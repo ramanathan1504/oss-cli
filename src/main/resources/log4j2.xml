@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <!-- 1. Console Appender for clean interactive CLI outputs -->
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%msg%n" />
+        </Console>
+
+        <!-- 2. Rolling File Appender for complete background daemon diagnostics -->
+        <RollingFile name="File" fileName="${sys:user.home}/.oss-cli/logs/oss-cli.log"
+                     filePattern="${sys:user.home}/.oss-cli/logs/oss-cli-%d{yyyy-MM-dd}-%i.log.gz">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n" />
+            <Policies>
+                <SizeBasedTriggeringPolicy size="10MB" />
+                <TimeBasedTriggeringPolicy />
+            </Policies>
+            <DefaultRolloverStrategy max="10" />
+        </RollingFile>
+    </Appenders>
+
+    <Loggers>
+        <!-- Route background details to the file while printing CLI relevant logs to the console -->
+        <Root level="INFO">
+            <AppenderRef ref="Console" level="INFO" />
+            <AppenderRef ref="File" level="DEBUG" />
+        </Root>
+    </Loggers>
+</Configuration>
