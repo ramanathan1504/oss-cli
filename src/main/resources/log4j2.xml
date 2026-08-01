@@ -7,8 +7,8 @@
         </Console>
 
         <!-- 2. Rolling File Appender for complete background daemon diagnostics -->
-        <RollingFile name="File" fileName="${sys:user.home}/.oss-cli/logs/oss-cli.log"
-                     filePattern="${sys:user.home}/.oss-cli/logs/oss-cli-%d{yyyy-MM-dd}-%i.log.gz">
+        <RollingFile name="File" fileName="${sys:oss.cli.home:-${sys:user.home}/.oss-cli}/logs/oss-cli.log"
+                     filePattern="${sys:oss.cli.home:-${sys:user.home}/.oss-cli}/logs/oss-cli-%d{yyyy-MM-dd}-%i.log.gz">
             <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n" />
             <Policies>
                 <SizeBasedTriggeringPolicy size="10MB" />

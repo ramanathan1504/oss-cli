@@ -11,13 +11,45 @@ import java.nio.file.Paths;
  * read a path that did not exist while the real database sat untouched under the old name, which is
  * indistinguishable from total data loss. Every previous location therefore stays declared here and
  * {@code DatabaseManager} relocates once on first run, rather than asking anyone to move files by hand.
+ *
+ * <p>Every path below moves as a set when {@value #HOME_ENV_VAR} is exported. That exists so a
+ * development build cannot touch the data an installed release depends on: both are built from the
+ * same pom by the same command, so nothing else tells them apart at runtime, and the schema
+ * migrations in {@code DatabaseManager} are one-way. Run development builds as:
+ *
+ * <pre>{@code
+ * OSS_CLI_HOME=~/.oss-cli-dev java -jar target/oss-cli-<version>.jar doctor
+ * }</pre>
  */
 public class AppPaths {
     // Dynamically resolves to /Users/<you> (or equivalent on Linux/Windows)
     public static final String HOME_DIR = System.getProperty("user.home");
 
-    /** The master global hidden directory: ~/.oss-cli */
-    public static final Path BASE_DIR = Paths.get(HOME_DIR, ".oss-cli");
+    /** Environment variable that relocates {@link #BASE_DIR}, and with it every path below. */
+    public static final String HOME_ENV_VAR = "OSS_CLI_HOME";
+
+    /**
+     * System property carrying {@link #BASE_DIR} to {@code log4j2.xml}.
+     *
+     * <p>The log file location is configured in XML, not in Java, so it cannot read {@link #BASE_DIR}
+     * directly. Without this bridge a relocated run still writes its logs into the real data
+     * directory, which defeats the point of relocating.
+     */
+    public static final String HOME_SYSTEM_PROPERTY = "oss.cli.home";
+
+    /** Where the data lives when nothing is overridden: {@code ~/.oss-cli} */
+    private static final Path DEFAULT_BASE_DIR = Paths.get(HOME_DIR, ".oss-cli");
+
+    /** The master global hidden directory: {@code ~/.oss-cli}, or {@value #HOME_ENV_VAR} when set. */
+    public static final Path BASE_DIR = resolveBaseDir();
+
+    /**
+     * True when {@value #HOME_ENV_VAR} pointed us somewhere other than the real data directory.
+     *
+     * <p>Setting the variable to the default location on purpose is not a relocation, so an operator
+     * who exports it explicitly still gets the normal legacy carry-over.
+     */
+    public static final boolean IS_RELOCATED = !BASE_DIR.equals(DEFAULT_BASE_DIR);
 
     /**
      * Every location this data has lived in, newest first.
@@ -40,8 +72,30 @@ public class AppPaths {
 
     public static final Path DB_PATH = DATA_DIR.resolve(DB_FILE_NAME);
 
-    /** First legacy database that actually exists, or null when there is nothing to carry over. */
+    /** Absolute JDBC URL targeting {@code <base>/data/issue_intelligence.db} */
+    public static final String DB_URL = "jdbc:sqlite:" + DB_PATH.toAbsolutePath();
+
+    /**
+     * Publishes {@link #BASE_DIR} as the {@value #HOME_SYSTEM_PROPERTY} system property.
+     *
+     * <p>Must run before the first {@code LogManager} call, because Log4j reads its configuration
+     * once, on first use. {@code Main} therefore calls this ahead of everything else.
+     */
+    public static void bootstrap() {
+        System.setProperty(HOME_SYSTEM_PROPERTY, BASE_DIR.toString());
+    }
+
+    /**
+     * First legacy database that actually exists, or null when there is nothing to carry over.
+     *
+     * <p>Nothing is ever carried into a relocated base. Dragging the real database across is exactly
+     * what the relocation exists to prevent, and it would leave a throwaway sandbox holding a full
+     * copy of production data.
+     */
     public static Path findLegacyDb() {
+        if (IS_RELOCATED) {
+            return null;
+        }
         for (Path base : LEGACY_BASE_DIRS) {
             Path candidate = base.resolve("data").resolve(DB_FILE_NAME);
             if (java.nio.file.Files.exists(candidate)) {
@@ -51,6 +105,20 @@ public class AppPaths {
         return null;
     }
 
-    /** Absolute JDBC URL targeting ~/.oss-cli/data/issue_intelligence.db */
-    public static final String DB_URL = "jdbc:sqlite:" + DB_PATH.toAbsolutePath();
+    private static Path resolveBaseDir() {
+        String override = System.getenv(HOME_ENV_VAR);
+        if (override == null || override.isBlank()) {
+            return DEFAULT_BASE_DIR;
+        }
+        String trimmed = override.trim();
+        // A quoted value skips shell expansion, and Java would then create a directory literally
+        // named "~" -- silently, beside the real one, which is a confusing way to lose an evening.
+        if (trimmed.equals("~")) {
+            return Paths.get(HOME_DIR);
+        }
+        if (trimmed.startsWith("~/")) {
+            trimmed = HOME_DIR + trimmed.substring(1);
+        }
+        return Paths.get(trimmed).toAbsolutePath().normalize();
+    }
 }
