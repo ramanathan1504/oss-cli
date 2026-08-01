@@ -17,7 +17,7 @@ public class SetupCommand implements Callable<Integer> {
         Scanner scanner = new Scanner(System.in);
 
         LOGGER.info("==================================================");
-        LOGGER.info("          issue-ai Interactive Setup Wizard       ");
+        LOGGER.info("          oss-cli Interactive Setup Wizard        ");
         LOGGER.info("==================================================");
 
         // 1. Configure GitHub Username

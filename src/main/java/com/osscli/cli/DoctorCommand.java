@@ -65,6 +65,7 @@ public class DoctorCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
+        checkDataLocation();
         checkDatabase();
         String embedModel = checkModels();
         checkVectorConsistency(embedModel);
@@ -74,7 +75,7 @@ public class DoctorCommand implements Callable<Integer> {
         checkData();
 
         LOGGER.info("");
-        LOGGER.info("  self-analyse doctor");
+        LOGGER.info("  oss-cli doctor");
         LOGGER.info("  ─────────────────────────────────────────────────────────────");
         for (Check c : checks) {
             LOGGER.info("  [{}] {} — {}", c.level().tag, c.what(), c.detail());
@@ -99,6 +100,26 @@ public class DoctorCommand implements Callable<Integer> {
         return fails > 0 ? 1 : 0;
     }
 
+    // ── data location ───────────────────────────────────────────────────────
+    /**
+     * Which store this run is pointed at.
+     *
+     * <p>Reported first, and as a warning when relocated, because every check below is
+     * about that directory. Without it, running doctor against a sandbox shows a healthy
+     * but empty install, which reads as data loss.
+     */
+    private void checkDataLocation() {
+        if (AppPaths.IS_RELOCATED) {
+            warn(
+                    "data directory",
+                    AppPaths.BASE_DIR + "  (" + AppPaths.HOME_ENV_VAR + " is set)",
+                    "That is a sandbox, not your usual store. Unset " + AppPaths.HOME_ENV_VAR + " to work against "
+                            + AppPaths.HOME_DIR + "/.oss-cli.");
+        } else {
+            ok("data directory", AppPaths.BASE_DIR.toString());
+        }
+    }
+
     // ── database ────────────────────────────────────────────────────────────
     private void checkDatabase() {
         if (!Files.exists(AppPaths.DB_PATH)) {
@@ -109,7 +130,7 @@ public class DoctorCommand implements Callable<Integer> {
                         "found only at the pre-rename location " + legacy,
                         "Run any command once — it relocates automatically.");
             } else {
-                warn("database", "not created yet", "Run 'self-analyse setup' to create it.");
+                warn("database", "not created yet", "Run 'oss-cli setup' to create it.");
             }
             return;
         }
@@ -149,7 +170,7 @@ public class DoctorCommand implements Callable<Integer> {
         if (guidance != null) {
             checkOneModel("guidance model", guidance, false);
         } else {
-            warn("guidance model", "not configured", "Run 'self-analyse setup', or set ollama.model.guidance.");
+            warn("guidance model", "not configured", "Run 'oss-cli setup', or set ollama.model.guidance.");
         }
         if (triage != null) {
             checkOneModel("triage model", triage, false);
@@ -200,7 +221,7 @@ public class DoctorCommand implements Callable<Integer> {
                     fail(
                             "vectors in " + table,
                             "produced by " + models.size() + " different models: " + models,
-                            "Re-sync to rebuild them with one model: self-analyse sync --me");
+                            "Re-sync to rebuild them with one model: oss-cli sync --me");
                 } else {
                     String only = models.iterator().next();
                     int n = byModel.get(only);
@@ -208,7 +229,7 @@ public class DoctorCommand implements Callable<Integer> {
                         warn(
                                 table,
                                 n + " vectors with no recorded model",
-                                "Re-sync once so provenance is recorded: self-analyse sync --me");
+                                "Re-sync once so provenance is recorded: oss-cli sync --me");
                     } else if (configuredModel != null && !only.equals(configuredModel)) {
                         warn(
                                 table,
@@ -228,7 +249,7 @@ public class DoctorCommand implements Callable<Integer> {
     private void checkGitHub() {
         String user = cfg("github.username", null);
         if (user == null || user.isBlank()) {
-            warn("github username", "not configured", "Run 'self-analyse setup'.");
+            warn("github username", "not configured", "Run 'oss-cli setup'.");
         } else {
             ok("github username", user);
         }
@@ -308,18 +329,18 @@ public class DoctorCommand implements Callable<Integer> {
         int issues = count("issues");
 
         if (issues == 0) {
-            warn("backlog", "no issues synced", "self-analyse sync --all");
+            warn("backlog", "no issues synced", "oss-cli sync --all");
         } else {
             ok("backlog", issues + " issues");
         }
 
         if (notes == 0) {
-            warn("your notes", "none indexed", "self-analyse sync --me");
+            warn("your notes", "none indexed", "oss-cli sync --me");
         } else if (passages == 0) {
             warn(
                     "your notes",
                     notes + " notes but no passages — long notes are unsearchable",
-                    "self-analyse sync --me   (builds passage-level embeddings)");
+                    "oss-cli sync --me   (builds passage-level embeddings)");
         } else {
             ok("your notes", notes + " notes, " + passages + " passages");
         }

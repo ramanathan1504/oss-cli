@@ -205,10 +205,51 @@ guess. Use `inspect` to see the decision before committing to it.
 
 ---
 
-## 6. Troubleshooting
+## 6. Where your data lives, and how not to destroy it
+
+Everything sits under `~/.oss-cli` — database, reports, backups, logs. Set
+`OSS_CLI_HOME` and all of it moves as a set:
+
+```bash
+OSS_CLI_HOME=~/.oss-cli-dev oss-cli doctor
+```
+
+**This matters if you build from source.** A jar you build and the one Homebrew
+installed are the same artifact from the same pom, so nothing tells them apart at
+runtime — and schema migrations run automatically and only go forwards. Run a
+build carrying a schema change against your real database and there is no way
+back. So run development builds relocated:
+
+```bash
+OSS_CLI_HOME=~/.oss-cli-dev java -jar target/oss-cli-<version>.jar sync --all
+```
+
+A relocated run starts from an empty database deliberately. Nothing is copied
+across: a sandbox holding a full duplicate of your real data defeats the point of
+having one.
+
+To see which build you are running and which store it will write to:
+
+```console
+$ oss-cli --version
+oss-cli 1.3.0
+build     2026-08-01T19:08:47Z
+running   /opt/homebrew/Cellar/oss-cli/1.3.0/libexec/oss-cli.jar
+data      /Users/you/.oss-cli
+```
+
+A jar loaded out of a `target/` directory is additionally marked
+`(development build)`. `doctor` reports the same directory as its first check and
+*warns* rather than passing silently when `OSS_CLI_HOME` is in effect — a
+healthy-looking but empty install is otherwise indistinguishable from data loss.
+
+---
+
+## 7. Troubleshooting
 
 | Symptom | Likely cause |
 |---|---|
+| Everything missing / database empty | `OSS_CLI_HOME` is exported in that shell. `oss-cli doctor` names the store it is using on its first line. |
 | Database looks empty after upgrade | Both old and new data directories exist. |
 | Everything escalates | Guidance model not installed, or `context_limit` too low. |
 | Local answers empty | Reasoning model returning output in a separate field. |
@@ -217,7 +258,7 @@ guess. Use `inspect` to see the decision before committing to it.
 
 ---
 
-## 7. Backups contain everything
+## 8. Backups contain everything
 
 `backup` archives the database — which includes the full text of everything you
 ingested. If a secret ever entered, it is in the backups too. Rotating the
