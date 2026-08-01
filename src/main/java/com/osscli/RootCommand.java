@@ -7,7 +7,7 @@ import picocli.CommandLine.Command;
         name = "oss-cli",
         aliases = {"sa"},
         mixinStandardHelpOptions = true,
-        version = "1.1",
+        versionProvider = VersionProvider.class,
         subcommands = {
             SyncCommand.class,
             CriticalCommand.class,
