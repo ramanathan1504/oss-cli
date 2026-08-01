@@ -15,6 +15,20 @@ echo "========================================"
 echo "🚀 Starting Automated Release for v$VERSION"
 echo "========================================"
 
+# Refuse to release from a tree carrying unrelated work. Everything present when
+# the jar is built gets committed below, so anything half-finished would ship.
+if [ -n "$(git status --porcelain)" ]; then
+    echo "❌ Error: working tree is not clean. Commit or stash first:"
+    git status --short
+    exit 1
+fi
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "$BRANCH" != "main" ]; then
+    echo "❌ Error: on branch '$BRANCH'. Releases are cut from main."
+    exit 1
+fi
+
 echo "1. Bumping version in pom.xml to $VERSION..."
 # This Maven command automatically updates the <version> tag in your pom.xml
 mvn versions:set -DnewVersion="$VERSION" -DgenerateBackupPoms=false
@@ -33,10 +47,22 @@ if [ ! -f "$RELEASE_JAR" ]; then
     exit 1
 fi
 
-echo "3. Committing pom.xml version bump to GitHub..."
-git add pom.xml
+echo "3. Committing the released tree to GitHub..."
+# -A, not just pom.xml. spotless:apply above rewrites source files, and staging
+# only the pom published a jar built from code that existed in no commit -- so
+# the tag could not rebuild the artifact it was supposed to describe.
+# target/ and *.jar are gitignored, so the build output is not swept in.
+git add -A
 # Note: || true prevents failing if there are no changes (e.g. running the same version twice)
 git commit -m "Bump project version to v$VERSION" || true
+
+# The jar was built from exactly this tree; anything left over means it was not.
+if [ -n "$(git status --porcelain)" ]; then
+    echo "❌ Error: tree still dirty after commit -- the jar would not match the tag:"
+    git status --short
+    exit 1
+fi
+
 git push origin main
 
 echo "4. Uploading to GitHub Releases..."
