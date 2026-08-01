@@ -940,8 +940,7 @@ public class SqliteStorage {
         return results;
     }
 
-    public static List<com.osscli.model.ChatMemory> loadAllPersonalChatMemories()
-            throws SQLException, IOException {
+    public static List<com.osscli.model.ChatMemory> loadAllPersonalChatMemories() throws SQLException, IOException {
         String sql = "SELECT file_name, content, vector FROM personal_chat_memory;";
         List<com.osscli.model.ChatMemory> results = new ArrayList<>();
         try (Connection conn = DatabaseManager.getConnection();
@@ -949,8 +948,8 @@ public class SqliteStorage {
                 ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
                 double[] vector = MAPPER.readValue(rs.getString("vector"), double[].class);
-                results.add(new com.osscli.model.ChatMemory(
-                        rs.getString("file_name"), rs.getString("content"), vector));
+                results.add(
+                        new com.osscli.model.ChatMemory(rs.getString("file_name"), rs.getString("content"), vector));
             }
         }
         return results;

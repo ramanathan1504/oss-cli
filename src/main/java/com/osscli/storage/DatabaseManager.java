@@ -323,9 +323,7 @@ public class DatabaseManager {
         java.nio.file.Path legacyDir = legacyDb.getParent();
 
         LOGGER.warn(
-                "Found a pre-rename database at {} and none at {} — relocating it once.",
-                legacyDb,
-                AppPaths.DB_PATH);
+                "Found a pre-rename database at {} and none at {} — relocating it once.", legacyDb, AppPaths.DB_PATH);
         try {
             for (String suffix : new String[] {"", "-wal", "-shm"}) {
                 java.nio.file.Path from = legacyDir.resolve(AppPaths.DB_FILE_NAME + suffix);

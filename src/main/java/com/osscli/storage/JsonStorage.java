@@ -76,8 +76,7 @@ public class JsonStorage {
         }
         return MAPPER.readValue(
                 filePath.toFile(),
-                MAPPER.getTypeFactory()
-                        .constructCollectionType(List.class, com.osscli.model.IssueEmbedding.class));
+                MAPPER.getTypeFactory().constructCollectionType(List.class, com.osscli.model.IssueEmbedding.class));
     }
 
     public static void saveTrendSnapshot(com.osscli.model.TrendSnapshot snapshot) throws java.io.IOException {

@@ -354,8 +354,7 @@ public class ChatCommand implements Callable<Integer> {
             // Scrub before the transcript is written anywhere. A chat session can easily
             // contain a key the user pasted in mid-conversation, and this path writes to
             // BOTH a file on disk and the database.
-            com.osscli.util.Redactor.Result scrubbed =
-                    com.osscli.util.Redactor.redact(fileContent.toString());
+            com.osscli.util.Redactor.Result scrubbed = com.osscli.util.Redactor.redact(fileContent.toString());
             if (scrubbed.redactedAnything()) {
                 LOGGER.warn("  ⚠ Redacted from this transcript: {}", scrubbed.summary());
                 LOGGER.warn("    Removing them here does not revoke them — rotate anything real.");

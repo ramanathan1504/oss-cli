@@ -382,8 +382,7 @@ public class SyncCommand implements Callable<Integer> {
                         // cache comparison, the embedding, the passages, the stored row -- must
                         // see only redacted text, or a secret ends up encoded in a vector or
                         // written to disk even though the visible content looks clean.
-                        com.osscli.util.Redactor.Result scrubbed =
-                                com.osscli.util.Redactor.redact(rawContent);
+                        com.osscli.util.Redactor.Result scrubbed = com.osscli.util.Redactor.redact(rawContent);
                         String content = scrubbed.text();
                         if (scrubbed.redactedAnything()) {
                             LOGGER.warn("    ⚠ Redacted from '{}': {}", fileName, scrubbed.summary());
@@ -485,8 +484,7 @@ public class SyncCommand implements Callable<Integer> {
                                 // Passage-level embeddings. The note-level vector above only ever
                                 // describes the note's opening, because the embedder truncates at
                                 // its input window; these make the whole note reachable.
-                                java.util.List<String> passages =
-                                        com.osscli.retrieval.PassageSplitter.split(content);
+                                java.util.List<String> passages = com.osscli.retrieval.PassageSplitter.split(content);
                                 java.util.List<double[]> passageVectors = new java.util.ArrayList<>();
                                 for (String passage : passages) {
                                     passageVectors.add(embedOllama.generateEmbedding(passage));
