@@ -28,7 +28,10 @@ import picocli.CommandLine.Command;
  * context limit set below what retrieval actually assembles -- because those degrade results
  * silently rather than failing.
  */
-@Command(name = "doctor", description = "Check every prerequisite at once and say exactly what to fix")
+@Command(
+        name = "doctor",
+        mixinStandardHelpOptions = true,
+        description = "Check every prerequisite at once and say exactly what to fix")
 public class DoctorCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(DoctorCommand.class);

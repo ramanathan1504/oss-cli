@@ -13,7 +13,7 @@ import org.apache.logging.log4j.Logger;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-@Command(name = "critical", description = "Find critical issues using local data")
+@Command(name = "critical", mixinStandardHelpOptions = true, description = "Find critical issues using local data")
 public class CriticalCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(CriticalCommand.class);

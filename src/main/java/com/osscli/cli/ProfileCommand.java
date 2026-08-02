@@ -20,7 +20,10 @@ import picocli.CommandLine.Option;
  * <p>Serves both directions the same data. A maintainer reads it as the rules a pull request will be judged against; a
  * new contributor reads it as what to target before writing anything.
  */
-@Command(name = "profile", description = "Build or show a repository's language, build and convention profile")
+@Command(
+        name = "profile",
+        mixinStandardHelpOptions = true,
+        description = "Build or show a repository's language, build and convention profile")
 public class ProfileCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(ProfileCommand.class);

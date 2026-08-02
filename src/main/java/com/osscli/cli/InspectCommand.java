@@ -13,6 +13,7 @@ import picocli.CommandLine.Parameters;
 
 @Command(
         name = "inspect",
+        mixinStandardHelpOptions = true,
         description =
                 "Show all context retrieved for an issue and preview whether Ollama will answer locally or escalate to an expert prompt.")
 public class InspectCommand implements Callable<Integer> {

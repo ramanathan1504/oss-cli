@@ -7,7 +7,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import picocli.CommandLine.Command;
 
-@Command(name = "setup", description = "Interactive wizard to configure local system settings, models, and paths")
+@Command(
+        name = "setup",
+        mixinStandardHelpOptions = true,
+        description = "Interactive wizard to configure local system settings, models, and paths")
 public class SetupCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(SetupCommand.class);

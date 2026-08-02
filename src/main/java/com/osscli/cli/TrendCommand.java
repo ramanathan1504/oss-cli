@@ -21,7 +21,10 @@ import org.apache.logging.log4j.Logger;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-@Command(name = "trend", description = "Track and visualize weekly project health trends")
+@Command(
+        name = "trend",
+        mixinStandardHelpOptions = true,
+        description = "Track and visualize weekly project health trends")
 public class TrendCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(TrendCommand.class);

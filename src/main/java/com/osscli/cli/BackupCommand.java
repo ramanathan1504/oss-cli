@@ -25,6 +25,7 @@ import picocli.CommandLine.Command;
 
 @Command(
         name = "backup",
+        mixinStandardHelpOptions = true,
         description =
                 "Export your entire AI memory and database into a portable archive with auto-rotation (keeps last 5)")
 public class BackupCommand implements Callable<Integer> {

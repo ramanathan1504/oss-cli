@@ -12,7 +12,7 @@ import org.apache.logging.log4j.Logger;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-@Command(name = "report", description = "Generate a consolidated weekly health report")
+@Command(name = "report", mixinStandardHelpOptions = true, description = "Generate a consolidated weekly health report")
 public class ReportCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(ReportCommand.class);

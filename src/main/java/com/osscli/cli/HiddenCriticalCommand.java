@@ -12,7 +12,10 @@ import org.apache.logging.log4j.Logger;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-@Command(name = "hidden-critical", description = "Find critical issues that maintainers may have underestimated")
+@Command(
+        name = "hidden-critical",
+        mixinStandardHelpOptions = true,
+        description = "Find critical issues that maintainers may have underestimated")
 public class HiddenCriticalCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(HiddenCriticalCommand.class);

@@ -17,7 +17,10 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
-@Command(name = "search", description = "Search the local issue backlog semantically using vector embeddings")
+@Command(
+        name = "search",
+        mixinStandardHelpOptions = true,
+        description = "Search the local issue backlog semantically using vector embeddings")
 public class SearchCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(SearchCommand.class);

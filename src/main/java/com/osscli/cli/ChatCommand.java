@@ -20,6 +20,7 @@ import picocli.CommandLine.Parameters;
 
 @Command(
         name = "chat",
+        mixinStandardHelpOptions = true,
         description = "Open an interactive REPL chat session with local alignment and multi-cloud escalation")
 public class ChatCommand implements Callable<Integer> {
 

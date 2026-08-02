@@ -19,7 +19,10 @@ import org.apache.logging.log4j.Logger;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
 
-@Command(name = "restore", description = "Import and restore your AI memory and database from a backup archive")
+@Command(
+        name = "restore",
+        mixinStandardHelpOptions = true,
+        description = "Import and restore your AI memory and database from a backup archive")
 public class RestoreCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(RestoreCommand.class);

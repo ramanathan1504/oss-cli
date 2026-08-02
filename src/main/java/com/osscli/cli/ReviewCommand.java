@@ -26,7 +26,10 @@ import picocli.CommandLine.Parameters;
  * <p>Missing layers are reported as one line each, saying what they would add and how to enable them. Silently
  * producing a thinner review would leave the user unable to tell a clean pull request from an unexamined one.
  */
-@Command(name = "review", description = "Review a pull request using every source you have connected")
+@Command(
+        name = "review",
+        mixinStandardHelpOptions = true,
+        description = "Review a pull request using every source you have connected")
 public class ReviewCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(ReviewCommand.class);
