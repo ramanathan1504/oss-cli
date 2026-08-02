@@ -32,6 +32,11 @@ public class ReviewCommand implements Callable<Integer> {
     private static final Logger LOGGER = LogManager.getLogger(ReviewCommand.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    /** Enough prior work to inform a judgment, few enough that the diff stays the bulk of the prompt. */
+    private static final int MAX_NOTES = 5;
+
+    private static final int NOTE_EXCERPT_CHARS = 1200;
+
     @Parameters(index = "0", description = "The pull request number to review")
     private long prNumber;
 
@@ -49,6 +54,11 @@ public class ReviewCommand implements Callable<Integer> {
             names = {"--no-verdict"},
             description = "Report the facts only, without asking a model to judge the change")
     private boolean noVerdict;
+
+    @Option(
+            names = {"--no-notes"},
+            description = "Do not consult your own notes when reviewing")
+    private boolean noNotes;
 
     @Override
     public Integer call() throws Exception {
@@ -73,9 +83,50 @@ public class ReviewCommand implements Callable<Integer> {
         printFacts(ev);
         com.osscli.model.RepoProfile profile = SqliteStorage.loadRepoProfile(repository);
         boolean conventionsChecked = printConventionChecks(ev, profile);
-        boolean verdictGiven = !noVerdict && printVerdict(ev, profile);
-        printLadder(verdictGiven, conventionsChecked);
+
+        List<com.osscli.model.PromptContextChunk> notes = noNotes ? List.of() : findRelatedNotes(ev);
+        printRelatedNotes(notes);
+
+        boolean verdictGiven = !noVerdict && printVerdict(ev, profile, notes);
+        printLadder(verdictGiven, conventionsChecked, !notes.isEmpty());
         return 0;
+    }
+
+    // ── Layer 4: the user's own notes ────────────────────────────────────────
+
+    /**
+     * Finds prior work bearing on this change.
+     *
+     * <p>The query is built from the title and the changed paths rather than the diff. Paths are what a note about the
+     * same subsystem is likely to share; diff bodies are dominated by syntax that matches everything weakly and
+     * nothing well.
+     *
+     * <p>Notes this tool generated for the same pull request are excluded. Feeding a review its own earlier verdict
+     * reads as independent corroboration while being an echo, and the same reasoning would then appear to be supported
+     * by evidence that is merely a copy of itself.
+     */
+    private List<com.osscli.model.PromptContextChunk> findRelatedNotes(PrEvidence ev) throws Exception {
+        StringBuilder query = new StringBuilder();
+        if (ev.title() != null) {
+            query.append(ev.title()).append('\n');
+        }
+        for (Map<String, Object> f : readList(ev.filesJson())) {
+            query.append(String.valueOf(f.get("filename"))).append('\n');
+        }
+
+        return com.osscli.retrieval.NoteRetriever.retrieveFor(
+                query.toString(), MAX_NOTES, "Issue-" + ev.prNumber() + "-review");
+    }
+
+    private void printRelatedNotes(List<com.osscli.model.PromptContextChunk> notes) {
+        if (notes.isEmpty()) {
+            return;
+        }
+        LOGGER.info("");
+        LOGGER.info("── Your prior work on this area ({}) ──", notes.size());
+        for (com.osscli.model.PromptContextChunk n : notes) {
+            LOGGER.info("  {}  ({}% match)", n.sourceRef(), Math.round(n.relevanceScore() * 100));
+        }
     }
 
     // ── Layer 1: convention checks, no model involved ────────────────────────
@@ -158,7 +209,8 @@ public class ReviewCommand implements Callable<Integer> {
      *     what was merely available. Reporting the capability as active while printing no verdict is the same class of
      *     defect as a sync that reports success after failing.
      */
-    private boolean printVerdict(PrEvidence ev, com.osscli.model.RepoProfile profile) {
+    private boolean printVerdict(
+            PrEvidence ev, com.osscli.model.RepoProfile profile, List<com.osscli.model.PromptContextChunk> notes) {
         try {
             String model = SqliteStorage.loadConfig("ollama.model.guidance");
             if (model == null || model.isBlank()) {
@@ -185,11 +237,32 @@ public class ReviewCommand implements Callable<Integer> {
                     ? "(no profile built for this project — judge on general grounds only)"
                     : profile.summary();
 
+            // Labelled as the reviewer's own material and capped, so it informs the judgment without displacing the
+            // diff. Notes are context for reading the change, never a substitute for reading it.
+            String priorWork = "(none found in your notes)";
+            if (!notes.isEmpty()) {
+                StringBuilder sb = new StringBuilder();
+                for (com.osscli.model.PromptContextChunk n : notes) {
+                    String body = n.content().length() > NOTE_EXCERPT_CHARS
+                            ? n.content().substring(0, NOTE_EXCERPT_CHARS) + "…"
+                            : n.content();
+                    sb.append("--- ")
+                            .append(n.sourceRef())
+                            .append(" ---\n")
+                            .append(body)
+                            .append("\n\n");
+                }
+                priorWork = sb.toString();
+            }
+
             String prompt = String.format(
                     """
                     You are reviewing a pull request for the open-source project %s.
 
                     PROJECT RULES (what this project enforces):
+                    %s
+
+                    YOUR PRIOR WORK ON THIS AREA (from the reviewer's own notes):
                     %s
 
                     Title: %s
@@ -200,8 +273,10 @@ public class ReviewCommand implements Callable<Integer> {
                     DIFF%s:
                     %s
 
-                    Review this change. Report only what the diff actually shows; if something
-                    cannot be determined from it, say so rather than guessing.
+                    Review THE DIFF and nothing else. The project rules and prior-work sections
+                    are background: cite them only where they bear on this diff, and never review
+                    them — they are not the change. Report only what the diff actually shows; if
+                    something cannot be determined from it, say so rather than guessing.
 
                     Respond in JSON with this exact structure:
                     {
@@ -213,6 +288,7 @@ public class ReviewCommand implements Callable<Integer> {
                     """,
                     ev.repository(),
                     projectRules,
+                    priorWork,
                     ev.title(),
                     ev.author(),
                     ev.baseRef(),
@@ -416,11 +492,12 @@ public class ReviewCommand implements Callable<Integer> {
      * tell the reader their notes had been weighed when they had not -- and a review is trusted precisely because of
      * what went into it.
      */
-    private void printLadder(boolean verdictGiven, boolean conventionsChecked) {
+    private void printLadder(boolean verdictGiven, boolean conventionsChecked, boolean notesUsed) {
         LOGGER.info("");
         LOGGER.info("── What this review used ──");
         LOGGER.info("  ✔ Facts from GitHub");
         report(conventionsChecked, "Convention checks against this project's rules", "run 'profile' to build it");
+        report(notesUsed, "Your own prior work", whyNoNotes());
         report(
                 verdictGiven,
                 "Local verdict from Ollama",
@@ -428,11 +505,16 @@ public class ReviewCommand implements Callable<Integer> {
 
         // Not yet consulted by this command. Listed so the gap is visible rather than mistaken for a clean result.
         LOGGER.info(
-                "  ○ Your own history and past reviews — {}",
-                hasNotesCorpus() ? "indexed, but review does not consult them yet" : "no notes indexed ('sync --me')");
-        LOGGER.info(
                 "  ○ Escalation for large diffs — {}",
                 hasCloudKey() ? "cloud key found, but review does not escalate yet" : "no cloud key configured");
+    }
+
+    /** Distinguishes "you have no notes" from "your notes had nothing to say about this change". */
+    private String whyNoNotes() {
+        if (noNotes) {
+            return "skipped by --no-notes";
+        }
+        return hasNotesCorpus() ? "nothing in your notes matched this change" : "no notes indexed ('sync --me')";
     }
 
     private void report(boolean used, String whatItGives, String howToEnable) {

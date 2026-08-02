@@ -258,7 +258,8 @@ public class ContextRetriever {
         return out;
     }
 
-    private static double similarityThreshold() {
+    /** Shared with {@link NoteRetriever} so both retrieval paths admit passages on identical evidence. */
+    static double similarityThreshold() {
         try {
             String configured = SqliteStorage.loadConfig("retrieval.similarity_threshold");
             if (configured != null && !configured.isBlank()) {
@@ -295,6 +296,11 @@ public class ContextRetriever {
             count++;
         }
         return sb.toString().strip();
+    }
+
+    /** Package-visible alias so other retrievers score identically rather than reimplementing this. */
+    static double similarity(double[] a, double[] b) {
+        return cosineSimilarity(a, b);
     }
 
     private static double cosineSimilarity(double[] a, double[] b) {
