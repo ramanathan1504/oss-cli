@@ -146,3 +146,27 @@ jobs:
           print('site OK' if not fail else 'site FAILED')
           sys.exit(1 if fail else 0)
           PY
+
+  deploy-site:
+    needs: site
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Published only after the markup check passes, and only from main. A
+      # pull request must never reach the live domain, and a fork cannot hold
+      # the credentials, so an absent token skips rather than fails.
+      - name: Publish osscli.ubuos.com
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@latest pages deploy site --project-name=osscli --branch=main
+
+      - name: Say why nothing was published
+        if: ${{ env.CLOUDFLARE_API_TOKEN == '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: echo "::warning::CLOUDFLARE_API_TOKEN is not set — the site was checked but not published."
