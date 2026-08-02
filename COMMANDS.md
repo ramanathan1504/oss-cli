@@ -92,7 +92,9 @@ oss-cli review 4234 --no-verdict
 oss-cli review 4234 -r apache/kafka --refresh
 ```
 
-When a verdict is produced it is filed to `<topic>/pr-reviews/` in your notes archive and indexed, so it becomes retrievable evidence for later questions.
+When a verdict is produced it is filed to `<topic>/oss-cli/` in your notes archive and indexed, so it becomes retrievable evidence for later questions.
+
+Everything OSS-CLI generates goes to that one folder, kept separate from anything you wrote yourself. Provenance then follows from location: a knowledge base can exclude generated notes when scoring what *you* know, and your own filing tools cannot collide with names OSS-CLI chose.
 
 ---
 
