@@ -1,0 +1,16 @@
+# Cloudflare Pages reads this file. One rule set, applied to every path.
+#
+# The page loads no scripts, styles, fonts or images from anywhere else, so the
+# policy can be closed down to 'self' without breaking it. Stating that here
+# means a future edit that reaches for a CDN fails visibly in review rather than
+# quietly widening what the page is allowed to fetch.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), interest-cohort=()
+  X-Frame-Options: DENY
+
+# The jar is versioned in its filename, the page is not. Cache accordingly.
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate

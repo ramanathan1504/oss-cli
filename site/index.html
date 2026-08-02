@@ -1,0 +1,683 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OSS-CLI — a local-first investigation workbench for maintainers</title>
+<meta name="description" content="OSS-CLI indexes your repositories and your notes on your own machine, then reviews pull requests and builds expert prompts from everything you have connected. Works with just a GitHub token.">
+<meta property="og:title" content="OSS-CLI">
+<meta property="og:description" content="A local-first investigation workbench for open-source maintainers.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230B1B24'/><path d='M8 12h5M8 17h9M8 22h6' stroke='%23C9A227' stroke-width='2.4' stroke-linecap='round'/><circle cx='23' cy='12' r='2.4' fill='%234E9A8F'/></svg>">
+
+<style>
+/* ============================================================
+   Tokens. Neutrals carry a petrol bias so they read as chosen
+   rather than inherited; brass is the single loud voice.
+   ============================================================ */
+:root{
+  --petrol-900:#08161D;
+  --petrol-800:#0B1B24;
+  --petrol-700:#122A35;
+  --petrol-600:#1D3B47;
+  --brass:#C9A227;
+  --brass-dim:#9A7C1C;
+  --patina:#3E8C82;
+  --rust:#B4553A;
+
+  --bg:#EDF2F3;
+  --bg-raised:#F7FAFA;
+  --bg-sunken:#E3EBEC;
+  --ink:#0B1B24;
+  --ink-soft:#3E5560;
+  --ink-faint:#6E858F;
+  --rule:#CFDCDE;
+  --accent:#8A6A0F;
+  --accent-bright:#C9A227;
+  --link:#256A62;
+
+  --term-bg:#0B1B24;
+  --term-ink:#D6E4E6;
+  --term-dim:#7A939C;
+
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,"JetBrains Mono","Cascadia Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+
+  --measure:66ch;
+  --gutter:clamp(1.25rem,4vw,2.5rem);
+  --shell:min(1180px,100% - var(--gutter) * 2);
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#08161D;
+    --bg-raised:#0E222C;
+    --bg-sunken:#050F14;
+    --ink:#E4EDEE;
+    --ink-soft:#A7BCC3;
+    --ink-faint:#718A93;
+    --rule:#1B3641;
+    --accent:#D8B23A;
+    --accent-bright:#E8C558;
+    --link:#5FB5AA;
+    --term-bg:#050F14;
+    --term-ink:#D6E4E6;
+    --term-dim:#6E888F;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#08161D; --bg-raised:#0E222C; --bg-sunken:#050F14;
+  --ink:#E4EDEE; --ink-soft:#A7BCC3; --ink-faint:#718A93; --rule:#1B3641;
+  --accent:#D8B23A; --accent-bright:#E8C558; --link:#5FB5AA;
+  --term-bg:#050F14; --term-ink:#D6E4E6; --term-dim:#6E888F;
+}
+:root[data-theme="light"]{
+  --bg:#EDF2F3; --bg-raised:#F7FAFA; --bg-sunken:#E3EBEC;
+  --ink:#0B1B24; --ink-soft:#3E5560; --ink-faint:#6E858F; --rule:#CFDCDE;
+  --accent:#8A6A0F; --accent-bright:#C9A227; --link:#256A62;
+  --term-bg:#0B1B24; --term-ink:#D6E4E6; --term-dim:#7A939C;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:var(--sans);font-size:17px;line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{margin:0;text-wrap:balance;font-weight:600;letter-spacing:-0.02em}
+p{margin:0}
+a{color:var(--link);text-decoration-thickness:1px;text-underline-offset:3px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent-bright);outline-offset:3px;border-radius:3px}
+code,kbd,pre{font-family:var(--mono)}
+
+.shell{width:var(--shell);margin-inline:auto}
+.rule{border:0;border-top:1px solid var(--rule);margin:0}
+
+/* eyebrow labels — uppercase mono, used only where a section needs naming */
+.eyebrow{
+  font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-faint);margin-bottom:1rem;
+}
+
+/* ---------- masthead ---------- */
+.masthead{
+  position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--rule);
+}
+.masthead-in{display:flex;align-items:center;gap:1.5rem;padding:.85rem 0}
+.wordmark{
+  display:flex;align-items:center;gap:.6rem;font-family:var(--mono);
+  font-weight:600;letter-spacing:-.03em;font-size:1.05rem;color:var(--ink);text-decoration:none;
+}
+.wordmark .glyph{
+  width:26px;height:26px;border-radius:7px;background:var(--petrol-800);
+  display:grid;place-items:center;flex:none;
+}
+.wordmark .glyph svg{display:block}
+.nav{display:flex;gap:1.4rem;margin-left:auto;align-items:center}
+.nav a{color:var(--ink-soft);text-decoration:none;font-size:.92rem}
+.nav a:hover{color:var(--ink)}
+.theme-btn{
+  background:transparent;border:1px solid var(--rule);color:var(--ink-soft);
+  border-radius:7px;padding:.35rem .55rem;cursor:pointer;font:inherit;font-size:.85rem;line-height:1;
+}
+.theme-btn:hover{border-color:var(--ink-faint);color:var(--ink)}
+@media (max-width:760px){.nav a:not(.nav-keep){display:none}}
+
+/* ---------- hero ---------- */
+.hero{padding:clamp(3rem,8vw,5.5rem) 0 clamp(2rem,5vw,3rem);position:relative;overflow:hidden}
+.hero-grid{display:grid;gap:clamp(2rem,5vw,3.5rem);grid-template-columns:1fr;align-items:start}
+@media (min-width:1000px){.hero-grid{grid-template-columns:minmax(0,46%) minmax(0,1fr)}}
+
+.hero h1{
+  font-family:var(--mono);font-size:clamp(2.1rem,5.2vw,3.15rem);line-height:1.08;
+  letter-spacing:-.045em;font-weight:600;
+}
+.hero h1 .em{color:var(--accent)}
+.hero .lede{
+  margin-top:1.25rem;max-width:var(--measure);color:var(--ink-soft);
+  font-size:clamp(1.02rem,1.5vw,1.15rem);
+}
+.hero .lede strong{color:var(--ink);font-weight:600}
+
+/* copyable install line — the primary call to action */
+.install-line{
+  margin-top:2rem;display:flex;align-items:stretch;gap:0;
+  border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:var(--bg-raised);
+  max-width:540px;
+}
+.install-line code{
+  flex:1;min-width:0;padding:.8rem .95rem;font-size:.88rem;color:var(--ink);
+  overflow-x:auto;white-space:nowrap;display:block;
+}
+.install-line code .sigil{color:var(--ink-faint);user-select:none}
+.copy-btn{
+  flex:none;border:0;border-left:1px solid var(--rule);background:var(--bg-sunken);
+  color:var(--ink-soft);padding:0 1rem;cursor:pointer;font:inherit;font-size:.82rem;
+  font-family:var(--mono);letter-spacing:.04em;
+}
+.copy-btn:hover{background:var(--accent-bright);color:var(--petrol-900)}
+.copy-btn[data-done="1"]{background:var(--patina);color:#fff}
+.install-alt{margin-top:.7rem;font-size:.85rem;color:var(--ink-faint)}
+.install-alt a{color:var(--link)}
+
+/* ---------- terminal card ---------- */
+.term{
+  border-radius:12px;overflow:hidden;background:var(--term-bg);
+  border:1px solid var(--petrol-600);
+  box-shadow:0 18px 44px -22px rgba(5,15,20,.6);
+}
+.term-bar{
+  display:flex;align-items:center;gap:.45rem;padding:.6rem .8rem;
+  background:var(--petrol-700);border-bottom:1px solid var(--petrol-600);
+}
+.dot{width:10px;height:10px;border-radius:50%;flex:none}
+.term-title{
+  margin-left:.5rem;font-family:var(--mono);font-size:.74rem;
+  color:var(--term-dim);letter-spacing:.04em;
+}
+.term-body{
+  margin:0;padding:1rem 1.1rem 1.2rem;overflow-x:auto;
+  font-size:.795rem;line-height:1.62;color:var(--term-ink);
+  font-variant-numeric:tabular-nums;
+}
+.term-body .c{color:var(--term-dim)}
+.term-body .ok{color:var(--patina)}
+.term-body .b{color:var(--brass)}
+.term-body .r{color:var(--rust)}
+.term-body .h{color:#fff;font-weight:600}
+
+/* ---------- generic section ---------- */
+.band{padding:clamp(3rem,7vw,4.75rem) 0}
+.band-sunken{background:var(--bg-sunken);border-block:1px solid var(--rule)}
+.band h2{font-size:clamp(1.5rem,3vw,1.95rem);letter-spacing:-.03em}
+.band .sub{margin-top:.85rem;max-width:var(--measure);color:var(--ink-soft)}
+
+/* ---------- the ladder ---------- */
+.ladder{margin-top:2.5rem;display:grid;gap:0;border-top:1px solid var(--rule)}
+.rung{
+  display:grid;grid-template-columns:auto minmax(0,1fr);gap:1rem 1.1rem;
+  padding:1.15rem .25rem;border-bottom:1px solid var(--rule);align-items:start;
+}
+@media (min-width:820px){
+  .rung{grid-template-columns:1.6rem minmax(0,18rem) minmax(0,1fr);align-items:baseline}
+}
+.rung .mark{
+  font-family:var(--mono);font-size:1rem;line-height:1.4;color:var(--patina);
+  grid-row:1;
+}
+.rung.opt .mark{color:var(--ink-faint)}
+.rung .what{font-weight:600;letter-spacing:-.01em}
+.rung .needs{
+  display:block;font-family:var(--mono);font-size:.76rem;letter-spacing:.03em;
+  color:var(--ink-faint);font-weight:400;margin-top:.2rem;
+}
+.rung .gives{color:var(--ink-soft);font-size:.95rem;grid-column:2;}
+@media (min-width:820px){.rung .gives{grid-column:3}}
+
+/* ---------- install tabs ---------- */
+.tabs{margin-top:2rem}
+.tablist{display:flex;gap:.4rem;flex-wrap:wrap;border-bottom:1px solid var(--rule);padding-bottom:.6rem}
+.tab{
+  font:inherit;font-family:var(--mono);font-size:.85rem;cursor:pointer;
+  background:transparent;border:1px solid transparent;border-radius:8px;
+  padding:.45rem .85rem;color:var(--ink-faint);
+}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected="true"]{background:var(--bg-raised);border-color:var(--rule);color:var(--ink)}
+.tabpanel{padding-top:1.6rem}
+.tabpanel[hidden]{display:none}
+.step{display:grid;gap:.5rem;margin-bottom:1.6rem}
+.step-h{font-family:var(--mono);font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint)}
+pre.block{
+  margin:0;background:var(--term-bg);color:var(--term-ink);border-radius:10px;
+  padding:.9rem 1rem;overflow-x:auto;font-size:.83rem;line-height:1.65;
+  border:1px solid var(--petrol-600);
+}
+pre.block .c{color:var(--term-dim)}
+.note{
+  font-size:.9rem;color:var(--ink-soft);border-left:2px solid var(--accent-bright);
+  padding-left:.9rem;max-width:var(--measure);
+}
+
+/* ---------- command table ---------- */
+.table-wrap{margin-top:2rem;overflow-x:auto;border:1px solid var(--rule);border-radius:10px;background:var(--bg-raised)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:.92rem}
+th,td{text-align:left;padding:.72rem .95rem;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{
+  font-family:var(--mono);font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-faint);font-weight:500;background:var(--bg-sunken);
+}
+tbody tr:last-child td{border-bottom:0}
+td code{font-size:.86rem;color:var(--accent);white-space:nowrap}
+td .need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)}
+
+/* ---------- two-up cards ---------- */
+.cards{margin-top:2.25rem;display:grid;gap:1rem;grid-template-columns:1fr}
+@media (min-width:760px){.cards{grid-template-columns:repeat(3,1fr)}}
+.card{
+  background:var(--bg-raised);border:1px solid var(--rule);border-radius:11px;
+  padding:1.25rem 1.3rem;display:grid;gap:.55rem;align-content:start;
+}
+.card h3{font-size:1.02rem;letter-spacing:-.015em}
+.card p{color:var(--ink-soft);font-size:.93rem}
+.card .k{font-family:var(--mono);font-size:.74rem;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+
+/* ---------- footer ---------- */
+.foot{padding:2.75rem 0 3.5rem;color:var(--ink-faint);font-size:.88rem}
+.foot-in{display:flex;flex-wrap:wrap;gap:1rem 2rem;align-items:center}
+.foot a{color:var(--ink-soft)}
+.foot .spacer{margin-left:auto}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms !important;transition-duration:.01ms !important}
+}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="shell masthead-in">
+    <a class="wordmark" href="#top">
+      <span class="glyph" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
+          <path d="M8 12h5M8 17h9M8 22h6" stroke="#C9A227" stroke-width="2.6" stroke-linecap="round"/>
+          <circle cx="23" cy="12" r="2.4" fill="#4E9A8F"/>
+        </svg>
+      </span>
+      oss-cli
+    </a>
+    <nav class="nav">
+      <a href="#how">How it works</a>
+      <a href="#install" class="nav-keep">Install</a>
+      <a href="#commands">Commands</a>
+      <a href="https://github.com/ramanathan1504/oss-cli" class="nav-keep">GitHub</a>
+      <button class="theme-btn" id="theme-btn" type="button" aria-label="Switch colour theme">◐</button>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ══════════════ hero ══════════════ -->
+<section class="hero">
+  <div class="shell hero-grid">
+    <div>
+      <h1>Your repositories<br>and your notes,<br><span class="em">on your machine.</span></h1>
+      <p class="lede">
+        OSS-CLI indexes the projects you follow and the notes you already keep, then
+        reviews pull requests against what it finds. <strong>A GitHub token is the only
+        thing it requires</strong> — everything else is a layer you add when you want it.
+      </p>
+
+      <div class="install-line">
+        <code id="install-cmd"><span class="sigil">$ </span>brew install ramanathan1504/oss-cli/oss-cli</code>
+        <button class="copy-btn" type="button" data-copy="#install-cmd">Copy</button>
+      </div>
+      <p class="install-alt">
+        Linux and Windows run the same jar —
+        <a href="#install">see the install guide</a>.
+      </p>
+    </div>
+
+    <div class="term" role="img" aria-label="Terminal showing oss-cli review output for pull request 4234">
+      <div class="term-bar">
+        <span class="dot" style="background:#E0685C"></span>
+        <span class="dot" style="background:#E0B44C"></span>
+        <span class="dot" style="background:#5BB98C"></span>
+        <span class="term-title">oss-cli review 4234</span>
+      </div>
+<pre class="term-body"><span class="c">$</span> oss-cli review 4234
+
+  <span class="h">Add ZstdCompressAction to support configurable compression levels</span>
+  by katstack <span class="c">·</span> open <span class="c">·</span> into 2.x <span class="c">·</span> head 29cccdf
+  5 file(s), <span class="ok">+349</span> <span class="r">−4</span>
+
+<span class="c">── Project conventions ──</span>
+  • 1 new source file added, and this project gates its
+    public API (<span class="b">bnd-baseline-maven-plugin</span>). New public
+    types may require baseline or export updates.
+  • Target toolchain is <span class="b">java 17</span> (minimum [17,18)).
+  • Build rules inherited from <span class="b">org.apache:apache:34</span>.
+
+<span class="c">── Your prior work on this area (5) ──</span>
+  log4j.md (passage 15)              <span class="c">73% match</span>
+  paste-may-30-2026---520pm.md       <span class="c">71% match</span>
+
+<span class="c">── Verdict (qwen2.5-coder:7b, confidence 90%) ──</span>
+  Adds ZStandard (.zst) support to the Rolling File
+  Appender with a configurable compression level.
+
+  Concerns:
+    • The mapping of <span class="b">compressionLevel=-1</span> as the Zstd
+      default is provisional and may change if future
+      releases support negative levels.
+
+<span class="c">── What this review used ──</span>
+  <span class="ok">✔</span> Facts from GitHub
+  <span class="ok">✔</span> Convention checks against this project's rules
+  <span class="ok">✔</span> Your own prior work
+  <span class="ok">✔</span> Local verdict from Ollama
+  <span class="c">○</span> Escalation for large diffs — no cloud key configured</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ the ladder ══════════════ -->
+<section class="band band-sunken" id="how">
+  <div class="shell">
+    <p class="eyebrow">How it works</p>
+    <h2>Nothing is mandatory. Every layer is yours to add.</h2>
+    <p class="sub">
+      Most tools fail closed — install this, configure that, then maybe you get an answer.
+      OSS-CLI is built as a ladder. It runs on whatever you have connected and tells you,
+      every single time, exactly which sources went into the answer you are reading.
+    </p>
+
+    <div class="ladder">
+      <div class="rung">
+        <span class="mark" aria-hidden="true">✔</span>
+        <span class="what">The facts<span class="needs">needs: a GitHub token</span></span>
+        <span class="gives">Issues and pull requests synced to local SQLite. Diffs, commits, changed files grouped by area, CI results, review threads. No clone required.</span>
+      </div>
+      <div class="rung">
+        <span class="mark" aria-hidden="true">✔</span>
+        <span class="what">Project conventions<span class="needs">needs: a repo profile</span></span>
+        <span class="gives">The rules a change is actually judged against — toolchain version, formatting gates, API baselines, OSGi packaging. Read from the repository, and from the build files it inherits.</span>
+      </div>
+      <div class="rung opt">
+        <span class="mark" aria-hidden="true">○</span>
+        <span class="what">Local answers<span class="needs">optional: Ollama</span></span>
+        <span class="gives">Semantic search across every issue you have synced, and a verdict on a pull request — generated on your own machine, with nothing sent anywhere.</span>
+      </div>
+      <div class="rung opt">
+        <span class="mark" aria-hidden="true">○</span>
+        <span class="what">Your prior work<span class="needs">optional: your own notes</span></span>
+        <span class="gives">Point it at folders you already keep. Past investigations, saved conversations and hand-written notes become searchable evidence, surfaced while you review rather than after.</span>
+      </div>
+      <div class="rung opt">
+        <span class="mark" aria-hidden="true">○</span>
+        <span class="what">Escalation<span class="needs">optional: a cloud API key</span></span>
+        <span class="gives">When local context or confidence runs out, OSS-CLI assembles a complete expert prompt. Send it automatically, or copy it into whichever model you prefer.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ what you get ══════════════ -->
+<section class="band">
+  <div class="shell">
+    <p class="eyebrow">Why it exists</p>
+    <h2>Stop reassembling the same context by hand.</h2>
+    <p class="sub">
+      The work of understanding a change is mostly retrieval: what the project's rules are,
+      what was decided last time, which upstream file this actually inherits from. OSS-CLI
+      does that part once and keeps it.
+    </p>
+
+    <div class="cards">
+      <div class="card">
+        <span class="k">Inherited rules</span>
+        <h3>Finds what isn't in the repo</h3>
+        <p>Many projects publish their packaging and API rules in a parent build file, not in the repository you are reading. OSS-CLI follows that chain and tells you where each rule came from.</p>
+      </div>
+      <div class="card">
+        <span class="k">Commit-aware cache</span>
+        <h3>Re-reviewing is free</h3>
+        <p>Evidence is cached against the head commit, not the pull request number. Nothing changed since last time? Instant. Someone pushed? It re-fetches on its own, with no staleness setting to get wrong.</p>
+      </div>
+      <div class="card">
+        <span class="k">Local-first</span>
+        <h3>Your data stays put</h3>
+        <p>Issues, vectors and notes live in SQLite on your disk. Retrieval and embedding run locally. Nothing leaves your machine unless you explicitly escalate a prompt to a cloud model.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ install ══════════════ -->
+<section class="band band-sunken" id="install">
+  <div class="shell">
+    <p class="eyebrow">Install</p>
+    <h2>Java 17 and a GitHub token. That's the whole requirement.</h2>
+    <p class="sub">
+      OSS-CLI ships as a single self-contained jar, so the Linux and Windows steps are the
+      same file Homebrew installs for you on macOS.
+    </p>
+
+    <div class="tabs">
+      <div class="tablist" role="tablist" aria-label="Operating system">
+        <button class="tab" role="tab" id="tab-mac" aria-controls="panel-mac" aria-selected="true">macOS</button>
+        <button class="tab" role="tab" id="tab-linux" aria-controls="panel-linux" aria-selected="false">Linux</button>
+        <button class="tab" role="tab" id="tab-win" aria-controls="panel-win" aria-selected="false">Windows</button>
+      </div>
+
+      <!-- macOS -->
+      <div class="tabpanel" role="tabpanel" id="panel-mac" aria-labelledby="tab-mac">
+        <div class="step">
+          <span class="step-h">1 · Install</span>
+<pre class="block">brew install ramanathan1504/oss-cli/oss-cli</pre>
+          <p class="note">Homebrew pulls in OpenJDK 17 for you and puts <code>oss-cli</code> on your PATH.</p>
+        </div>
+        <div class="step">
+          <span class="step-h">2 · Give it a GitHub token</span>
+<pre class="block"><span class="c"># any token with the `repo` scope — the gh CLI already has one</span>
+security add-generic-password -a "$USER" -s github_token \
+  -w "$(gh auth token)" -U</pre>
+        </div>
+        <div class="step">
+          <span class="step-h">3 · Check everything</span>
+<pre class="block">oss-cli doctor</pre>
+        </div>
+      </div>
+
+      <!-- Linux -->
+      <div class="tabpanel" role="tabpanel" id="panel-linux" aria-labelledby="tab-linux" hidden>
+        <div class="step">
+          <span class="step-h">1 · Java 17</span>
+<pre class="block"><span class="c"># Debian / Ubuntu</span>
+sudo apt install openjdk-17-jre
+
+<span class="c"># Fedora / RHEL</span>
+sudo dnf install java-17-openjdk</pre>
+        </div>
+        <div class="step">
+          <span class="step-h">2 · Download the latest jar</span>
+<pre class="block">mkdir -p ~/.local/share ~/.local/bin
+
+<span class="c"># resolves whatever the newest release is, so this stays correct</span>
+JAR_URL=$(curl -fsSL https://api.github.com/repos/ramanathan1504/oss-cli/releases/latest \
+  | grep -o '"browser_download_url": *"[^"]*\.jar"' | cut -d'"' -f4)
+
+curl -fL -o ~/.local/share/oss-cli.jar "$JAR_URL"</pre>
+        </div>
+        <div class="step">
+          <span class="step-h">3 · Put it on your PATH</span>
+<pre class="block">printf '#!/bin/sh\nexec java -jar %s "$@"\n' \
+  "$HOME/.local/share/oss-cli.jar" > ~/.local/bin/oss-cli
+chmod +x ~/.local/bin/oss-cli</pre>
+        </div>
+        <div class="step">
+          <span class="step-h">4 · Give it a GitHub token</span>
+<pre class="block"><span class="c"># add to ~/.bashrc or ~/.zshrc to persist it</span>
+export GITHUB_TOKEN="ghp_your_token_here"
+
+oss-cli doctor</pre>
+        </div>
+      </div>
+
+      <!-- Windows -->
+      <div class="tabpanel" role="tabpanel" id="panel-win" aria-labelledby="tab-win" hidden>
+        <div class="step">
+          <span class="step-h">1 · Java 17</span>
+<pre class="block">winget install EclipseAdoptium.Temurin.17.JRE</pre>
+        </div>
+        <div class="step">
+          <span class="step-h">2 · Download the latest jar</span>
+<pre class="block"><span class="c"># PowerShell</span>
+$dir = "$env:LOCALAPPDATA\oss-cli"
+New-Item -ItemType Directory -Force -Path $dir | Out-Null
+
+<span class="c"># resolves whatever the newest release is, so this stays correct</span>
+$rel = Invoke-RestMethod https://api.github.com/repos/ramanathan1504/oss-cli/releases/latest
+$url = ($rel.assets | Where-Object { $_.name -like "*.jar" })[0].browser_download_url
+
+Invoke-WebRequest -Uri $url -OutFile "$dir\oss-cli.jar"</pre>
+        </div>
+        <div class="step">
+          <span class="step-h">3 · Add a command</span>
+<pre class="block"><span class="c"># create oss-cli.cmd somewhere on your PATH</span>
+"@echo off`r`njava -jar `"$dir\oss-cli.jar`" %*" |
+  Out-File -Encoding ascii "$dir\oss-cli.cmd"
+
+$env:Path += ";$dir"</pre>
+        </div>
+        <div class="step">
+          <span class="step-h">4 · Give it a GitHub token</span>
+<pre class="block">setx GITHUB_TOKEN "ghp_your_token_here"
+
+<span class="c"># open a new terminal, then</span>
+oss-cli doctor</pre>
+        </div>
+      </div>
+    </div>
+
+    <hr class="rule" style="margin:2.5rem 0 2rem">
+
+    <p class="eyebrow">First run</p>
+    <div class="step">
+      <span class="step-h">Register a repository and sync it</span>
+<pre class="block"><span class="c"># any repository you want to follow</span>
+oss-cli sync --add apache/kafka
+
+<span class="c"># pulls issues and PRs, then builds the search index</span>
+oss-cli sync --all
+
+<span class="c"># review a pull request with everything you have connected</span>
+oss-cli review 4234 -r apache/kafka</pre>
+    </div>
+    <p class="note">
+      <strong>Optional, any time:</strong> install <a href="https://ollama.com">Ollama</a> for local
+      answers and semantic search, then run <code>oss-cli setup</code> to point OSS-CLI at your
+      own note folders. Skip both and every command above still works.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════ commands ══════════════ -->
+<section class="band" id="commands">
+  <div class="shell">
+    <p class="eyebrow">Reference</p>
+    <h2>The commands you will actually use</h2>
+    <p class="sub">
+      Run <code>oss-cli --help</code> for the full list, or <code>oss-cli doctor</code> when
+      something is not behaving — it checks every prerequisite and names what to fix.
+    </p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th scope="col">Command</th><th scope="col">Needs</th><th scope="col">What it does</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>sync --add &lt;repo&gt;</code></td><td class="need">token</td><td>Registers a repository and builds its convention profile</td></tr>
+          <tr><td><code>sync --all</code></td><td class="need">token</td><td>Pulls issues and pull requests, then updates the search index</td></tr>
+          <tr><td><code>sync --me</code></td><td class="need">token</td><td>Indexes your own pull request history and your note folders</td></tr>
+          <tr><td><code>profile</code></td><td class="need">token</td><td>Shows a project's language, build, toolchain and enforced conventions</td></tr>
+          <tr><td><code>review &lt;pr&gt;</code></td><td class="need">token</td><td>Reviews a pull request using every source you have connected</td></tr>
+          <tr><td><code>prompt &lt;issue&gt;</code></td><td class="need">token</td><td>Answers locally, or assembles a complete expert prompt when it cannot</td></tr>
+          <tr><td><code>search &lt;query&gt;</code></td><td class="need">Ollama</td><td>Semantic search across everything you have indexed</td></tr>
+          <tr><td><code>triage &lt;issue&gt;</code></td><td class="need">Ollama</td><td>Full triage audit for a single issue</td></tr>
+          <tr><td><code>doctor</code></td><td class="need">—</td><td>Checks every prerequisite and says exactly what to fix</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<hr class="rule">
+<footer class="foot">
+  <div class="shell foot-in">
+    <span>OSS-CLI — Apache-2.0</span>
+    <a href="https://github.com/ramanathan1504/oss-cli">Source</a>
+    <a href="https://github.com/ramanathan1504/oss-cli/blob/main/COMMANDS.md">Command reference</a>
+    <a href="https://github.com/ramanathan1504/oss-cli/blob/main/SETUP.md">Setup guide</a>
+    <a href="https://github.com/ramanathan1504/oss-cli/issues">Report an issue</a>
+    <span class="spacer"></span>
+    <span>Runs on your machine.</span>
+  </div>
+</footer>
+
+<script>
+// ---- theme toggle: stamps data-theme so it beats the media query both ways
+(function () {
+  var root = document.documentElement;
+  var btn = document.getElementById('theme-btn');
+  var saved = null;
+  try { saved = localStorage.getItem('osscli-theme'); } catch (e) {}
+  if (saved) root.setAttribute('data-theme', saved);
+
+  btn.addEventListener('click', function () {
+    var current = root.getAttribute('data-theme');
+    if (!current) {
+      current = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    var next = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('osscli-theme', next); } catch (e) {}
+  });
+})();
+
+// ---- copy buttons
+document.querySelectorAll('[data-copy]').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var el = document.querySelector(btn.getAttribute('data-copy'));
+    if (!el) return;
+    var text = el.textContent.replace(/^\s*\$\s*/, '');
+    navigator.clipboard.writeText(text).then(function () {
+      var old = btn.textContent;
+      btn.textContent = 'Copied';
+      btn.setAttribute('data-done', '1');
+      setTimeout(function () {
+        btn.textContent = old;
+        btn.removeAttribute('data-done');
+      }, 1600);
+    }).catch(function () {
+      btn.textContent = 'Press ⌘C';
+    });
+  });
+});
+
+// ---- install tabs
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  function select(tab) {
+    tabs.forEach(function (t) {
+      var on = t === tab;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+  }
+  tabs.forEach(function (tab, i) {
+    tab.addEventListener('click', function () { select(tab); });
+    tab.addEventListener('keydown', function (e) {
+      var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      e.preventDefault();
+      var next = tabs[(i + d + tabs.length) % tabs.length];
+      next.focus();
+      select(next);
+    });
+  });
+
+  // Preselect the visitor's platform — the common case is the one they need.
+  var p = navigator.platform || '';
+  var ua = navigator.userAgent || '';
+  if (/Win/i.test(p) || /Windows/i.test(ua)) select(document.getElementById('tab-win'));
+  else if (/Linux|X11/i.test(p) && !/Android/i.test(ua)) select(document.getElementById('tab-linux'));
+})();
+</script>
+</body>
+</html>
