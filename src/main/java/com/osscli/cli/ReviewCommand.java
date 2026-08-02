@@ -261,7 +261,16 @@ public class ReviewCommand implements Callable<Integer> {
         }
     }
 
-    /** Files the verdict beside hand-written reviews so it becomes retrievable evidence like any other note. */
+    /**
+     * Files the verdict with this tool's other generated output, not beside hand-written reviews.
+     *
+     * <p>Generated notes are kept in one folder of their own so that a note's provenance is a property of its
+     * location. Mixing them into an archive's existing review folder costs two things. A knowledge base that scores
+     * what its owner knows cannot then separate what they reasoned out from what a model produced from their own
+     * corpus, so re-answering a question raises the score for it. And a filing tool that overwrites its previous note
+     * for a pull request cannot see a generated file under a different naming scheme, so the same review accumulates
+     * under two names.
+     */
     private void recordReview(PrEvidence ev, String model, JsonNode verdict) {
         StringBuilder sb = new StringBuilder();
         sb.append(verdict.path("summary").asText("")).append("\n");
@@ -270,7 +279,7 @@ public class ReviewCommand implements Callable<Integer> {
         sb.append("\nHead commit: ").append(ev.headSha()).append('\n');
 
         com.osscli.knowledge.ResolutionWriter.record(
-                ev.repository(), ev.prNumber(), ev.title(), model, null, sb.toString(), "pr-reviews", "review");
+                ev.repository(), ev.prNumber(), ev.title(), model, null, sb.toString(), "oss-cli", "review");
     }
 
     private void appendSection(StringBuilder sb, String heading, JsonNode array) {
