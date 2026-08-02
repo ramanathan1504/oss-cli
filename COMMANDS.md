@@ -85,6 +85,11 @@ No local clone is required — everything comes from the GitHub API.
 *   `-r`, `--repo <repo>` : Target repository. Defaults to `default.repository`.
 *   `--refresh` : Re-fetch even when this exact commit is cached.
 *   `--no-verdict` : Report facts and conventions only, without asking a model to judge.
+*   `--no-notes` : Do not consult your own notes.
+*   `--escalate` : When the diff exceeds the local budget, send it to a cloud model instead of truncating. Picks whichever provider key is configured.
+*   `--send-claude`, `--send-openai`, `--send-gemini` : Escalate to a named provider.
+
+Escalation fires **only when it would change the answer** — a diff that already fits the local budget is answered locally and says so, rather than spending a cloud call to reread what Ollama could see anyway.
 
 ```bash
 oss-cli review 4234
