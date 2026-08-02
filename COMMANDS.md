@@ -65,6 +65,25 @@ bnd-baseline-maven-plugin — OSGi/API baseline enforced [inherited from org.apa
 checkstyle                — checkstyle enforced        [inherited from org.apache:apache:34]
 ```
 
+### `onboard`
+Answers "I want to contribute to this project — what do I need to know?"
+
+Reads the same profile `review` judges against, from the other direction: a maintainer needs the rules to check a change, a newcomer needs them before writing one. Deriving both from one source is what stops contributor advice drifting from the standard pull requests are actually held to.
+
+Reports what the project enforces **as instructions rather than plugin names** — a newcomer cannot act on `bnd-baseline-maven-plugin`, but can act on being told that adding a public class will fail the build until the API baseline is updated.
+
+*   `-r`, `--repo <repo>` : Target repository. Defaults to `default.repository`.
+*   `--rebuild` : Re-read the repository rather than using the stored profile.
+*   `--no-steps` : Skip the model-written build steps and list the source documents only.
+
+```bash
+oss-cli onboard -r apache/logging-log4j2
+```
+
+Build commands are extracted from the project's own `BUILDING` / `CONTRIBUTING` document, and the model is told to return nothing rather than supply commands from general knowledge — a plausible invented command fails somewhere unrelated to the real setup and costs more time than an admission.
+
+Starter issues are matched on **whole words in a normalised label**, so `good-first-issue`, `Good First Issue` and `E-easy` all match while `area/resteasy-classic` and `spring boot starter` do not. They are listed fewest-comments-first: a starter issue with a long thread usually turned out to be hard, or someone is already on it.
+
 ### `review`
 Reviews a pull request using every source you have connected, and nothing you have not.
 
@@ -74,9 +93,9 @@ Built as a **ladder**. Layer 0 needs only a GitHub token; every layer above it i
 |---|---|---|
 | Facts | GitHub token | Diff, commits, files by area, CI checks, review threads |
 | Conventions | a built profile | Deterministic gate checks (no model involved) |
+| History | notes corpus | Your own prior work on the changed paths |
 | Verdict | Ollama | Local judgment against the project's rules |
-| Escalation | cloud key | Handling for diffs beyond the local budget *(not yet wired)* |
-| History | notes corpus | Your past reviews and work *(not yet wired)* |
+| Escalation | cloud key | The whole diff read by a cloud model when it exceeds the local budget |
 
 Evidence is cached **by head commit SHA**, not by PR number. A pull request is rewritten by every push, so caching by number alone would serve a review of code that no longer exists. Re-reviewing unchanged code is instant; after a push it re-fetches automatically.
 
@@ -269,6 +288,7 @@ oss-cli restore /path/to/sa_brain_backup_20260627_104000.zip
 | `sync --me`       | Online         | No                      | Sync personal PR profile + Drive logs        |
 | `profile`         | Online         | No                      | Language, build, toolchain, conventions      |
 | `review`          | Online         | Optional Ollama         | **Review a PR from every connected source**  |
+| `onboard`         | Online         | Optional Ollama         | What a project expects before you contribute |
 | `critical`        | Offline        | No                      | Fast keyword-score severity ranking          |
 | `analyze`         | Offline        | Ollama                  | AI batch severity scoring                    |
 | `duplicates`      | Offline        | Ollama                  | Vector-based duplicate detection             |

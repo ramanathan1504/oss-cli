@@ -18,6 +18,7 @@ import picocli.CommandLine.Command;
             PrsCommand.class,
             ReviewCommand.class,
             ProfileCommand.class,
+            OnboardCommand.class,
             ReportCommand.class,
             TrendCommand.class,
             TriageCommand.class,
