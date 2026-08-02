@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.4.0
+
+_2026-08-02_
+
+- Make the release publish step repeatable (#9)
+- Build, verify and smoke-test on every push (#8)
+- Detect the toolchain Gradle projects declare (#7)
+- Add onboard, the contributor's view of a repository profile (#6)
+- Cut a release with one command (#5)
+- Escalate a review when the diff is larger than the local model can read (#4)
+- Add the single-page site, deployable to Cloudflare Pages (#3)
+- Let review consult the reviewer's own notes (#2)
+- Keep generated notes out of the folders holding hand-written ones (#1)
+- Report what actually happened, index every repo, and close the loop
+- Remove a merge-conflict marker left in .gitignore
+
+
 ## 1.3.1
 
 _2026-08-02_
