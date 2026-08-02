@@ -178,6 +178,55 @@ reasons are user-facing diagnostics — keep `timeout`, `parse_error`,
 
 ---
 
+## Releasing
+
+One command:
+
+```bash
+./release.sh 1.3.2
+```
+
+Everything that touches this repository happens locally in that script; everything
+that touches the outside world happens in CI, triggered by the tag it pushes.
+
+| `release.sh` (local) | `.github/workflows/release.yml` (on tag `v*`) |
+|---|---|
+| Refuses a dirty tree, a non-`main` branch, a duplicate tag, or a `main` behind origin | Rebuilds the jar from the tagged tree |
+| Sets the pom version | Fails if the jar name and the tag disagree |
+| Rewrites `oss-cli-<version>.jar` in the docs | Copies this version's `CHANGELOG.md` section into the release notes |
+| Prepends a `CHANGELOG.md` entry from every non-merge commit since the last tag | Publishes the GitHub release with the jar |
+| Formats, builds, commits, tags, pushes | Bumps the Homebrew formula's `url` and `sha256` |
+
+The split is deliberate. The tag ends up pointing at the exact tree that was built
+and reviewed, and CI rebuilds from that tag rather than trusting a jar uploaded
+from someone's laptop.
+
+**Before releasing**, skim the generated `CHANGELOG.md` entry — it is commit
+subjects, so a subject that only made sense inside its diff should be reworded.
+Commit that edit, then run the script.
+
+### One-time setup
+
+- `TAP_TOKEN` — a repo-scoped token with write access to `homebrew-oss-cli`,
+  added under *Settings → Secrets and variables → Actions*. Without it the tap
+  step is skipped rather than failing, so a fork can still cut a release.
+- `main` is protected. Pushing the release commit relies on admin bypass
+  (`enforce_admins: false`), which is why releases are cut by a maintainer
+  rather than by CI.
+
+### If a release goes wrong
+
+The tag is the trigger, so deleting it locally and remotely and re-tagging
+re-runs the whole pipeline:
+
+```bash
+git tag -d v1.3.2 && git push --delete origin v1.3.2
+```
+
+Delete the GitHub release too if one was created — `gh release delete v1.3.2`.
+
+---
+
 ## Things worth fixing
 
 1. **Free-text search over the notes** — `search` covers only the issue
