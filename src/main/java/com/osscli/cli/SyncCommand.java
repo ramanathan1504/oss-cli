@@ -23,6 +23,9 @@ public class SyncCommand implements Callable<Integer> {
     private static final Logger LOGGER = LogManager.getLogger(SyncCommand.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    /** Vectors are committed this often so an interrupted first index resumes instead of restarting. */
+    private static final int EMBED_BATCH_SIZE = 50;
+
     @Option(
             names = {"--me"},
             description = "Dynamically sync and build your personal contribution profile from GitHub")
@@ -48,6 +51,12 @@ public class SyncCommand implements Callable<Integer> {
             description = "Remove a GitHub repository from the local monitoring database")
     private String removeRepo;
 
+    @Option(
+            names = {"--no-embed"},
+            description = "Skip building the local vector index (faster sync; disables semantic retrieval "
+                    + "for newly synced issues)")
+    private boolean noEmbed;
+
     @Override
     public Integer call() throws Exception {
         if (me) {
@@ -58,6 +67,17 @@ public class SyncCommand implements Callable<Integer> {
         if (addRepo != null) {
             SqliteStorage.saveMonitoredRepository(addRepo, true);
             LOGGER.info("Successfully registered '{}' in SQLite. You can now sync it anytime!", addRepo);
+
+            // Profile at registration: this is the moment the user is asking "what is this project?", and the answer
+            // is what every later review compares against. Failure is not fatal -- 'profile --rebuild' retries.
+            try {
+                LOGGER.info("  ↳ Building repository profile...");
+                SqliteStorage.saveRepoProfile(com.osscli.profile.RepoProfileBuilder.build(addRepo));
+                LOGGER.info("  ✔ Profile built. Run 'profile -r {}' to see it.", addRepo);
+            } catch (Exception e) {
+                LOGGER.warn("  ⚠ Could not build the profile now: {}", e.getMessage());
+                LOGGER.warn("    The repository is registered; run 'profile -r {}' to build it later.", addRepo);
+            }
             return 0;
         }
 
@@ -76,6 +96,7 @@ public class SyncCommand implements Callable<Integer> {
                 return 0;
             }
             LOGGER.info("Starting batch sync for {} active repositories...", activeRepos.size());
+            int failed = 0;
             for (String repo : activeRepos) {
                 LOGGER.info("==================================================");
                 LOGGER.info("Syncing: {}", repo);
@@ -83,10 +104,20 @@ public class SyncCommand implements Callable<Integer> {
                 try {
                     syncRepository(repo);
                 } catch (Exception e) {
+                    failed++;
                     LOGGER.error("  ↳ [Error] Failed to sync '{}': {}", repo, e.getMessage());
                 }
             }
             LOGGER.info("==================================================");
+            if (failed > 0) {
+                // Reporting success here regardless of outcome is what made a fully broken sync look like a
+                // working one -- the per-repo errors scroll past and the last line is the one that is believed.
+                LOGGER.error(
+                        "Batch synchronization finished with errors: {} of {} repositories failed.",
+                        failed,
+                        activeRepos.size());
+                return 1;
+            }
             LOGGER.info("Batch synchronization completed successfully.");
             LOGGER.info("==================================================");
             return 0;
@@ -149,9 +180,97 @@ public class SyncCommand implements Callable<Integer> {
         printMostCommented(realIssues);
         printOldest(realIssues);
         printRecentlyUpdated(realIssues);
+
+        // 5. Bring the vector index up to date for whatever was just stored.
+        if (!noEmbed) {
+            embedMissingIssues(targetRepo);
+        }
         LOGGER.info("");
 
         return 0;
+    }
+
+    /**
+     * Generates embeddings for issues in {@code repository} that do not yet have one.
+     *
+     * <p>Runs for every synced repository. Vectors used to appear only as a side effect of {@code duplicates}, so
+     * retrieval worked for whichever repository the user happened to run that command on and silently returned nothing
+     * everywhere else -- an empty result is indistinguishable from "no related issues exist".
+     *
+     * <p>Never fails the sync. Ollama is optional for users who only want issue tracking, so an unreachable daemon
+     * downgrades this to a warning: the GitHub data is already committed and is worth keeping regardless.
+     *
+     * <p>Progress is saved in batches, which also makes the work resumable. First-time indexing of a large repository
+     * is thousands of model calls; if it is interrupted, the next sync continues from what survived rather than
+     * starting over.
+     */
+    private void embedMissingIssues(String repository) {
+        try {
+            String embedModel = SqliteStorage.loadConfig("ollama.model.embedding");
+            if (embedModel == null || embedModel.isBlank()) {
+                embedModel = "all-minilm";
+            }
+
+            List<Issue> stored = SqliteStorage.loadIssues(repository);
+            java.util.Set<Long> alreadyEmbedded = SqliteStorage.loadEmbeddedIssueNumbers(repository, embedModel);
+
+            List<Issue> pending = stored.stream()
+                    .filter(issue -> !alreadyEmbedded.contains(issue.number()))
+                    .toList();
+
+            if (pending.isEmpty()) {
+                LOGGER.info(
+                        "  ↳ Vector index up to date ({} issues indexed with '{}').",
+                        alreadyEmbedded.size(),
+                        embedModel);
+                return;
+            }
+
+            OllamaClient embedder = new OllamaClient(embedModel);
+            if (!embedder.isServerReachable()) {
+                LOGGER.warn(
+                        "  ⚠ Ollama unreachable — {} issue(s) in '{}' have no vector and will not be searchable.",
+                        pending.size(),
+                        repository);
+                LOGGER.warn("    Issue data was saved. Start Ollama and re-run sync to build the index.");
+                return;
+            }
+
+            LOGGER.info("  ↳ Building vector index: {} new issue(s) with '{}'...", pending.size(), embedModel);
+
+            List<com.osscli.model.IssueEmbedding> batch = new ArrayList<>();
+            int done = 0;
+            int failed = 0;
+
+            for (Issue issue : pending) {
+                String content = "Title: " + issue.title() + "\nBody: " + (issue.body() == null ? "" : issue.body());
+                try {
+                    batch.add(new com.osscli.model.IssueEmbedding(
+                            repository, issue.number(), embedder.generateEmbedding(content)));
+                } catch (Exception e) {
+                    // One malformed or oversized issue must not abandon the rest of the repository.
+                    failed++;
+                    LOGGER.debug("    embedding failed for #{}: {}", issue.number(), e.getMessage());
+                }
+
+                done++;
+                if (batch.size() >= EMBED_BATCH_SIZE) {
+                    SqliteStorage.saveEmbeddings(repository, batch, embedModel);
+                    batch.clear();
+                    LOGGER.info("    … {}/{} embedded", done, pending.size());
+                }
+            }
+            SqliteStorage.saveEmbeddings(repository, batch, embedModel);
+
+            if (failed > 0) {
+                LOGGER.warn("  ↳ Vector index updated: {} embedded, {} skipped after errors.", done - failed, failed);
+            } else {
+                LOGGER.info("  ✔ Vector index updated: {} issue(s) embedded.", done);
+            }
+        } catch (Exception e) {
+            LOGGER.warn("  ⚠ Could not update the vector index for '{}': {}", repository, e.getMessage());
+            LOGGER.warn("    Issue data was saved; retrieval for this repository may be incomplete.");
+        }
     }
 
     private void printMostCommented(List<Issue> issues) {
@@ -208,6 +327,11 @@ public class SyncCommand implements Callable<Integer> {
         OllamaClient embedOllama = new OllamaClient(embedModel);
         OllamaClient guideOllama = new OllamaClient(guidanceModel);
 
+        if (!embedOllama.isServerReachable()) {
+            LOGGER.error("Error: Cannot reach the Ollama daemon at http://localhost:11434.");
+            LOGGER.error("Start it with: ollama serve   (or launch the Ollama app)");
+            return 1;
+        }
         if (!embedOllama.isModelAvailable()) {
             LOGGER.error("Error: Required embedding model '{}' is not pulled locally.", embedModel);
             LOGGER.error("Please run: ollama pull {}", embedModel);

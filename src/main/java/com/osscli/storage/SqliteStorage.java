@@ -5,6 +5,7 @@ import com.osscli.model.AiAnalysisResult;
 import com.osscli.model.Issue;
 import com.osscli.model.IssueEmbedding;
 import com.osscli.model.Label;
+import com.osscli.model.PrEvidence;
 import com.osscli.model.PullRequestMarker;
 import com.osscli.model.RepoIssue;
 import com.osscli.model.TrendSnapshot;
@@ -17,8 +18,10 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -315,6 +318,146 @@ public class SqliteStorage {
             }
             ps.executeBatch();
             conn.commit();
+        }
+    }
+
+    /**
+     * Issue numbers in {@code repository} that already carry a vector from {@code embeddingModel}.
+     *
+     * <p>Returns numbers rather than vectors because the caller only needs to know what is missing, and a repository
+     * with thousands of issues would otherwise pull thousands of full vectors off disk to answer a set-membership
+     * question.
+     *
+     * <p>Rows written by a different model are reported as absent. Vectors from two models occupy unrelated coordinate
+     * spaces, so keeping the stale ones would mean ranking distances that cannot be compared. Rows predating the
+     * {@code embedding_model} column (written as NULL) are treated the same way -- unknown provenance is not a match.
+     */
+    public static Set<Long> loadEmbeddedIssueNumbers(String repository, String embeddingModel) throws SQLException {
+        String sql = "SELECT issue_number FROM embeddings WHERE repository = ? AND embedding_model = ?;";
+        Set<Long> numbers = new HashSet<>();
+
+        try (Connection conn = DatabaseManager.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, repository);
+            ps.setString(2, embeddingModel);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    numbers.add(rs.getLong("issue_number"));
+                }
+            }
+        }
+        return numbers;
+    }
+
+    // ==========================================
+    // Repository profile
+    // ==========================================
+
+    public static void saveRepoProfile(com.osscli.model.RepoProfile p) throws SQLException {
+        String sql = "INSERT OR REPLACE INTO repo_profile (repository, primary_language, build_system, "
+                + "target_version, min_version, conventions_json, docs_json, summary, built_at) "
+                + "VALUES (?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP);";
+        try (Connection conn = DatabaseManager.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, p.repository());
+            ps.setString(2, p.primaryLanguage());
+            ps.setString(3, p.buildSystem());
+            ps.setString(4, p.targetVersion());
+            ps.setString(5, p.minVersion());
+            ps.setString(6, p.conventionsJson());
+            ps.setString(7, p.docsJson());
+            ps.setString(8, p.summary());
+            ps.executeUpdate();
+        }
+    }
+
+    public static com.osscli.model.RepoProfile loadRepoProfile(String repository) throws SQLException {
+        String sql = "SELECT * FROM repo_profile WHERE repository = ?;";
+        try (Connection conn = DatabaseManager.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, repository);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                return new com.osscli.model.RepoProfile(
+                        rs.getString("repository"),
+                        rs.getString("primary_language"),
+                        rs.getString("build_system"),
+                        rs.getString("target_version"),
+                        rs.getString("min_version"),
+                        rs.getString("conventions_json"),
+                        rs.getString("docs_json"),
+                        rs.getString("summary"));
+            }
+        }
+    }
+
+    // ==========================================
+    // Pull request evidence cache
+    // ==========================================
+
+    public static void savePrEvidence(PrEvidence e) throws SQLException {
+        String sql = "INSERT OR REPLACE INTO pr_cache (repository, pr_number, head_sha, title, author, state, "
+                + "base_ref, body, commits_json, files_json, diff, reviews_json, comments_json, checks_json, "
+                + "additions, deletions, changed_files, fetched_at) "
+                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP);";
+
+        try (Connection conn = DatabaseManager.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, e.repository());
+            ps.setLong(2, e.prNumber());
+            ps.setString(3, e.headSha());
+            ps.setString(4, e.title());
+            ps.setString(5, e.author());
+            ps.setString(6, e.state());
+            ps.setString(7, e.baseRef());
+            ps.setString(8, e.body());
+            ps.setString(9, e.commitsJson());
+            ps.setString(10, e.filesJson());
+            ps.setString(11, e.diff());
+            ps.setString(12, e.reviewsJson());
+            ps.setString(13, e.commentsJson());
+            ps.setString(14, e.checksJson());
+            ps.setInt(15, e.additions());
+            ps.setInt(16, e.deletions());
+            ps.setInt(17, e.changedFiles());
+            ps.executeUpdate();
+        }
+    }
+
+    /** Cached evidence for this exact commit, or null. A different head SHA is a miss, never a stale hit. */
+    public static PrEvidence loadPrEvidence(String repository, long prNumber, String headSha) throws SQLException {
+        String sql = "SELECT * FROM pr_cache WHERE repository = ? AND pr_number = ? AND head_sha = ?;";
+
+        try (Connection conn = DatabaseManager.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, repository);
+            ps.setLong(2, prNumber);
+            ps.setString(3, headSha);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                return new PrEvidence(
+                        rs.getString("repository"),
+                        rs.getLong("pr_number"),
+                        rs.getString("head_sha"),
+                        rs.getString("title"),
+                        rs.getString("author"),
+                        rs.getString("state"),
+                        rs.getString("base_ref"),
+                        rs.getString("body"),
+                        rs.getString("commits_json"),
+                        rs.getString("files_json"),
+                        rs.getString("diff"),
+                        rs.getString("reviews_json"),
+                        rs.getString("comments_json"),
+                        rs.getString("checks_json"),
+                        rs.getInt("additions"),
+                        rs.getInt("deletions"),
+                        rs.getInt("changed_files"));
+            }
         }
     }
 

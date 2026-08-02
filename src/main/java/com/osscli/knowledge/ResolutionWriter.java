@@ -1,0 +1,252 @@
+package com.osscli.knowledge;
+
+import com.osscli.AppPaths;
+import com.osscli.llm.OllamaClient;
+import com.osscli.retrieval.PassageSplitter;
+import com.osscli.storage.SqliteStorage;
+import com.osscli.util.Redactor;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+/**
+ * Writes a finished investigation back into the knowledge base as an indexed note.
+ *
+ * <p>This is the return arc of the retrieval loop. Without it the tool reads from its corpus but never adds to it:
+ * every answer, whether produced locally or by an escalated cloud model, was displayed once and discarded, so the same
+ * question cost the same work every time and nothing the user had already solved was ever retrievable.
+ *
+ * <p>The note is written to disk AND embedded in the same step, deliberately. A file that exists but has no vector is
+ * invisible to retrieval, which is indistinguishable from not having saved it at all -- the failure would only surface
+ * much later, as an answer that should have been found and was not.
+ */
+public final class ResolutionWriter {
+
+    private static final Logger LOGGER = LogManager.getLogger(ResolutionWriter.class);
+
+    private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
+
+    /**
+     * Subfolder recording which tool produced the note.
+     *
+     * <p>Filing is topic first, provenance second: the topic is what someone browses for, while the source only says
+     * what kind of evidence a note is. Keeping this tool's output in its own folder means an archive shared with other
+     * capture tools stays sortable, and a bad run can be removed without touching hand-written notes.
+     */
+    private static final String PROVENANCE_DIR = "oss-cli";
+
+    private ResolutionWriter() {}
+
+    /**
+     * Records a resolution and indexes it for future retrieval.
+     *
+     * <p>Never throws. A failure here must not discard an answer the user is already reading on screen, nor fail the
+     * command that produced it -- the answer has value even when archiving it does not work.
+     *
+     * @param source what produced the answer, e.g. {@code "ollama"} or a cloud provider name
+     * @return the file written, or null if the note could not be recorded
+     */
+    public static Path record(
+            String repository, long issueNumber, String issueTitle, String source, String question, String answer) {
+        return record(repository, issueNumber, issueTitle, source, question, answer, PROVENANCE_DIR, "resolution");
+    }
+
+    /**
+     * As {@link #record}, but filed under a caller-chosen provenance folder and file label.
+     *
+     * <p>Reviews belong beside hand-written reviews, not beside issue resolutions: an archive already keeping
+     * {@code pr-reviews/} should receive generated reviews there rather than in a second folder that splits the same
+     * kind of material across two places.
+     */
+    public static Path record(
+            String repository,
+            long issueNumber,
+            String issueTitle,
+            String source,
+            String question,
+            String answer,
+            String provenanceDir,
+            String label) {
+
+        if (answer == null || answer.isBlank()) {
+            return null;
+        }
+
+        try {
+            Path dir = resolveTopicDir(repository).resolveSibling(provenanceDir);
+            Files.createDirectories(dir);
+
+            String fileName = String.format(
+                    "Issue-%d-%s-%s.md", issueNumber, label, LocalDateTime.now().format(STAMP));
+            Path file = dir.resolve(fileName);
+
+            String body = buildNote(repository, issueNumber, issueTitle, source, question, answer);
+
+            // The transcript can carry a key pasted into a prompt, and this writes to both disk and the database.
+            Redactor.Result scrubbed = Redactor.redact(body);
+            if (scrubbed.redactedAnything()) {
+                LOGGER.warn("  ⚠ Redacted from this resolution note: {}", scrubbed.summary());
+                LOGGER.warn("    Removing them here does not revoke them — rotate anything real.");
+            }
+            String content = scrubbed.text();
+
+            Files.writeString(file, content, StandardCharsets.UTF_8);
+
+            index(file, content);
+
+            LOGGER.info("  ✔ {} recorded and indexed → {}", capitalize(label), file.toAbsolutePath());
+            return file;
+
+        } catch (Exception e) {
+            LOGGER.warn("  ⚠ Could not record this resolution: {}", e.getMessage());
+            LOGGER.warn("    The answer above is unaffected, but it will not be searchable later.");
+            return null;
+        }
+    }
+
+    /** Embeds the note so the next question can retrieve it. Skipped with a warning when Ollama is unavailable. */
+    private static void index(Path file, String content) throws Exception {
+        String embedModel = SqliteStorage.loadConfig("ollama.model.embedding");
+        if (embedModel == null || embedModel.isBlank()) {
+            embedModel = "all-minilm";
+        }
+
+        OllamaClient embedder = new OllamaClient(embedModel);
+        if (!embedder.isServerReachable()) {
+            LOGGER.warn("  ⚠ Ollama unreachable — the note was saved but is not yet searchable.");
+            LOGGER.warn("    Run 'sync --me' once Ollama is running to index it.");
+            return;
+        }
+
+        String path = file.toAbsolutePath().toString();
+        long modified = Files.getLastModifiedTime(file).toMillis();
+
+        SqliteStorage.savePersonalChatMemory(
+                path,
+                file.getFileName().toString(),
+                modified,
+                content,
+                embedder.generateEmbedding(content),
+                embedModel);
+
+        // Chunk as well as whole-document: retrieval ranks passages, so a long note that matches in one paragraph
+        // would otherwise be diluted by the rest of its own text and lose to a shorter, weaker match.
+        List<String> passages = PassageSplitter.split(content);
+        List<double[]> vectors = new ArrayList<>(passages.size());
+        for (String passage : passages) {
+            vectors.add(embedder.generateEmbedding(passage));
+        }
+        SqliteStorage.savePersonalChatChunks(path, passages, vectors, embedModel);
+    }
+
+    private static String buildNote(
+            String repository, long issueNumber, String issueTitle, String source, String question, String answer) {
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("# ")
+                .append(repository)
+                .append(" — Issue #")
+                .append(issueNumber)
+                .append('\n');
+        if (issueTitle != null && !issueTitle.isBlank()) {
+            sb.append("## ").append(issueTitle).append('\n');
+        }
+        sb.append('\n');
+        sb.append("- Repository: ").append(repository).append('\n');
+        sb.append("- Issue: #").append(issueNumber).append('\n');
+        sb.append("- Answered by: ").append(source == null ? "unknown" : source).append('\n');
+        sb.append("- Recorded: ").append(LocalDateTime.now()).append('\n');
+        sb.append("\n---\n\n## Resolution\n\n").append(answer).append('\n');
+
+        if (question != null && !question.isBlank()) {
+            sb.append("\n---\n\n## Context supplied\n\n").append(question).append('\n');
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Chooses the folder for a repository's notes, preferring one the user already keeps.
+     *
+     * <p>An existing folder wins whenever its name and the repository's name contain one another, so
+     * {@code apache/logging-log4j2} lands in a {@code log4j/} folder that is already there rather than starting a
+     * near-duplicate beside it. Matching against whatever the archive happens to contain keeps this working for any
+     * naming scheme without a built-in table of repositories, which would only ever fit one user's archive.
+     */
+    private static Path resolveTopicDir(String repository) throws java.sql.SQLException {
+        String slug = topicSlug(repository);
+        Path root = resolveNotesRoot();
+
+        Path existing = findExistingTopic(root, slug);
+        return (existing == null ? root.resolve(slug) : existing).resolve(PROVENANCE_DIR);
+    }
+
+    private static Path findExistingTopic(Path root, String slug) {
+        if (!Files.isDirectory(root)) {
+            return null;
+        }
+        try (var entries = Files.list(root)) {
+            return entries.filter(Files::isDirectory)
+                    .filter(p -> {
+                        String name = p.getFileName().toString().toLowerCase(Locale.ROOT);
+                        return !name.startsWith(".")
+                                && !name.startsWith("_")
+                                && (name.contains(slug) || slug.contains(name));
+                    })
+                    // Longest name is the most specific match: prefer "spring-boot" over "spring" when both exist.
+                    .max((a, b) -> Integer.compare(
+                            a.getFileName().toString().length(),
+                            b.getFileName().toString().length()))
+                    .orElse(null);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /** The repository name without its owner, lowercased — {@code apache/logging-log4j2} becomes {@code logging-log4j2}. */
+    private static String capitalize(String s) {
+        return s == null || s.isEmpty() ? "Note" : Character.toUpperCase(s.charAt(0)) + s.substring(1);
+    }
+
+    private static String topicSlug(String repository) {
+        String name = repository == null ? "" : repository;
+        int slash = name.lastIndexOf('/');
+        if (slash >= 0 && slash + 1 < name.length()) {
+            name = name.substring(slash + 1);
+        }
+        name = name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9._-]", "-");
+        return name.isBlank() ? "misc" : name;
+    }
+
+    /**
+     * Where notes are filed: an explicit setting, else the first configured note folder, else a directory beside the
+     * database.
+     *
+     * <p>The local fallback matters because the loop must still close for a user who keeps no external archive. Writing
+     * nothing in that case would silently make the tool read-only for exactly the people who have not set anything up.
+     */
+    private static Path resolveNotesRoot() throws java.sql.SQLException {
+        String configured = SqliteStorage.loadConfig("notes.resolutions_path");
+        if (configured != null && !configured.isBlank()) {
+            return Path.of(configured.trim());
+        }
+
+        String drivePaths = SqliteStorage.loadConfig("drive.paths");
+        if (drivePaths != null && !drivePaths.isBlank()) {
+            for (String candidate : drivePaths.split(",")) {
+                String trimmed = candidate.trim();
+                if (!trimmed.isEmpty() && Files.isDirectory(Path.of(trimmed))) {
+                    return Path.of(trimmed);
+                }
+            }
+        }
+        return AppPaths.BASE_DIR.resolve("resolutions");
+    }
+}

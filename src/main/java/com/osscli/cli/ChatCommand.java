@@ -319,70 +319,16 @@ public class ChatCommand implements Callable<Integer> {
         return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 
+    /**
+     * Files the session through the shared writer so it lands under its topic and is chunk-indexed.
+     *
+     * <p>This used to write to the first configured note folder, which is that folder's root -- above every topic
+     * directory, where no topic-scoped browse or search reaches it. It also stored one vector for the whole
+     * transcript, so a session matching in a single paragraph was diluted by the rest of its own text.
+     */
     private void saveAndIndexChatHistory(String chatContent, Issue target) {
-        try {
-            String drivePathsStr = SqliteStorage.loadConfig("drive.paths");
-            if (drivePathsStr == null || drivePathsStr.trim().isEmpty()) {
-                LOGGER.warn("No Google Drive paths configured in SQLite. Chat history will not be saved.");
-                return;
-            }
-
-            String targetDir = drivePathsStr.split(",")[0].trim();
-            java.nio.file.Path dirPath = java.nio.file.Paths.get(targetDir);
-
-            if (!java.nio.file.Files.exists(dirPath)) {
-                LOGGER.warn("Configured Drive path does not exist locally: {}", dirPath.toAbsolutePath());
-                return;
-            }
-
-            String timestamp = java.time.LocalDateTime.now()
-                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-            String fileName = String.format("Issue_%d_Resolution_Session_%s.md", issueNumber, timestamp);
-            java.nio.file.Path filePath = dirPath.resolve(fileName);
-            String absolutePath = filePath.toAbsolutePath().toString();
-
-            StringBuilder fileContent = new StringBuilder();
-            fileContent
-                    .append("# Resolution Session: Issue #")
-                    .append(issueNumber)
-                    .append("\n");
-            fileContent.append("**Title:** ").append(target.title()).append("\n");
-            fileContent.append("**Date:** ").append(java.time.LocalDate.now()).append("\n\n");
-            fileContent.append("## Conversation Transcript\n\n");
-            fileContent.append(chatContent);
-
-            // Scrub before the transcript is written anywhere. A chat session can easily
-            // contain a key the user pasted in mid-conversation, and this path writes to
-            // BOTH a file on disk and the database.
-            com.osscli.util.Redactor.Result scrubbed = com.osscli.util.Redactor.redact(fileContent.toString());
-            if (scrubbed.redactedAnything()) {
-                LOGGER.warn("  ⚠ Redacted from this transcript: {}", scrubbed.summary());
-                LOGGER.warn("    Removing them here does not revoke them — rotate anything real.");
-            }
-            String finalContent = scrubbed.text();
-
-            // 1. Save physical backup to Google Drive
-            java.nio.file.Files.writeString(filePath, finalContent, java.nio.charset.StandardCharsets.UTF_8);
-            long lastModified =
-                    java.nio.file.Files.getLastModifiedTime(filePath).toMillis();
-            LOGGER.info("✔ Chat history successfully saved to Google Drive: {}", absolutePath);
-
-            // 2. Real-Time Intelligence: Instantly Vectorize and Index into SQLite
-            LOGGER.info("  ↳ Instantly vectorizing conversation for your Second Brain...");
-            String embedModel = SqliteStorage.loadConfig("ollama.model.embedding");
-            if (embedModel == null) {
-                embedModel = "all-minilm";
-            }
-
-            OllamaClient embedOllama = new OllamaClient(embedModel);
-            double[] chatVector = embedOllama.generateEmbedding(finalContent);
-
-            SqliteStorage.savePersonalChatMemory(
-                    absolutePath, fileName, lastModified, finalContent, chatVector, embedModel);
-            LOGGER.info("  ✔ Session embedded and injected into active memory. Your Copilot is instantly smarter!");
-
-        } catch (Exception e) {
-            LOGGER.error("Failed to save and index chat history: {}", e.getMessage());
-        }
+        LOGGER.info("  ↳ Recording this session into your knowledge base...");
+        com.osscli.knowledge.ResolutionWriter.record(
+                repository, issueNumber, target == null ? null : target.title(), "chat", null, chatContent);
     }
 }

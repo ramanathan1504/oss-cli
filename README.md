@@ -24,8 +24,25 @@ Tier 3 — Expert Prompt (Fallback, On-Demand)
 
 The platform separates public repository data from your private developer identity:
 
-1. **The Repository Engine (Public):** Syncs 14+ enterprise Java repositories (Kafka, Quarkus, Elastic, etc.) into a unified SQLite database with cross-project dependency tracking and JIRA Bridge matching.
-2. **The Personal Copilot (Private):** Ingests your 1-year GitHub PR footprint and local Google Drive AI Studio/ChatGPT/Claude chat logs to build a **Developer Expertise Vector**.
+1. **The Repository Engine (Public):** Syncs whatever repositories *you* register — any language, any forge account, from one repo to hundreds — into a unified SQLite database with cross-project dependency tracking and JIRA Bridge matching. Nothing is hardcoded to a particular project.
+2. **The Personal Copilot (Private):** Ingests your own GitHub PR footprint and whatever note folders you point it at (AI Studio / ChatGPT / Claude exports, hand-written Markdown) to build a **Developer Expertise Vector**.
+
+You bring the repositories and the data. OSS-CLI does the mapping, indexing and retrieval so you no longer chase the same context by hand — upstream and downstream docs, inherited build rules, old work on the same area, and past conversations all become one searchable corpus.
+
+---
+
+## 🧩 Bring what you have — nothing is mandatory
+
+Every capability is a layer, and each is optional. The tool reports which layers a given answer actually used, so a thin result is never mistaken for a confident one.
+
+| You have | You get |
+|---|---|
+| A GitHub token only | Sync, issue tracking, PR facts, commits, diffs, CI state, and convention checks |
+| ...plus Ollama | Local answers, semantic search, vector indexing, PR verdicts |
+| ...plus a cloud API key | Escalation when local context or confidence is not enough |
+| ...plus your own notes | Your history and past reasoning blended into retrieval |
+
+A brand-new user with none of the optional pieces still gets working commands. Missing layers print one line saying what they would add and how to enable them — never a hard failure.
 
 ---
 
@@ -33,7 +50,24 @@ The platform separates public repository data from your private developer identi
 
 * **Java 17**
 * **Apache Maven**
-* **Ollama** (Local models: `qwen2.5:7b`, `qwen2.5:0.5b`, `all-minilm`)
+* **A GitHub token** — the only hard requirement
+* **Ollama** *(optional)* — enables local answers and vector search. Models are your choice; defaults are `qwen2.5-coder:7b`, `qwen2.5:0.5b`, `all-minilm`.
+* **A cloud API key** *(optional)* — Claude, OpenAI or Gemini, for escalation
+
+---
+
+## 🔎 Repository & PR Intelligence
+
+`profile` reads a repository and reports what it *is* — language, build system, toolchain version, documentation, and the conventions a change must respect. Everything is pattern-matched rather than hardcoded, so an unfamiliar project is handled by the same code path as a familiar one.
+
+For Maven projects it **follows the inherited POM chain through Maven Central**, because a project's real rules are often published in a parent artifact rather than committed to the repository you are looking at. Apache Log4j, for example, declares no OSGi configuration anywhere in its own tree, yet every module is a bundle — the bnd setup and the API baseline gate live two levels up.
+
+`review` then uses that profile to review a pull request, caching evidence **by head commit SHA** so re-reviewing unchanged code is instant while a new push re-fetches automatically. No local clone is needed.
+
+```bash
+oss-cli profile -r apache/logging-log4j2
+oss-cli review 4234
+```
 
 ---
 

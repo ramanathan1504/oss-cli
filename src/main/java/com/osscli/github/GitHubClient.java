@@ -69,8 +69,49 @@ public class GitHubClient {
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-        ObjectMapper mapper = new ObjectMapper();
-        return mapper.readValue(response.body(), new TypeReference<>() {});
+        if (response.statusCode() != 200) {
+            throw new IOException(describeApiFailure(response));
+        }
+
+        return MAPPER.readValue(response.body(), new TypeReference<List<Issue>>() {});
+    }
+
+    /**
+     * Turns a non-200 GitHub response into a message that names the actual problem. Without this the error body (a JSON
+     * object) reaches Jackson, which reports an unhelpful "cannot deserialize ArrayList<Issue> from Object value".
+     */
+    private static String describeApiFailure(HttpResponse<String> response) {
+        int status = response.statusCode();
+        String detail = response.headers()
+                .firstValue("x-github-request-id")
+                .map(id -> " (request id " + id + ")")
+                .orElse("");
+
+        return switch (status) {
+            case 401 -> "GitHub rejected the token (401 Bad credentials)" + detail
+                    + ". The stored token is expired or revoked -- create a new one at "
+                    + "https://github.com/settings/tokens and register it with 'oss-cli setup'.";
+            case 403, 429 -> {
+                boolean exhausted = response.headers()
+                        .firstValue("x-ratelimit-remaining")
+                        .map("0"::equals)
+                        .orElse(false);
+                yield exhausted
+                        ? "GitHub rate limit exhausted (" + status + ")" + detail + ". Resets at epoch seconds "
+                                + response.headers()
+                                        .firstValue("x-ratelimit-reset")
+                                        .orElse("unknown") + "."
+                        : "GitHub denied the request (" + status + ")" + detail
+                                + ". The token is likely missing the required scopes.";
+            }
+            case 404 -> "Repository or endpoint not found (404)" + detail
+                    + ". It may be private, renamed, or the token lacks access.";
+            default -> {
+                String body = com.osscli.util.Redactor.redact(response.body()).text();
+                yield "GitHub API call failed with status " + status + detail + ": "
+                        + (body != null && body.length() > 500 ? body.substring(0, 500) + "..." : body);
+            }
+        };
     }
 
     public List<Issue> searchIssuesAndPrs(String query) throws IOException, InterruptedException {
@@ -130,5 +171,82 @@ public class GitHubClient {
             }
         }
         return filePaths;
+    }
+
+    // ── Pull request review surface ──────────────────────────────────────────
+    // Everything below reads from the API alone, so a review works for a repository the user has
+    // never cloned. A local checkout can add build and test evidence on top, but must not be the
+    // price of entry for someone reviewing a project they just discovered.
+
+    /** Raw JSON body of an arbitrary API path, e.g. {@code /repos/o/r/pulls/1}. Null when the endpoint 404s. */
+    public String getJson(String path) throws IOException, InterruptedException {
+        return get(GITHUB_API + path, "application/vnd.github+json");
+    }
+
+    /** The unified diff for a pull request, via the {@code .diff} media type. Null when unavailable. */
+    public String getPullRequestDiff(String owner, String repo, long prNumber)
+            throws IOException, InterruptedException {
+        return get(
+                GITHUB_API + "/repos/" + owner + "/" + repo + "/pulls/" + prNumber, "application/vnd.github.v3.diff");
+    }
+
+    /**
+     * Fetches every page of a paginated collection endpoint and returns the concatenated elements.
+     *
+     * <p>Paginating matters for review accuracy rather than completeness alone: a reviewer shown the first 30 of 80
+     * changed files has no signal that 50 are missing, and would sign off on a diff they never saw.
+     */
+    public List<Map<String, Object>> getPaged(String path, int maxPages) throws IOException, InterruptedException {
+        List<Map<String, Object>> all = new ArrayList<>();
+        String separator = path.contains("?") ? "&" : "?";
+
+        for (int page = 1; page <= maxPages; page++) {
+            String body =
+                    get(GITHUB_API + path + separator + "per_page=100&page=" + page, "application/vnd.github+json");
+            if (body == null) {
+                break;
+            }
+            List<Map<String, Object>> pageItems =
+                    MAPPER.readValue(body, new TypeReference<List<Map<String, Object>>>() {});
+            all.addAll(pageItems);
+            if (pageItems.size() < 100) {
+                break;
+            }
+        }
+        return all;
+    }
+
+    /**
+     * Decoded contents of a file in the default branch, or null when it does not exist.
+     *
+     * <p>A missing file is a normal answer here -- profiling asks for many documents a given repository may simply not
+     * have -- so absence is reported as null rather than raised, and only real failures throw.
+     */
+    public String getFileContent(String owner, String repo, String filePath) throws IOException, InterruptedException {
+        String body = get(
+                GITHUB_API + "/repos/" + owner + "/" + repo + "/contents/" + filePath, "application/vnd.github.v3.raw");
+        return body;
+    }
+
+    /** Shared GET returning the body, null on 404, and a described failure otherwise. */
+    private String get(String url, String accept) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Accept", accept)
+                .header("Authorization", "Bearer " + token)
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .GET()
+                .timeout(java.time.Duration.ofSeconds(30))
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() == 404) {
+            return null;
+        }
+        if (response.statusCode() != 200) {
+            throw new IOException(describeApiFailure(response));
+        }
+        return response.body();
     }
 }

@@ -133,23 +133,40 @@ public class OllamaClient {
         }
     }
 
+    /**
+     * Whether the Ollama daemon answers on its default port. Checked separately from {@link #isModelAvailable()} so a
+     * stopped daemon is never reported as a missing model -- "ollama pull" cannot fix a server that is not running.
+     */
+    public boolean isServerReachable() {
+        try {
+            return tagList() != null;
+        } catch (Exception e) {
+            LOGGER.debug("Ollama daemon unreachable: {}", e.getMessage());
+            return false;
+        }
+    }
+
     public boolean isModelAvailable() {
+        try {
+            String body = tagList();
+            // Safe check to see if the requested model name is present in the local tag list
+            return body != null && (body.contains("\"name\":\"" + model) || body.contains("\"model\":\"" + model));
+        } catch (Exception e) {
+            LOGGER.error("Ollama connection failed while checking model availability: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /** Returns the raw /api/tags body, or null if the daemon responded with a non-200. */
+    private String tagList() throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:11434/api/tags"))
                 .GET()
                 .timeout(Duration.ofSeconds(5)) // Fast 5-second connection check
                 .build();
-        try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() == 200) {
-                String body = response.body();
-                // Safe check to see if the requested model name is present in the local tag list
-                return body.contains("\"name\":\"" + model) || body.contains("\"model\":\"" + model);
-            }
-        } catch (Exception e) {
-            LOGGER.error("Ollama connection failed while checking model availability: {}", e.getMessage());
-        }
-        return false;
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        return response.statusCode() == 200 ? response.body() : null;
     }
 
     public String generateText(String prompt) throws IOException, InterruptedException {

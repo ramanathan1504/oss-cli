@@ -28,12 +28,71 @@ Fetches issues, pull requests, author profiles, and ecosystem dependencies from 
 *   `--remove <repo>` : Remove a repository from the database watchlist.
 *   `--me` : **Personal Sync.** Fetches your 1-year PR history, creates your Developer Expertise Vector, and recursively crawls your Google Drive (automatically parsing ChatGPT/Claude `.json` exports and `.md` files) to index your conversational memory.
 
+*   `--no-embed` : Skip building the local vector index. Sync is faster, but issues fetched in that run are not semantically searchable until a later sync indexes them.
+
+Every sync builds the vector index for the repositories it touched. Indexing is incremental (only issues without a current vector), resumable (vectors commit in batches of 50), and model-aware (changing `ollama.model.embedding` re-indexes rather than mixing incomparable vector spaces). If Ollama is not running, the issue data is still saved and a warning names how many issues are not yet searchable.
+
+`--add` also builds the repository profile — see [`profile`](#profile).
+
 ```bash
 oss-cli sync --all
 oss-cli sync --me
 oss-cli sync --add apache/kafka
 oss-cli sync --remove apache/camel
 ```
+
+---
+
+## 🔎 Repository Intelligence
+
+### `profile`
+Builds a technical profile of a repository from the files it actually contains: language, build system, toolchain version, documentation, and the conventions a change must respect.
+
+Everything is pattern-matched, never hardcoded per project. Documentation is matched by **name across any extension**, so a project whose README is `README.adoc` is not reported as undocumented. For Maven projects the **inherited POM chain is followed through Maven Central**, because many projects publish their packaging and API rules in a parent artifact rather than committing them to the repository being reviewed.
+
+*   `-r`, `--repo <repo>` : Target repository. Defaults to `default.repository`.
+*   `--rebuild` : Re-read the repository even if a profile is stored.
+
+```bash
+oss-cli profile -r apache/logging-log4j2
+oss-cli profile --rebuild
+```
+
+Detected conventions are tagged with their source, so rules inherited from elsewhere are visible as such:
+
+```
+bnd-baseline-maven-plugin — OSGi/API baseline enforced [inherited from org.apache.logging:logging-parent:12.1.1]
+checkstyle                — checkstyle enforced        [inherited from org.apache:apache:34]
+```
+
+### `review`
+Reviews a pull request using every source you have connected, and nothing you have not.
+
+Built as a **ladder**. Layer 0 needs only a GitHub token; every layer above it is optional and additive. The output states which layers were actually used — not which are installed — so a thin review is never mistaken for a clean one.
+
+| Layer | Requires | Adds |
+|---|---|---|
+| Facts | GitHub token | Diff, commits, files by area, CI checks, review threads |
+| Conventions | a built profile | Deterministic gate checks (no model involved) |
+| Verdict | Ollama | Local judgment against the project's rules |
+| Escalation | cloud key | Handling for diffs beyond the local budget *(not yet wired)* |
+| History | notes corpus | Your past reviews and work *(not yet wired)* |
+
+Evidence is cached **by head commit SHA**, not by PR number. A pull request is rewritten by every push, so caching by number alone would serve a review of code that no longer exists. Re-reviewing unchanged code is instant; after a push it re-fetches automatically.
+
+No local clone is required — everything comes from the GitHub API.
+
+*   `-r`, `--repo <repo>` : Target repository. Defaults to `default.repository`.
+*   `--refresh` : Re-fetch even when this exact commit is cached.
+*   `--no-verdict` : Report facts and conventions only, without asking a model to judge.
+
+```bash
+oss-cli review 4234
+oss-cli review 4234 --no-verdict
+oss-cli review 4234 -r apache/kafka --refresh
+```
+
+When a verdict is produced it is filed to `<topic>/pr-reviews/` in your notes archive and indexed, so it becomes retrievable evidence for later questions.
 
 ---
 
@@ -201,6 +260,8 @@ oss-cli restore /path/to/sa_brain_backup_20260627_104000.zip
 | `setup`           | Interactive    | No                      | Configure API keys, paths, models            |
 | `sync --all`      | Online         | No                      | Sync all registered repositories             |
 | `sync --me`       | Online         | No                      | Sync personal PR profile + Drive logs        |
+| `profile`         | Online         | No                      | Language, build, toolchain, conventions      |
+| `review`          | Online         | Optional Ollama         | **Review a PR from every connected source**  |
 | `critical`        | Offline        | No                      | Fast keyword-score severity ranking          |
 | `analyze`         | Offline        | Ollama                  | AI batch severity scoring                    |
 | `duplicates`      | Offline        | Ollama                  | Vector-based duplicate detection             |

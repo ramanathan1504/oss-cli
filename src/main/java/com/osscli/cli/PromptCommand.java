@@ -153,20 +153,14 @@ public class PromptCommand implements Callable<Integer> {
                         LOGGER.info("{}", answer);
                         LOGGER.info("\n═══════════════════════════════════════════════════════");
 
-                        SqliteStorage.savePromptHistory(
+                        // One row, then attach its chunks. This previously called savePromptHistory twice --
+                        // once discarding the id, once nested in the chunk call -- so every local answer wrote a
+                        // duplicate row and the chunks attached to only one of them.
+                        long localHistoryId = SqliteStorage.savePromptHistory(
                                 issueNumber, repository, true, null, answer, null, totalTokens, confidence, null);
-                        SqliteStorage.savePromptContextChunks(
-                                SqliteStorage.savePromptHistory(
-                                        issueNumber,
-                                        repository,
-                                        true,
-                                        null,
-                                        answer,
-                                        null,
-                                        totalTokens,
-                                        confidence,
-                                        null),
-                                chunks);
+                        SqliteStorage.savePromptContextChunks(localHistoryId, chunks);
+
+                        recordResolution("ollama", structuredContext, answer);
                         return 0;
                     } else {
                         // Low confidence — escalate
@@ -237,11 +231,47 @@ public class PromptCommand implements Callable<Integer> {
         }
 
         // ── Log to SQLite ─────────────────────────────────────────────────────
+        // The cloud answer is stored, not just the prompt that produced it. Recording only the outgoing prompt
+        // left escalation one-way: the expensive half of the exchange arrived, was printed, and was lost.
         long historyId = SqliteStorage.savePromptHistory(
-                issueNumber, repository, false, escalationReason, null, expertPrompt, totalTokens, 0.0, providerSent);
+                issueNumber,
+                repository,
+                false,
+                escalationReason,
+                cloudResponse,
+                expertPrompt,
+                totalTokens,
+                0.0,
+                providerSent);
         SqliteStorage.savePromptContextChunks(historyId, chunks);
 
+        if (cloudResponse != null) {
+            recordResolution(providerSent, expertPrompt, cloudResponse);
+        }
+
         return 0;
+    }
+
+    /**
+     * Feeds a finished answer back into the searchable corpus.
+     *
+     * <p>Called for both the local and the escalated path, because the loop is only closed if it closes regardless of
+     * which model happened to answer. An escalated answer is the more valuable of the two -- it is the one that cost
+     * a cloud call -- so losing it was the more expensive omission.
+     */
+    private void recordResolution(String source, String context, String answer) {
+        String title = null;
+        try {
+            title = SqliteStorage.loadIssues(repository).stream()
+                    .filter(i -> i.number() == issueNumber)
+                    .map(com.osscli.model.Issue::title)
+                    .findFirst()
+                    .orElse(null);
+        } catch (Exception e) {
+            // A missing title is cosmetic; the note is still worth writing without it.
+            LOGGER.debug("Could not load issue title for #{}: {}", issueNumber, e.getMessage());
+        }
+        com.osscli.knowledge.ResolutionWriter.record(repository, issueNumber, title, source, context, answer);
     }
 
     /**

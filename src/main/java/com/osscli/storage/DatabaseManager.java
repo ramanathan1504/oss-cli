@@ -16,7 +16,7 @@ public class DatabaseManager {
 
     private static final Logger LOGGER = LogManager.getLogger(DatabaseManager.class);
     // private static final String DB_URL = "jdbc:sqlite:data/issue_intelligence.db";
-    private static final int CURRENT_SCHEMA_VERSION = 10;
+    private static final int CURRENT_SCHEMA_VERSION = 11;
 
     /** Tables whose rows carry an embedding vector and therefore need provenance. */
     static final String[] VECTOR_TABLES = {"personal_chat_memory", "personal_pr_memory", "embeddings"};
@@ -259,6 +259,29 @@ public class DatabaseManager {
                 try (Statement stmt = conn.createStatement()) {
                     stmt.execute(getCreatePersonalChatChunkTableSql());
                     stmt.execute("CREATE INDEX IF NOT EXISTS idx_chat_chunk_file ON personal_chat_chunk(file_path);");
+                }
+            }
+        },
+        // Migration 11: Pull request review cache and per-repository profile.
+        //
+        // The PR cache is keyed by head SHA rather than PR number. A pull request is not a fixed
+        // object -- every push rewrites its diff, commits and checks -- so caching by number alone
+        // would serve a review of code that no longer exists, which is worse than no cache at all.
+        // Keying on the SHA makes a re-review of untouched code free and a re-review after a push
+        // automatic, with no staleness rule to get wrong.
+        new Migration() {
+            @Override
+            public int getTargetVersion() {
+                return 11;
+            }
+
+            @Override
+            public void execute(Connection conn) throws SQLException {
+                LOGGER.info("Upgrading database schema to Version 11 (PR review cache and repo profiles)...");
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute(getCreatePrCacheTableSql());
+                    stmt.execute("CREATE INDEX IF NOT EXISTS idx_pr_cache_repo ON pr_cache(repository, pr_number);");
+                    stmt.execute(getCreateRepoProfileTableSql());
                 }
             }
         }
@@ -579,6 +602,60 @@ public class DatabaseManager {
                     vector TEXT,
                     embedding_model TEXT,
                     embedding_dim INTEGER
+                );
+                """;
+    }
+
+    /**
+     * Raw GitHub evidence for one pull request at one commit.
+     *
+     * <p>Stored as fetched, not as rendered. The review layers above this re-read the same rows, so a verdict can be
+     * regenerated with a different model or a rebuilt profile without spending the API calls again.
+     */
+    private static String getCreatePrCacheTableSql() {
+        return """
+                CREATE TABLE IF NOT EXISTS pr_cache (
+                    repository TEXT NOT NULL,
+                    pr_number INTEGER NOT NULL,
+                    head_sha TEXT NOT NULL,
+                    title TEXT,
+                    author TEXT,
+                    state TEXT,
+                    base_ref TEXT,
+                    body TEXT,
+                    commits_json TEXT,
+                    files_json TEXT,
+                    diff TEXT,
+                    reviews_json TEXT,
+                    comments_json TEXT,
+                    checks_json TEXT,
+                    additions INTEGER,
+                    deletions INTEGER,
+                    changed_files INTEGER,
+                    fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (repository, pr_number, head_sha)
+                );
+                """;
+    }
+
+    /**
+     * What a repository is, in its own terms: language, build system, target version, conventions.
+     *
+     * <p>Derived from files the repository actually contains rather than from any list of known projects, so it is
+     * built the same way for a repository nobody has seen before.
+     */
+    private static String getCreateRepoProfileTableSql() {
+        return """
+                CREATE TABLE IF NOT EXISTS repo_profile (
+                    repository TEXT PRIMARY KEY,
+                    primary_language TEXT,
+                    build_system TEXT,
+                    target_version TEXT,
+                    min_version TEXT,
+                    conventions_json TEXT,
+                    docs_json TEXT,
+                    summary TEXT,
+                    built_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
                 """;
     }

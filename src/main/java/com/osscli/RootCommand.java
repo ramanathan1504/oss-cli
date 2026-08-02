@@ -16,6 +16,8 @@ import picocli.CommandLine.Command;
             DuplicatesCommand.class,
             SearchCommand.class,
             PrsCommand.class,
+            ReviewCommand.class,
+            ProfileCommand.class,
             ReportCommand.class,
             TrendCommand.class,
             TriageCommand.class,
