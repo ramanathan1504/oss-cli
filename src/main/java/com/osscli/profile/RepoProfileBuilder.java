@@ -101,6 +101,18 @@ public final class RepoProfileBuilder {
 
     private static final int MAX_DOC_BYTES = 40000;
 
+    /** Workflows read when nothing else declared a toolchain. Bounded so a CI-heavy repo does not cost a request each. */
+    private static final int MAX_WORKFLOWS_READ = 5;
+
+    /** Higher version wins when several files declare one; see {@link Toolchain} for why. */
+    private static boolean isHigher(Toolchain.Finding candidate, Toolchain.Finding current) {
+        try {
+            return Double.parseDouble(candidate.version()) > Double.parseDouble(current.version());
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
     private RepoProfileBuilder() {}
 
     public static RepoProfile build(String repository) throws Exception {
@@ -166,7 +178,9 @@ public final class RepoProfileBuilder {
             }
         }
 
-        // ── Build descriptors, and the conventions inside them ───────────────
+        // ── Build descriptors, and the conventions and toolchain inside them ──
+        Toolchain.Finding toolchain = null;
+
         for (String path : paths) {
             String system = BUILD_FILES.get(baseName(path));
             if (system == null || path.chars().filter(c -> c == '/').count() > 1) {
@@ -183,6 +197,27 @@ public final class RepoProfileBuilder {
                 rootPom = body;
             }
             scanForConventions(body, "this repository (" + path + ")", conventions);
+
+            // Gradle states the language version in the build file rather than in a dedicated one, and often in
+            // buildSrc rather than at the root -- which is why a root-only scan reports Gradle projects as having
+            // declared nothing.
+            Toolchain.Finding found = Toolchain.fromBuildFile(path, body);
+            if (found != null && (toolchain == null || isHigher(found, toolchain))) {
+                toolchain = found;
+            }
+        }
+
+        // ── Files that pin a build JDK without being build files ─────────────
+        for (String path : paths) {
+            String lower = path.toLowerCase(Locale.ROOT);
+            if (!lower.endsWith(".properties")
+                    || lower.chars().filter(c -> c == '/').count() > 2) {
+                continue;
+            }
+            Toolchain.Finding found = Toolchain.fromProperties(path, safeFetch(client, owner, name, path));
+            if (found != null && (toolchain == null || isHigher(found, toolchain))) {
+                toolchain = found;
+            }
         }
 
         // ── Packaging descriptors committed in the tree ──────────────────────
@@ -200,13 +235,34 @@ public final class RepoProfileBuilder {
             }
         }
 
-        // ── CI ───────────────────────────────────────────────────────────────
-        long workflows = paths.stream()
+        // ── CI, and the toolchain it sets up ─────────────────────────────────
+        List<String> workflowPaths = paths.stream()
                 .filter(p -> p.startsWith(".github/workflows/"))
                 .filter(p -> p.endsWith(".yml") || p.endsWith(".yaml"))
-                .count();
-        if (workflows > 0) {
-            conventions.put("ci", workflows + " GitHub Actions workflow(s)");
+                .toList();
+
+        if (!workflowPaths.isEmpty()) {
+            conventions.put("ci", workflowPaths.size() + " GitHub Actions workflow(s)");
+        }
+
+        // CI is the one place every ecosystem states its version the same way, and it is the version the project is
+        // actually verified against. Read only when the build files were silent, and only from the first few
+        // workflows -- a repository with thirty of them would otherwise cost thirty requests for a fallback.
+        if (toolchain == null) {
+            for (String path : workflowPaths.subList(0, Math.min(workflowPaths.size(), MAX_WORKFLOWS_READ))) {
+                Toolchain.Finding found = Toolchain.fromWorkflow(path, safeFetch(client, owner, name, path));
+                if (found != null) {
+                    toolchain = found;
+                    break;
+                }
+            }
+        }
+
+        // An explicit version file outranks everything: it exists for no other purpose, whereas a build file may
+        // mention several versions and CI may run a newer JDK than the code targets.
+        if (toolchain != null && targetVersion == null) {
+            targetVersion = toolchain.describe();
+            conventions.put("toolchain", toolchain.describe() + " [" + toolchain.source() + "]");
         }
 
         // ── The inherited chain, where many projects keep the real rules ─────
