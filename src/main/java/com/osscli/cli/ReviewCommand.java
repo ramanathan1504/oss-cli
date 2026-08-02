@@ -37,6 +37,12 @@ public class ReviewCommand implements Callable<Integer> {
 
     private static final int NOTE_EXCERPT_CHARS = 1200;
 
+    /** Diff characters a local model is asked to read. Beyond this it is truncated, or escalated when allowed. */
+    private static final int LOCAL_DIFF_BUDGET = 24000;
+
+    /** Set once the verdict came from a cloud model, so the layer summary reports the route actually taken. */
+    private boolean escalated;
+
     @Parameters(index = "0", description = "The pull request number to review")
     private long prNumber;
 
@@ -59,6 +65,26 @@ public class ReviewCommand implements Callable<Integer> {
             names = {"--no-notes"},
             description = "Do not consult your own notes when reviewing")
     private boolean noNotes;
+
+    @Option(
+            names = {"--escalate"},
+            description = "Send the review to a cloud model when the diff exceeds the local budget")
+    private boolean escalate;
+
+    @Option(
+            names = {"--send-claude"},
+            description = "Escalate to Anthropic Claude (implies --escalate)")
+    private boolean sendClaude;
+
+    @Option(
+            names = {"--send-openai"},
+            description = "Escalate to OpenAI (implies --escalate)")
+    private boolean sendOpenAi;
+
+    @Option(
+            names = {"--send-gemini"},
+            description = "Escalate to Google Gemini (implies --escalate)")
+    private boolean sendGemini;
 
     @Override
     public Integer call() throws Exception {
@@ -217,19 +243,36 @@ public class ReviewCommand implements Callable<Integer> {
                 model = "qwen2.5-coder:7b";
             }
             com.osscli.llm.OllamaClient ollama = new com.osscli.llm.OllamaClient(model);
-            if (!ollama.isServerReachable()) {
+
+            String fullDiff = ev.diff() == null ? "" : ev.diff();
+            boolean oversized = fullDiff.length() > LOCAL_DIFF_BUDGET;
+
+            // A cloud model reads the whole diff, so escalation is worth it precisely when truncation would other-
+            // wise hide part of the change. Escalating a diff that already fits buys nothing and costs a call.
+            String provider = escalationProvider();
+            boolean useCloud = provider != null && oversized;
+
+            if (provider != null && !oversized) {
+                LOGGER.info("");
+                LOGGER.info("  ↳ Diff fits the local budget — answering locally, no cloud call needed.");
+            }
+            if (!useCloud && !ollama.isServerReachable()) {
                 return false;
             }
 
-            int budget = 24000;
-            String diff = ev.diff() == null ? "" : ev.diff();
-            boolean truncated = diff.length() > budget;
-            if (truncated) {
-                diff = diff.substring(0, budget);
-            }
+            String diff = useCloud || !oversized ? fullDiff : fullDiff.substring(0, LOCAL_DIFF_BUDGET);
+            boolean truncated = !useCloud && oversized;
 
             LOGGER.info("");
-            LOGGER.info("  ↳ Asking {} for a verdict{}...", model, truncated ? " (diff truncated)" : "");
+            if (useCloud) {
+                LOGGER.info(
+                        "  ↳ Diff is {} chars, over the {} local budget — escalating to {} with the full diff...",
+                        fullDiff.length(),
+                        LOCAL_DIFF_BUDGET,
+                        provider);
+            } else {
+                LOGGER.info("  ↳ Asking {} for a verdict{}...", model, truncated ? " (diff truncated)" : "");
+            }
 
             // The profile is what turns a generic code opinion into a project-specific one: without it the model has
             // no idea this project gates exported packages or targets a particular toolchain.
@@ -298,12 +341,19 @@ public class ReviewCommand implements Callable<Integer> {
                     truncated ? " (truncated — judge only what is shown)" : "",
                     diff);
 
-            JsonNode node = MAPPER.readTree(ollama.generateJson(prompt));
+            String raw = useCloud ? sendToCloud(provider, prompt) : ollama.generateJson(prompt);
+            if (raw == null) {
+                LOGGER.warn("  ⚠ No response from {} — the facts above are unaffected.", useCloud ? provider : model);
+                return false;
+            }
+
+            JsonNode node = MAPPER.readTree(extractJson(raw));
+            String answeredBy = useCloud ? provider : model;
 
             LOGGER.info("");
             LOGGER.info(
                     "── Verdict ({}, confidence {}) ──",
-                    model,
+                    answeredBy,
                     String.format("%.0f%%", node.path("confidence").asDouble(0.5) * 100));
             LOGGER.info("  {}", node.path("summary").asText(""));
 
@@ -314,9 +364,11 @@ public class ReviewCommand implements Callable<Integer> {
                 LOGGER.info("");
                 LOGGER.info("  Note: the diff exceeded the local budget and was truncated.");
                 LOGGER.info("        Findings cover only the portion shown above.");
+                LOGGER.info("        Pass --escalate to send the whole diff to a cloud model.");
             }
 
-            recordReview(ev, model, node);
+            escalated = useCloud;
+            recordReview(ev, answeredBy, node);
             return true;
 
         } catch (Exception e) {
@@ -324,6 +376,68 @@ public class ReviewCommand implements Callable<Integer> {
             LOGGER.warn("    The facts above are unaffected.");
             return false;
         }
+    }
+
+    /**
+     * Which cloud provider to escalate to, or null when escalation was not asked for or is not configured.
+     *
+     * <p>An explicit {@code --send-*} names the provider. A bare {@code --escalate} picks whichever key is present,
+     * so the common case — one configured provider — needs no second flag. Asking to escalate with no key configured
+     * says so rather than silently answering locally, because the difference is what the review is worth.
+     */
+    private String escalationProvider() {
+        if (sendClaude) {
+            return "claude";
+        }
+        if (sendOpenAi) {
+            return "openai";
+        }
+        if (sendGemini) {
+            return "gemini";
+        }
+        if (!escalate) {
+            return null;
+        }
+        for (String[] pair : new String[][] {
+            {"ANTHROPIC_API_KEY", "claude"}, {"OPENAI_API_KEY", "openai"}, {"GEMINI_API_KEY", "gemini"}
+        }) {
+            String v = System.getenv(pair[0]);
+            if (v != null && !v.isBlank()) {
+                return pair[1];
+            }
+        }
+        LOGGER.warn("  ⚠ --escalate was requested but no cloud key is configured — answering locally instead.");
+        LOGGER.warn("    Set ANTHROPIC_API_KEY, OPENAI_API_KEY or GEMINI_API_KEY, or run 'setup'.");
+        return null;
+    }
+
+    private String sendToCloud(String provider, String prompt) throws Exception {
+        return switch (provider) {
+            case "claude" -> new com.osscli.llm.ClaudeClient(configOr("claude.model", "claude-sonnet-5"))
+                    .generateText(prompt);
+            case "openai" -> new com.osscli.llm.OpenAiClient(configOr("openai.model", "gpt-4o")).generateText(prompt);
+            default -> new com.osscli.llm.GeminiClient(configOr("gemini.model", "gemini-2.0-flash"))
+                    .generateText(prompt);
+        };
+    }
+
+    private String configOr(String key, String fallback) throws java.sql.SQLException {
+        String v = SqliteStorage.loadConfig(key);
+        return v == null || v.isBlank() ? fallback : v;
+    }
+
+    /**
+     * Pulls the JSON object out of a model response.
+     *
+     * <p>Ollama is asked for JSON and returns only JSON. Cloud models are conversational by default and commonly wrap
+     * the object in a sentence or a fenced code block, which parses as a failure and would discard an answer that was
+     * actually correct.
+     */
+    private static String extractJson(String raw) {
+        String s = raw.trim();
+        int start = s.indexOf('{');
+        int end = s.lastIndexOf('}');
+        return (start >= 0 && end > start) ? s.substring(start, end + 1) : s;
     }
 
     private void printBullets(String heading, JsonNode array) {
@@ -499,14 +613,20 @@ public class ReviewCommand implements Callable<Integer> {
         report(conventionsChecked, "Convention checks against this project's rules", "run 'profile' to build it");
         report(notesUsed, "Your own prior work", whyNoNotes());
         report(
-                verdictGiven,
+                verdictGiven && !escalated,
                 "Local verdict from Ollama",
-                noVerdict ? "skipped by --no-verdict" : "start Ollama with 'ollama serve'");
+                noVerdict
+                        ? "skipped by --no-verdict"
+                        : (escalated ? "escalated instead" : "start Ollama with 'ollama serve'"));
+        report(escalated, "Escalation to a cloud model", whyNoEscalation());
+    }
 
-        // Not yet consulted by this command. Listed so the gap is visible rather than mistaken for a clean result.
-        LOGGER.info(
-                "  ○ Escalation for large diffs — {}",
-                hasCloudKey() ? "cloud key found, but review does not escalate yet" : "no cloud key configured");
+    /** Separates "you cannot escalate" from "escalation was not needed", which mean different things to a reviewer. */
+    private String whyNoEscalation() {
+        if (!escalate && !sendClaude && !sendOpenAi && !sendGemini) {
+            return hasCloudKey() ? "not requested (pass --escalate)" : "no cloud key configured";
+        }
+        return hasCloudKey() ? "diff fit the local budget" : "no cloud key configured";
     }
 
     /** Distinguishes "you have no notes" from "your notes had nothing to say about this change". */
