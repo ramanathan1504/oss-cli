@@ -61,11 +61,18 @@ jobs:
             rm -f release-notes.md
           fi
 
+      # Idempotent, so the run can be repeated. The usual reason to repeat one is
+      # that a secret was missing the first time -- adding it and re-running is
+      # the obvious fix, and it would otherwise fail here on a release that
+      # already exists, before reaching the step that was the point.
       - name: Publish the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ -f release-notes.md ]; then
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME exists — replacing the jar."
+            gh release upload "$GITHUB_REF_NAME" "$jar" --clobber
+          elif [ -f release-notes.md ]; then
             gh release create "$GITHUB_REF_NAME" "$jar" \
               --title "OSS-CLI $GITHUB_REF_NAME" --notes-file release-notes.md
           else
