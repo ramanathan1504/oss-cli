@@ -17,7 +17,10 @@ import org.apache.logging.log4j.Logger;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-@Command(name = "duplicates", description = "Identify potential duplicate issues using local vector embeddings")
+@Command(
+        name = "duplicates",
+        mixinStandardHelpOptions = true,
+        description = "Identify potential duplicate issues using local vector embeddings")
 public class DuplicatesCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(DuplicatesCommand.class);

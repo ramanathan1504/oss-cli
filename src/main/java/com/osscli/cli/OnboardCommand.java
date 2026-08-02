@@ -26,7 +26,10 @@ import picocli.CommandLine.Option;
  * rules to check a change; a newcomer needs them before writing one. Deriving both from one source is what stops the
  * advice given to contributors drifting from the standard their pull requests are actually held to.
  */
-@Command(name = "onboard", description = "Learn what a project expects before you contribute to it")
+@Command(
+        name = "onboard",
+        mixinStandardHelpOptions = true,
+        description = "Learn what a project expects before you contribute to it")
 public class OnboardCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(OnboardCommand.class);

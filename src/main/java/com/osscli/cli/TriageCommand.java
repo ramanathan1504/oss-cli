@@ -20,7 +20,10 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
-@Command(name = "triage", description = "Perform a consolidated automated triage audit on a specific issue")
+@Command(
+        name = "triage",
+        mixinStandardHelpOptions = true,
+        description = "Perform a consolidated automated triage audit on a specific issue")
 public class TriageCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(TriageCommand.class);

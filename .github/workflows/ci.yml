@@ -1,0 +1,148 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A second push to a pull request makes the first run irrelevant. Cancelling it
+# frees a runner and stops a stale red cross sitting on a branch that was
+# already fixed. main is never cancelled: its history is what release.sh trusts.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: temurin
+          cache: maven
+
+      # spotless:check is bound to the verify phase, so formatting is a build
+      # failure here rather than a review comment.
+      - name: Build and verify
+        run: mvn -B -ntp clean verify
+
+      # There are no unit tests yet, so this is the only thing standing between
+      # a compiling jar and a broken one. Picocli wires subcommands by
+      # annotation at runtime: a duplicated command name or a bad @Option type
+      # compiles cleanly and fails on first launch, which without this would be
+      # discovered by whoever ran brew upgrade.
+      - name: Smoke test the built jar
+        run: |
+          JAR=$(ls target/oss-cli-*.jar | head -1)
+          echo "Testing $JAR"
+
+          java -jar "$JAR" --help > help.txt
+          java -jar "$JAR" --version
+
+          # Every command must be reachable from the root command.
+          for cmd in sync profile onboard review prompt search doctor backup restore; do
+            grep -q "^  $cmd" help.txt || {
+              echo "::error::'$cmd' is missing from --help; the subcommand is not wired up"
+              cat help.txt
+              exit 1
+            }
+          done
+
+          # Each must at least parse its own options rather than crash on load.
+          for cmd in sync profile onboard review prompt doctor; do
+            java -jar "$JAR" "$cmd" --help > /dev/null || {
+              echo "::error::'$cmd --help' failed; the command cannot initialise"
+              exit 1
+            }
+          done
+
+          echo "All commands reachable and loadable."
+
+      - name: Keep the jar for inspection
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oss-cli-jar
+          path: target/oss-cli-*.jar
+          retention-days: 7
+          if-no-files-found: error
+
+  site:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The page is deployed as-is with no build step, so a malformed tag ships
+      # straight to production. Checking the markup here is the only gate.
+      - name: Check the site is well-formed and self-contained
+        run: |
+          python3 - <<'PY'
+          import sys, re
+          from html.parser import HTMLParser
+
+          VOID = {'area','base','br','col','embed','hr','img','input','link',
+                  'meta','param','source','track','wbr'}
+
+          # Elements that FETCH. An <a href> is a link the reader follows, not a
+          # resource the page loads, so it is not a policy violation and must
+          # not be flagged -- the page links to GitHub on purpose.
+          LOADING = {'link':'href', 'script':'src', 'img':'src', 'iframe':'src',
+                     'source':'src', 'video':'src', 'audio':'src', 'embed':'src',
+                     'object':'data', 'track':'src', 'input':'src'}
+
+          class P(HTMLParser):
+              def __init__(self):
+                  super().__init__(convert_charrefs=True)
+                  self.stack, self.errs, self.external = [], [], []
+              def handle_starttag(self, t, attrs):
+                  wanted = LOADING.get(t)
+                  if wanted:
+                      for k, v in attrs:
+                          if k == wanted and v and v.startswith(('http://', 'https://', '//')):
+                              self.external.append((t, v, self.getpos()))
+                  if t not in VOID:
+                      self.stack.append((t, self.getpos()))
+              def handle_startendtag(self, t, attrs):
+                  self.handle_starttag(t, attrs)
+                  if t not in VOID and self.stack:
+                      self.stack.pop()
+              def handle_endtag(self, t):
+                  if not self.stack:
+                      self.errs.append(f'stray </{t}> at {self.getpos()}')
+                      return
+                  top = self.stack.pop()
+                  if top[0] != t:
+                      self.errs.append(f'</{t}> at {self.getpos()} closes <{top[0]}> from {top[1]}')
+
+          src = open('site/index.html', encoding='utf-8').read()
+          p = P(); p.feed(src)
+
+          fail = False
+          for e in p.errs:
+              print(f'::error file=site/index.html::{e}'); fail = True
+          if p.stack:
+              print(f'::error file=site/index.html::unclosed: {[t for t,_ in p.stack]}'); fail = True
+
+          # _headers forbids external fetches, so anything that slips in here
+          # works locally and is blocked in production -- the worst failure to
+          # debug, and invisible without this check.
+          for tag, url, pos in p.external:
+              print(f'::error file=site/index.html,line={pos[0]}::<{tag}> loads "{url}" '
+                    f'from another host, which the Content-Security-Policy in site/_headers blocks')
+              fail = True
+
+          # A version pinned in an install command 404s on the next release.
+          for m in re.finditer(r'oss-cli-\d+\.\d+\.\d+\.jar', src):
+              print(f'::error file=site/index.html::hardcoded jar version "{m.group(0)}" '
+                    f'will 404 after the next release; resolve it from the API instead'); fail = True
+
+          print('site OK' if not fail else 'site FAILED')
+          sys.exit(1 if fail else 0)
+          PY

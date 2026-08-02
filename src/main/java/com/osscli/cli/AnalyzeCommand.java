@@ -16,7 +16,10 @@ import org.apache.logging.log4j.Logger;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-@Command(name = "analyze", description = "Perform batch AI Severity Analysis on open issues via local Ollama")
+@Command(
+        name = "analyze",
+        mixinStandardHelpOptions = true,
+        description = "Perform batch AI Severity Analysis on open issues via local Ollama")
 public class AnalyzeCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(AnalyzeCommand.class);

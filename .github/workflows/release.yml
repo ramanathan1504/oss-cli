@@ -75,8 +75,13 @@ jobs:
 
       # Runs only when the tap token is present, so a fork or a contributor's
       # tag does not fail the whole release on a secret they cannot have.
+      #
+      # The condition reads env, not secrets. The secrets context is not
+      # available to a step-level `if`, and a workflow referencing it there is
+      # rejected before any job starts -- the whole file fails to parse, which
+      # reports as a failed run with no logs and no obvious cause.
       - name: Update the Homebrew tap
-        if: ${{ secrets.TAP_TOKEN != '' }}
+        if: ${{ env.TAP_TOKEN != '' }}
         env:
           TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
           VERSION: ${{ steps.v.outputs.version }}

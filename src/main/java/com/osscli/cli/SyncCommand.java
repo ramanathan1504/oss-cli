@@ -17,7 +17,10 @@ import org.apache.logging.log4j.Logger;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-@Command(name = "sync", description = "Pull live GitHub issues and PRs and save to local SQLite tables")
+@Command(
+        name = "sync",
+        mixinStandardHelpOptions = true,
+        description = "Pull live GitHub issues and PRs and save to local SQLite tables")
 public class SyncCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(SyncCommand.class);

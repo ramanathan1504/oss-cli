@@ -18,7 +18,10 @@ import org.apache.logging.log4j.Logger;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
-@Command(name = "prs", description = "Analyze cached open pull requests for stale status, reviews, and critical fixes")
+@Command(
+        name = "prs",
+        mixinStandardHelpOptions = true,
+        description = "Analyze cached open pull requests for stale status, reviews, and critical fixes")
 public class PrsCommand implements Callable<Integer> {
     private static final Logger LOGGER = LogManager.getLogger(PrsCommand.class);
 
