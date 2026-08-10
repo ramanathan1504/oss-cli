@@ -11,20 +11,20 @@ expert prompt to send wherever you like. You choose what leaves your machine.
 
 ## 1. What you need
 
-| | Why |
-|---|---|
-| Java 17 + Maven | building and running |
-| A model server | embeddings, and local answers. Ollama by default. |
-| `gh` CLI or a GitHub token | syncing repositories and your own PR history |
+|                            | Why                                               |
+|----------------------------|---------------------------------------------------|
+| Java 17 + Maven            | building and running                              |
+| A model server             | embeddings, and local answers. Ollama by default. |
+| `gh` CLI or a GitHub token | syncing repositories and your own PR history      |
 
 **Model choice is yours and is config, not code.** Three roles are configured
 separately, because they have different demands:
 
-| Role | Config key | What it does |
-|---|---|---|
+| Role      | Config key               | What it does                           |
+|-----------|--------------------------|----------------------------------------|
 | embedding | `ollama.model.embedding` | turns notes and questions into vectors |
-| triage | `ollama.model.triage` | cheap, high-volume classification |
-| guidance | `ollama.model.guidance` | writes the local answer |
+| triage    | `ollama.model.triage`    | cheap, high-volume classification      |
+| guidance  | `ollama.model.guidance`  | writes the local answer                |
 
 The **embedding model matters most**. No corpus of any size fits in a context
 window, so every question is answered from retrieved passages — retrieval
@@ -247,14 +247,14 @@ healthy-looking but empty install is otherwise indistinguishable from data loss.
 
 ## 7. Troubleshooting
 
-| Symptom | Likely cause |
-|---|---|
+| Symptom                             | Likely cause                                                                                              |
+|-------------------------------------|-----------------------------------------------------------------------------------------------------------|
 | Everything missing / database empty | `OSS_CLI_HOME` is exported in that shell. `oss-cli doctor` names the store it is using on its first line. |
-| Database looks empty after upgrade | Both old and new data directories exist. |
-| Everything escalates | Guidance model not installed, or `context_limit` too low. |
-| Local answers empty | Reasoning model returning output in a separate field. |
-| Similarity results nonsensical | Mixed embedding models. Re-sync to rebuild. |
-| Long notes never retrieved | Passages not built yet — run `sync --me` once after upgrading. |
+| Database looks empty after upgrade  | Both old and new data directories exist.                                                                  |
+| Everything escalates                | Guidance model not installed, or `context_limit` too low.                                                 |
+| Local answers empty                 | Reasoning model returning output in a separate field.                                                     |
+| Similarity results nonsensical      | Mixed embedding models. Re-sync to rebuild.                                                               |
+| Long notes never retrieved          | Passages not built yet — run `sync --me` once after upgrading.                                            |
 
 ---
 
