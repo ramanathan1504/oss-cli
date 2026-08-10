@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.1
+
+_2026-08-10_
+
+- SETUP: align the markdown tables
+- README: say where OSS-CLI sits, of the three
+- Publish the site from CI (#10)
+
+
 ## 1.4.0
 
 _2026-08-02_
