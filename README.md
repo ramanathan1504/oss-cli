@@ -6,6 +6,27 @@ An advanced, offline-first **Prompt Intelligence Platform** for open-source main
 
 ---
 
+## 🧭 Where this sits, of the three
+
+**This repo knows → `log4j2-workout` runs → `knowledge-creator` remembers.**
+
+| Repo | Owns | Reach for it when |
+|---|---|---|
+| **this one** | facts about any repo from the GitHub API, cached by head SHA — no clone, any language, any forge | you want PR facts, conventions or a verdict without building anything |
+| `log4j2-workout` | execution — real apps, real JVMs, a version × config × app matrix, `bench review <n>` | the question needs something to actually run, on one project |
+| `knowledge-creator` | the archive: harvest, file, index, retrieve | you want it findable in a year |
+
+The boundary that matters: **OSS-CLI never needs a clone and is never specific
+to one project.** Anything that has to check out a branch, run Maven, or know
+what Log4j in particular does belongs in `log4j2-workout` — which is why the
+red/green PR gates live there and not here.
+
+Both write into the same archive and stay out of each other's way by location:
+everything OSS-CLI generates goes to `<topic>/oss-cli/`, hand-written reviews go
+to `<topic>/pr-reviews/`.
+
+---
+
 ## 🧠 Architecture: Adaptive Local-First Intelligence
 
 ```
