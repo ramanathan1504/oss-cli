@@ -154,15 +154,6 @@ public class Extension {
     private String manifestSha;
 
     /**
-     * Documentation this extension wants shown, as paths relative to its root.
-     *
-     * <p>Declared rather than discovered. Globbing a repository for {@code *.md} would surface a
-     * CONTRIBUTING file, a stale scratch note and every changelog fragment with equal billing --
-     * and an extension author knows which handful of pages are the ones worth reading.
-     */
-    private List<String> docs = List.of();
-
-    /**
      * Absolute path to the repository this was registered from.
      *
      * <p>Written by the registry, never read from the manifest. A manifest that could name its own
@@ -216,29 +207,6 @@ public class Extension {
 
     public void setAxes(List<String> axes) {
         this.axes = axes == null ? List.of() : axes;
-    }
-
-    public List<String> getDocs() {
-        return docs;
-    }
-
-    public void setDocs(List<String> docs) {
-        this.docs = docs == null ? List.of() : docs;
-    }
-
-    /**
-     * Resolve a declared doc path, refusing anything that escapes the extension root.
-     *
-     * <p>The path arrives from a browser query string. Without this, {@code ../../.ssh/id_rsa}
-     * would be served by a process running as the user -- and it is only ever compared against the
-     * declared list, so a traversal cannot be smuggled in by asking for it.
-     */
-    public Path docPath(String rel) {
-        if (rel == null || !docs.contains(rel)) {
-            return null;
-        }
-        Path resolved = rootPath().resolve(rel).normalize();
-        return resolved.startsWith(rootPath().normalize()) ? resolved : null;
     }
 
     public List<String> getWrites() {
