@@ -23,10 +23,15 @@ import picocli.CommandLine.Option;
 /**
  * OSS-CLI as a service you install once and attach things to.
  *
- * <p>The model is Node-RED's: one long-running process on a known port, and a palette of
- * capabilities you add without rebuilding or restarting anything. Here the palette entries are
- * extensions -- a {@code bench} that runs something real, a {@code kb} that remembers -- and adding
- * one means pasting the path of a directory that contains an {@code oss-ext.json}.
+ * <p>Install it once; it runs locally and stays running; you add capabilities to it without
+ * rebuilding or restarting anything. The palette entries are extensions -- a {@code bench} that
+ * runs something real, a {@code kb} that remembers -- and adding one means pasting the path of a
+ * directory that contains an {@code oss-ext.json}.
+ *
+ * <p>The point is not the web page. The page is only the least ceremonious way to paste a path and
+ * see what is attached; everything it does is equally available as {@code oss-cli ext …}. What
+ * matters is that <b>the set of things this can run against is open, and grows from other people's
+ * machines</b> -- someone writes one file in their own repository and their bench is in the list.
  *
  * <p>That is the whole attach story, and it is deliberately dull: anyone who has a Kafka setup, or a
  * Spring project, or anything else worth running against, writes that one file in their own
@@ -56,8 +61,8 @@ public class ServeCommand implements Callable<Integer> {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    /** 1504 by default. Fixed and memorable, the way :1880 is for Node-RED — a service you
-     * install once is one you return to by typing the same address, not by looking it up. */
+    /** 1504 by default: fixed, so a service you install once is one you return to by typing the
+     * same address rather than looking it up. */
     @Option(names = "--port", description = "Port to listen on (default: ${DEFAULT-VALUE})")
     int port = 1504;
 

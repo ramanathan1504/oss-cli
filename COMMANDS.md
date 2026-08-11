@@ -284,7 +284,7 @@ oss-cli restore /path/to/sa_brain_backup_20260627_104000.zip
 | Command           | Mode           | AI Required             | Description                                  |
 |-------------------|----------------|-------------------------|----------------------------------------------|
 | `setup`           | Interactive    | No                      | Configure API keys, paths, models            |
-| `serve`           | Local service  | No                      | **Run on http://localhost:1504 with a palette of attached extensions** |
+| `serve`           | Local service  | No                      | **Runs locally on http://localhost:1504; attach benches by path** |
 | `ext add <path>`  | Local          | No                      | Attach a bench/kb from a local repo containing `oss-ext.json` |
 | `ext list`        | Local          | No                      | What is attached, and whether it is still reachable |
 | `bench <verb>`    | Local          | No                      | Dispatch to an attached **bench** (runs something real) |
