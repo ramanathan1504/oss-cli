@@ -55,20 +55,40 @@ public class Extension {
      * registers something nothing will ever dispatch to.
      */
     public enum Kind {
-        /** Executes something real -- a matrix, a build, a repro. Answers "does it actually run?" */
-        BENCH,
+        /** Runs something real -- a matrix, a build, a repro. Answers "does it actually work?" */
+        RUNNER("bench"),
         /** Remembers -- an archive that files and retrieves. Answers "have I worked this out?" */
-        KB;
+        MEMORY("kb");
+
+        /**
+         * What this kind used to be called.
+         *
+         * <p>"bench" and "kb" were the author's words for these, and they read as jargon to anyone
+         * who did not invent them: a newcomer has to be told what a "kb" is before they can decide
+         * whether they want one. "runner" and "memory" say what the thing does.
+         *
+         * <p>The old names keep working, permanently and silently. Manifests already written are
+         * files in other people's repositories -- breaking them to tidy a word would be charging
+         * them for a rename they did not ask for.
+         */
+        private final String legacy;
+
+        Kind(String legacy) {
+            this.legacy = legacy;
+        }
 
         public static Kind parse(String raw) {
             if (raw == null || raw.isBlank()) {
-                throw new IllegalArgumentException("manifest is missing \"kind\" (expected: bench, kb)");
+                throw new IllegalArgumentException("manifest is missing \"kind\" (expected: runner, memory)");
             }
-            try {
-                return valueOf(raw.trim().toUpperCase(java.util.Locale.ROOT));
-            } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("unknown kind \"" + raw + "\" (expected: bench, kb)");
+            String v = raw.trim().toLowerCase(java.util.Locale.ROOT);
+            for (Kind k : values()) {
+                if (k.lower().equals(v) || k.legacy.equals(v)) {
+                    return k;
+                }
             }
+            throw new IllegalArgumentException(
+                    "unknown kind \"" + raw + "\" (expected: runner, memory — or the older bench, kb)");
         }
 
         public String lower() {

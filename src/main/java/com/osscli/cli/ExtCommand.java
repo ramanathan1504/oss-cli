@@ -34,7 +34,7 @@ import picocli.CommandLine.Parameters;
 @Command(
         name = "ext",
         mixinStandardHelpOptions = true,
-        description = "Register and inspect bench/kb extensions",
+        description = "Attach and inspect runners and memories",
         subcommands = {ExtCommand.Add.class, ExtCommand.ListExt.class, ExtCommand.Remove.class, ExtCommand.Refresh.class
         })
 public class ExtCommand implements Callable<Integer> {
@@ -85,7 +85,7 @@ public class ExtCommand implements Callable<Integer> {
                 System.out.println("No extensions registered.");
                 System.out.println();
                 System.out.println("  oss-cli ext add <repo>     a repo with an oss-ext.json at its root");
-                System.out.println("  kinds: bench (executes something real) · kb (remembers)");
+                    System.out.println("  kinds: runner (executes something real) · memory (remembers)");
                 return 0;
             }
             System.out.printf("%-14s %-6s %-9s %s%n", "NAME", "KIND", "STATE", "VERBS");
@@ -224,25 +224,29 @@ public class ExtCommand implements Callable<Integer> {
     // claims any flag it recognises out of the passthrough -- `oss-cli bench list --apps` printed
     // this command's own usage, because --apps was unknown HERE and never reached the bench. After
     // the verb, nothing is ours.
+    // Renamed, with the old spelling kept as an alias. Anything already in a script, a note or
+    // muscle memory keeps working; renaming a verb is not worth breaking someone's Tuesday.
     @Command(
-            name = "bench",
+            name = "run",
+            aliases = {"bench"},
             mixinStandardHelpOptions = true,
-            description = "Run something real through a registered bench extension")
+            description = "Run something real through an attached runner")
     public static class BenchDispatch extends Dispatch {
         @Override
         Extension.Kind kind() {
-            return Extension.Kind.BENCH;
+            return Extension.Kind.RUNNER;
         }
     }
 
     @Command(
-            name = "kb",
+            name = "memory",
+            aliases = {"kb"},
             mixinStandardHelpOptions = true,
-            description = "File, index or search through a registered knowledge-base extension")
+            description = "File, index or search through an attached memory")
     public static class KbDispatch extends Dispatch {
         @Override
         Extension.Kind kind() {
-            return Extension.Kind.KB;
+            return Extension.Kind.MEMORY;
         }
     }
 }

@@ -14,12 +14,12 @@ public class Main {
 
         CommandLine commandLine = new CommandLine(new RootCommand());
 
-        // `bench` and `kb` are dispatchers, not parsers: everything after the verb belongs to the
+        // `run` and `memory` are dispatchers, not parsers: everything after the verb belongs to the
         // extension. Left as ordinary subcommands, picocli claims flags out of the passthrough --
         // `oss-cli bench list --apps` printed picocli's own usage because --apps was unknown HERE
         // and so never reached the bench. Scoped to these two, because every other subcommand does
         // want its arguments parsed.
-        for (String dispatcher : java.util.List.of("bench", "kb")) {
+        for (String dispatcher : java.util.List.of("run", "memory")) {
             CommandLine sub = commandLine.getSubcommands().get(dispatcher);
             if (sub != null) {
                 sub.setStopAtPositional(true).setUnmatchedOptionsArePositionalParams(true);

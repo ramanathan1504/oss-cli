@@ -221,7 +221,7 @@ knowledge-creator/
 ├── oss-ext.json          declares this repo as the `devon` kb
 ├── oss-harvest.py        the daily harvester (launchd, 09:15)
 ├── pr-review-file.py     files a written review into the archive
-├── devon-index.sh        nudge DEVONthink to re-read changed files
+├── devon-index.sh        nudge your indexer to re-read changed files
 └── logs/                 harvester output — check here when a sync looks wrong
 
 ~/Library/Mobile Documents/…/Devon Capture/   THE ARCHIVE (iCloud, not in the repo)

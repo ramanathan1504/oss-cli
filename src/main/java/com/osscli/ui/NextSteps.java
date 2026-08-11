@@ -64,8 +64,8 @@ public final class NextSteps {
     }
 
     private static List<String> build(After after, String subject) {
-        boolean hasBench = !ExtensionRegistry.ofKind(Extension.Kind.BENCH).isEmpty();
-        boolean hasKb = !ExtensionRegistry.ofKind(Extension.Kind.KB).isEmpty();
+        boolean hasBench = !ExtensionRegistry.ofKind(Extension.Kind.RUNNER).isEmpty();
+        boolean hasKb = !ExtensionRegistry.ofKind(Extension.Kind.MEMORY).isEmpty();
         String s = (subject == null || subject.isBlank()) ? "<n>" : subject.trim();
 
         // Ordered by how often each is the right next move, then trimmed to three: a list long

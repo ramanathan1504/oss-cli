@@ -26,11 +26,11 @@ Fetches issues, pull requests, author profiles, and ecosystem dependencies from 
 *   `-a`, `--all` : Sequentially synchronize all active repositories in your database registry.
 *   `--add <repo>` : Register a new repository to your local database watchlist.
 *   `--remove <repo>` : Remove a repository from the database watchlist.
-*   `--me` : **Personal Sync.** Fetches your 1-year PR history, creates your Developer Expertise Vector, and recursively crawls your Google Drive (automatically parsing ChatGPT/Claude `.json` exports and `.md` files) to index your conversational memory.
+*   `--me` : **Personal Sync.** Fetches your 1-year PR history, creates your Developer Expertise Vector, and recursively crawls your Google Drive (automatically parsing assistant `.json` exports and `.md` files) to index your conversational memory.
 
 *   `--no-embed` : Skip building the local vector index. Sync is faster, but issues fetched in that run are not semantically searchable until a later sync indexes them.
 
-Every sync builds the vector index for the repositories it touched. Indexing is incremental (only issues without a current vector), resumable (vectors commit in batches of 50), and model-aware (changing `ollama.model.embedding` re-indexes rather than mixing incomparable vector spaces). If Ollama is not running, the issue data is still saved and a warning names how many issues are not yet searchable.
+Every sync builds the vector index for the repositories it touched. Indexing is incremental (only issues without a current vector), resumable (vectors commit in batches of 50), and model-aware (changing `ollama.model.embedding` re-indexes rather than mixing incomparable vector spaces). If no local model is running, the issue data is still saved and a warning names how many issues are not yet searchable.
 
 `--add` also builds the repository profile — see [`profile`](#profile).
 
@@ -94,7 +94,7 @@ Built as a **ladder**. Layer 0 needs only a GitHub token; every layer above it i
 | Facts | GitHub token | Diff, commits, files by area, CI checks, review threads |
 | Conventions | a built profile | Deterministic gate checks (no model involved) |
 | History | notes corpus | Your own prior work on the changed paths |
-| Verdict | Ollama | Local judgment against the project's rules |
+| Verdict | a local model | Local judgment against the project's rules |
 | Escalation | cloud key | The whole diff read by a cloud model when it exceeds the local budget |
 
 Evidence is cached **by head commit SHA**, not by PR number. A pull request is rewritten by every push, so caching by number alone would serve a review of code that no longer exists. Re-reviewing unchanged code is instant; after a push it re-fetches automatically.
@@ -108,7 +108,7 @@ No local clone is required — everything comes from the GitHub API.
 *   `--escalate` : When the diff exceeds the local budget, send it to a cloud model instead of truncating. Picks whichever provider key is configured.
 *   `--send-claude`, `--send-openai`, `--send-gemini` : Escalate to a named provider.
 
-Escalation fires **only when it would change the answer** — a diff that already fits the local budget is answered locally and says so, rather than spending a cloud call to reread what Ollama could see anyway.
+Escalation fires **only when it would change the answer** — a diff that already fits the local budget is answered locally and says so, rather than spending a cloud call to reread what the local model could see anyway.
 
 ```bash
 oss-cli review 4234
@@ -125,12 +125,12 @@ Everything OSS-CLI generates goes to that one folder, kept separate from anythin
 ## 🔍 Prompt Intelligence (New)
 
 ### `prompt`
-Core new command. Runs the full **Retrieve → Ollama → Adaptive Response** pipeline.
+Core new command. Runs the full **Retrieve → local model → Adaptive Response** pipeline.
 
-**Ollama answers first.** The command retrieves all relevant local context (issues, PRs, stack traces, chat logs, notes, similar fixes), estimates the token count, and passes everything to Ollama.
+**The local model answers first.** The command retrieves all relevant local context (issues, PRs, stack traces, chat logs, notes, similar fixes), estimates the token count, and passes everything to the local model.
 
-- **If context fits within Ollama's limit AND confidence is high** → Ollama answers directly from the local database. No external AI needed.
-- **If context exceeds Ollama's limit OR confidence is too low** → The platform builds a high-quality expert prompt from all gathered context and presents it for copy/send to your AI of choice.
+- **If context fits within the local model's limit AND confidence is high** → the local model answers directly from the local database. No external AI needed.
+- **If context exceeds the local model's limit OR confidence is too low** → The platform builds a high-quality expert prompt from all gathered context and presents it for copy/send to your AI of choice.
 
 Retrieves from all local sources:
 - Issue body, labels, and comments

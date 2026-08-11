@@ -1,6 +1,6 @@
 # OSS-CLI — Developer Investigation Workbench
 
-An advanced, offline-first **Prompt Intelligence Platform** for open-source maintainers. Instead of being another AI chatbot, OSS-CLI acts as an intelligent context assembler — it searches your entire local knowledge base (issues, PRs, vectors, chat logs, personal notes) and generates a perfect, expert-quality prompt that you can copy to ChatGPT, Gemini, Claude, or any AI of your choice.
+An advanced, offline-first **Prompt Intelligence Platform** for open-source maintainers. Instead of being another AI chatbot, OSS-CLI acts as an intelligent context assembler — it searches your entire local knowledge base (issues, PRs, vectors, chat logs, personal notes) and generates a perfect, expert-quality prompt you can hand to whichever AI you already use.
 
 > "OSS-CLI does not call an AI. It **becomes** the intelligence layer — and hands a perfect prompt to whichever AI you choose."
 
@@ -33,20 +33,20 @@ to `<topic>/pr-reviews/`.
 Tier 1 — Retrieval (Local, Instant)
   SQLite + Vector DB → Issues, PRs, Stack Traces, Chat Logs, Notes
 
-Tier 2 — Local Answer (Ollama, Primary)
-  Ollama tries to answer directly from retrieved context
+Tier 2 — Local Answer (a local model, primary)
+  A local model tries to answer directly from retrieved context
       ↓ Within token limit + confident → Answer shown immediately
       ↓ Context too large OR low confidence → Escalate to Tier 3
 
 Tier 3 — Expert Prompt (Fallback, On-Demand)
   Prompt Builder assembles full context into a structured expert prompt
-  → Copy to ChatGPT / Gemini / Claude   OR   auto-send via --send-* flag
+  → Copy to whichever AI you use   OR   auto-send via --send-* flag
 ```
 
 The platform separates public repository data from your private developer identity:
 
 1. **The Repository Engine (Public):** Syncs whatever repositories *you* register — any language, any forge account, from one repo to hundreds — into a unified SQLite database with cross-project dependency tracking and JIRA Bridge matching. Nothing is hardcoded to a particular project.
-2. **The Personal Copilot (Private):** Ingests your own GitHub PR footprint and whatever note folders you point it at (AI Studio / ChatGPT / Claude exports, hand-written Markdown) to build a **Developer Expertise Vector**.
+2. **The Personal Copilot (Private):** Ingests your own GitHub PR footprint and whatever note folders you point it at (assistant exports, hand-written Markdown) to build a **Developer Expertise Vector**.
 
 You bring the repositories and the data. OSS-CLI does the mapping, indexing and retrieval so you no longer chase the same context by hand — upstream and downstream docs, inherited build rules, old work on the same area, and past conversations all become one searchable corpus.
 
@@ -59,7 +59,7 @@ Every capability is a layer, and each is optional. The tool reports which layers
 | You have | You get |
 |---|---|
 | A GitHub token only | Sync, issue tracking, PR facts, commits, diffs, CI state, and convention checks |
-| ...plus Ollama | Local answers, semantic search, vector indexing, PR verdicts |
+| ...plus a local model | Local answers, semantic search, vector indexing, PR verdicts |
 | ...plus a cloud API key | Escalation when local context or confidence is not enough |
 | ...plus your own notes | Your history and past reasoning blended into retrieval |
 
@@ -73,7 +73,7 @@ A brand-new user with none of the optional pieces still gets working commands. M
 * **Apache Maven**
 * **A GitHub token** — the only hard requirement
 * **Ollama** *(optional)* — enables local answers and vector search. Models are your choice; defaults are `qwen2.5-coder:7b`, `qwen2.5:0.5b`, `all-minilm`.
-* **A cloud API key** *(optional)* — Claude, OpenAI or Gemini, for escalation
+* **A cloud API key** *(optional)* — any major provider, for escalation
 
 ---
 
@@ -81,7 +81,7 @@ A brand-new user with none of the optional pieces still gets working commands. M
 
 `profile` reads a repository and reports what it *is* — language, build system, toolchain version, documentation, and the conventions a change must respect. Everything is pattern-matched rather than hardcoded, so an unfamiliar project is handled by the same code path as a familiar one.
 
-For Maven projects it **follows the inherited POM chain through Maven Central**, because a project's real rules are often published in a parent artifact rather than committed to the repository you are looking at. Apache Log4j, for example, declares no OSGi configuration anywhere in its own tree, yet every module is a bundle — the bnd setup and the API baseline gate live two levels up.
+For Maven projects it **follows the inherited POM chain through Maven Central**, because a project's real rules are often published in a parent artifact rather than committed to the repository you are looking at. One large Apache project, for example, declares no OSGi configuration anywhere in its own tree, yet every module is a bundle — the bnd setup and the API baseline gate live two levels up.
 
 `review` then uses that profile to review a pull request, caching evidence **by head commit SHA** so re-reviewing unchanged code is instant while a new push re-fetches automatically. No local clone is needed.
 
@@ -100,7 +100,7 @@ oss-cli review 4234
    ```
 
 2. **Run the Interactive Wizard:**
-   Securely registers your GitHub Token, Cloud API Keys (Gemini/OpenAI/Anthropic), Ollama models, and Google Drive paths into the SQLite `system_config` table.
+   Securely registers your GitHub token, any cloud API keys, local model names, and note folder paths into the SQLite `system_config` table.
    ```bash
    oss-cli setup
    ```
