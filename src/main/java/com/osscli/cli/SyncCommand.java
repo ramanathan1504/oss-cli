@@ -427,8 +427,8 @@ public class SyncCommand implements Callable<Integer> {
                                 pr.number(),
                                 guidanceModel);
 
-                        String summaryPrompt = String.format(
-                                """
+                        String summaryPrompt =
+                                String.format("""
                                 You are an maintainer.
                                 Summarize the following pull request as a personal development story.
                                 Explain:
@@ -441,8 +441,7 @@ public class SyncCommand implements Callable<Integer> {
                                 Files Changed: %s
 
                                 Keep the story concise and technical.
-                                """,
-                                pr.title(), pr.body(), String.join(", ", modifiedFiles));
+                                """, pr.title(), pr.body(), String.join(", ", modifiedFiles));
 
                         String generatedStory = guideOllama.generateJson(summaryPrompt);
                         double[] storyVector = embedOllama.generateEmbedding(generatedStory);
