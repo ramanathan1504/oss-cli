@@ -48,6 +48,7 @@ import picocli.CommandLine.Command;
             DoctorCommand.class,
             // OSS-CLI knows; a bench runs and a kb remembers. Registered as three entries rather
             // than one so `oss-cli bench …` and `oss-cli kb …` read as first-class capabilities.
+            AliasCommand.class,
             ExtCommand.class,
             com.osscli.serve.ServeCommand.class,
             ExtCommand.BenchDispatch.class,
