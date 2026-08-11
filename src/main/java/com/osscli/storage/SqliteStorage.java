@@ -59,8 +59,7 @@ public class SqliteStorage {
             return;
         }
 
-        String insertIssueSql =
-                """
+        String insertIssueSql = """
                 INSERT OR REPLACE INTO issues (
                     repository, number, title, body, state, comments, created_at, updated_at, is_pull_request, author, author_association
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
@@ -70,8 +69,7 @@ public class SqliteStorage {
         String insertLabelSql = "INSERT INTO labels (repository, issue_number, label_name) VALUES (?, ?, ?);";
 
         String deleteLinksSql = "DELETE FROM cross_repo_links WHERE source_repo = ? AND source_number = ?;";
-        String insertLinkSql =
-                """
+        String insertLinkSql = """
                 INSERT OR REPLACE INTO cross_repo_links (
                     source_repo, source_number, target_repo, target_number, link_type
                 ) VALUES (?, ?, ?, ?, ?);
@@ -505,8 +503,7 @@ public class SqliteStorage {
             return;
         }
 
-        String sql =
-                """
+        String sql = """
                 INSERT OR REPLACE INTO snapshots (
                     repository, date, critical_issues, high_priority, stale_prs, duplicate_clusters
                 ) VALUES (?, ?, ?, ?, ?, ?);
@@ -574,8 +571,7 @@ public class SqliteStorage {
     // ==========================================
 
     public static List<com.osscli.model.JiraBridgeLink> loadJiraBridges(String repository) throws SQLException {
-        String sql =
-                """
+        String sql = """
                 SELECT a.issue_number AS local_number, b.repository AS external_repo, b.issue_number AS external_number, a.jira_key
                 FROM jira_mentions a
                 JOIN jira_mentions b ON a.jira_key = b.jira_key
@@ -605,8 +601,7 @@ public class SqliteStorage {
     }
 
     public static List<String> loadInboundLinks(String repository) throws SQLException {
-        String sql =
-                """
+        String sql = """
                 SELECT source_repo, source_number, target_number
                 FROM cross_repo_links
                 WHERE target_repo = ? AND source_repo != ?;
@@ -628,8 +623,7 @@ public class SqliteStorage {
     }
 
     public static List<String> loadOutboundLinks(String repository) throws SQLException {
-        String sql =
-                """
+        String sql = """
                 SELECT source_number, target_repo, target_number
                 FROM cross_repo_links
                 WHERE source_repo = ? AND target_repo != ?;

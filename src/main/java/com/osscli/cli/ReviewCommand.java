@@ -432,11 +432,11 @@ public class ReviewCommand implements Callable<Integer> {
 
     private String sendToCloud(String provider, String prompt) throws Exception {
         return switch (provider) {
-            case "claude" -> new com.osscli.llm.ClaudeClient(configOr("claude.model", "claude-sonnet-5"))
-                    .generateText(prompt);
+            case "claude" ->
+                new com.osscli.llm.ClaudeClient(configOr("claude.model", "claude-sonnet-5")).generateText(prompt);
             case "openai" -> new com.osscli.llm.OpenAiClient(configOr("openai.model", "gpt-4o")).generateText(prompt);
-            default -> new com.osscli.llm.GeminiClient(configOr("gemini.model", "gemini-2.0-flash"))
-                    .generateText(prompt);
+            default ->
+                new com.osscli.llm.GeminiClient(configOr("gemini.model", "gemini-2.0-flash")).generateText(prompt);
         };
     }
 

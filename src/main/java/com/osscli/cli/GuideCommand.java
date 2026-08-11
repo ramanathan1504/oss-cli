@@ -174,8 +174,7 @@ public class GuideCommand implements Callable<Integer> {
         }
 
         LOGGER.info("Synthesizing initial blueprint using local model '{}'...", modelName);
-        String localPrompt = String.format(
-                """
+        String localPrompt = String.format("""
                 You are an expert maintainer for the '%s' repository.
                 Help the developer write a step-by-step code resolution plan for this new issue.
 
@@ -190,8 +189,7 @@ public class GuideCommand implements Callable<Integer> {
                 1. ANALYSIS: A concise technical explanation of the root cause.
                 2. HISTORICAL MATCH: How this relates to the past work provided in the reference memory.
                 3. STEP-BY-STEP PLAN: A concrete, file-by-file coding blueprint.
-                """,
-                repository, memorySection.trim(), target.title(), target.body());
+                """, repository, memorySection.trim(), target.title(), target.body());
 
         String localOutput = localOllama.generateText(localPrompt);
         LOGGER.info(
@@ -212,14 +210,12 @@ public class GuideCommand implements Callable<Integer> {
             String cloudOutput;
             String provider;
 
-            String cloudPrompt = String.format(
-                    """
+            String cloudPrompt = String.format("""
                     You are an expert maintainer. Refine this resolution for issue #%d.
                     Memory Context: %s
                     Local Draft: %s
                     User Instructions: %s
-                    """,
-                    issueNumber, memorySection, localOutput, tweak);
+                    """, issueNumber, memorySection, localOutput, tweak);
 
             try {
                 if (useOpenAi) {
@@ -234,8 +230,7 @@ public class GuideCommand implements Callable<Integer> {
                 }
 
                 LOGGER.info("Received {} response. Aligning with your local memory profile...", provider);
-                String alignmentPrompt = String.format(
-                        """
+                String alignmentPrompt = String.format("""
                         An online expert AI provided this code solution:
                         %s
 
@@ -243,8 +238,7 @@ public class GuideCommand implements Callable<Integer> {
                         %s
 
                         Output the final, verified solution that matches my coding style and file patterns.
-                        """,
-                        cloudOutput, memorySection);
+                        """, cloudOutput, memorySection);
 
                 String finalOutput = localOllama.generateText(alignmentPrompt);
                 LOGGER.info(

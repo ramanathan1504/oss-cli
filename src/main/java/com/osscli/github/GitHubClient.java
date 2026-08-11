@@ -104,9 +104,10 @@ public class GitHubClient {
                 .orElse("");
 
         return switch (status) {
-            case 401 -> "GitHub rejected the token (401 Bad credentials)" + detail
-                    + ". The stored token is expired or revoked -- create a new one at "
-                    + "https://github.com/settings/tokens and register it with 'oss-cli setup'.";
+            case 401 ->
+                "GitHub rejected the token (401 Bad credentials)" + detail
+                        + ". The stored token is expired or revoked -- create a new one at "
+                        + "https://github.com/settings/tokens and register it with 'oss-cli setup'.";
             case 403, 429 -> {
                 boolean exhausted = response.headers()
                         .firstValue("x-ratelimit-remaining")
@@ -120,8 +121,9 @@ public class GitHubClient {
                         : "GitHub denied the request (" + status + ")" + detail
                                 + ". The token is likely missing the required scopes.";
             }
-            case 404 -> "Repository or endpoint not found (404)" + detail
-                    + ". It may be private, renamed, or the token lacks access.";
+            case 404 ->
+                "Repository or endpoint not found (404)" + detail
+                        + ". It may be private, renamed, or the token lacks access.";
             default -> {
                 String body = com.osscli.util.Redactor.redact(response.body()).text();
                 yield "GitHub API call failed with status " + status + detail + ": "

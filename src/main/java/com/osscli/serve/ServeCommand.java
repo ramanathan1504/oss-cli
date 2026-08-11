@@ -344,8 +344,7 @@ public class ServeCommand implements Callable<Integer> {
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
         // KeepAlive with a throttle: a crash loop retries once a minute rather than spinning.
         // RunAtLoad so it is there after a reboot without being started by hand.
-        String plist =
-                """
+        String plist = """
                 <?xml version="1.0" encoding="UTF-8"?>
                 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"                 "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
                 <plist version="1.0"><dict>
@@ -361,8 +360,7 @@ public class ServeCommand implements Callable<Integer> {
                   <key>StandardOutPath</key><string>%s</string>
                   <key>StandardErrorPath</key><string>%s</string>
                 </dict></plist>
-                """
-                        .formatted(LABEL, java, jar, port, logFile("out"), logFile("err"));
+                """.formatted(LABEL, java, jar, port, logFile("out"), logFile("err"));
         try {
             Files.createDirectories(plistPath().getParent());
             Files.writeString(plistPath(), plist);
@@ -450,8 +448,7 @@ public class ServeCommand implements Callable<Integer> {
     // --------------------------------------------------------------------- page ---
     // Self-contained: no CDN, no build step, and it renders with the registry it
     // fetches rather than one baked in at start.
-    private static final String PAGE =
-            """
+    private static final String PAGE = """
             <!doctype html><html><head><meta charset="utf-8">
             <meta name="viewport" content="width=device-width,initial-scale=1">
             <title>oss-cli</title><style>

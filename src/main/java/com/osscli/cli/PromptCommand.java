@@ -133,8 +133,7 @@ public class PromptCommand implements Callable<Integer> {
                         "Context fits within Ollama limit ({} / {} tokens). Asking Ollama locally...",
                         totalTokens,
                         contextLimit);
-                String jsonPrompt = String.format(
-                        """
+                String jsonPrompt = String.format("""
                         %s
 
                         ## TASK
@@ -149,8 +148,7 @@ public class PromptCommand implements Callable<Integer> {
                           "confidence": <0.0 to 1.0>,
                           "escalate": <true if the context is insufficient for a confident answer>
                         }
-                        """,
-                        structuredContext, issueNumber, issueNumber, issueNumber);
+                        """, structuredContext, issueNumber, issueNumber, issueNumber);
 
                 try {
                     String jsonResponse = ollama.generateJson(jsonPrompt);
