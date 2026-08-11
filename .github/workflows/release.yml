@@ -87,23 +87,22 @@ jobs:
       # available to a step-level `if`, and a workflow referencing it there is
       # rejected before any job starts -- the whole file fails to parse, which
       # reports as a failed run with no logs and no obvious cause.
-      - name: Update the Homebrew tap
-        if: ${{ env.TAP_TOKEN != '' }}
-        env:
-          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
-          VERSION: ${{ steps.v.outputs.version }}
-        run: |
-          git clone "https://x-access-token:${TAP_TOKEN}@github.com/${GITHUB_REPOSITORY_OWNER}/homebrew-oss-cli.git" tap
-          cd tap
-
-          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/oss-cli-${VERSION}.jar"
-          sed -i -e "s|url \".*\"|url \"${URL}\"|" -e "s|sha256 \".*\"|sha256 \"${sha}\"|" oss-cli.rb
-
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add oss-cli.rb
-          git diff --cached --quiet || git commit -m "Bump Homebrew formula to v${VERSION}"
-          git push
+      # The Homebrew tap is NOT updated from here any more.
+      #
+      # It used to be, using a personal access token with write access to the tap
+      # repository. That token expired, and the failure was the worst shape a
+      # release failure can take: the release and its jar published correctly,
+      # only the formula bump failed, so `brew upgrade` reported "already
+      # installed" while a newer version existed. Nothing broken, nothing
+      # reported, and the user simply not getting what was published.
+      #
+      # The tap now bumps itself: a workflow there reads this repository's latest
+      # release (public, so no authentication) and writes to its own repo with the
+      # automatic GITHUB_TOKEN. There is no cross-repo credential left to expire,
+      # and a release can no longer fail because of one.
+      #
+      # It polls three-hourly; `gh workflow run "Bump formula" --repo
+      # <owner>/homebrew-oss-cli` publishes immediately.
 
       - name: Summary
         run: |
