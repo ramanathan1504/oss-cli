@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.1
+
+_2026-08-11_
+
+- Detect a drifted manifest instead of silently acting on the snapshot
+- Correct two comments the approval redesign left stale
+
+
 ## 1.5.0
 
 _2026-08-11_
