@@ -26,7 +26,7 @@ import java.util.Properties;
 import picocli.CommandLine;
 
 /**
- * Answers {@code oss-cli --version} with enough detail to tell two identical builds apart.
+ * Answers {@code oss --version} with enough detail to tell two identical builds apart.
  *
  * <p>The version used to be a literal in {@code RootCommand}, and had drifted: it read {@code 1.1}
  * while the pom said {@code 1.2.0}. It is now filtered into {@code version.properties} at build
@@ -49,7 +49,7 @@ public class VersionProvider implements CommandLine.IVersionProvider {
         String buildTime = props.getProperty("buildTime", UNKNOWN);
         Path location = codeSourceLocation();
 
-        String headline = "oss-cli " + version;
+        String headline = "oss " + version;
         if (isDevelopmentBuild(location)) {
             headline += " (development build)";
         }

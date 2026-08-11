@@ -20,8 +20,10 @@ import com.osscli.cli.*;
 import picocli.CommandLine.Command;
 
 @Command(
-        name = "oss-cli",
-        aliases = {"sa"},
+        // The command is `oss`. It has to say so too: usage text and error messages
+        // that name a command nobody typed send people looking for a binary that is
+        // no longer installed.
+        name = "oss",
         mixinStandardHelpOptions = true,
         versionProvider = VersionProvider.class,
         subcommands = {
