@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.6.1
+
+_2026-08-11_
+
+- Call it oss (#20)
+- Let people name this command themselves (#19)
+- Drop the local docs pane; documentation belongs on the site (#18)
+- deps: bump com.diffplug.spotless:spotless-maven-plugin from 2.43.0 to 3.9.0 (#17)
+- Apache 2.0 headers on every source file, contributing rules, dependency alerts (#12)
+
+
 ## 1.6.0
 
 _2026-08-11_
