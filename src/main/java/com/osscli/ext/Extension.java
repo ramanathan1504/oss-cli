@@ -103,6 +103,21 @@ public class Extension {
     private String writesTo;
 
     /**
+     * SHA-256 of the manifest exactly as it was when this was registered.
+     *
+     * <p>The registry stores a snapshot rather than re-reading every manifest on every command, so
+     * that a checkout switching branches cannot silently change what is registered. The cost is that
+     * an edited manifest leaves the snapshot stale -- and that failed silently once, in the worst
+     * possible way: {@code writesTo} was corrected on disk while the registry kept the old value, so
+     * an approval naming the right repository could never match it and the verb was simply
+     * unusable, with nothing saying why.
+     *
+     * <p>So drift is now detectable. The snapshot is still authoritative -- it just can no longer be
+     * used without knowing whether it is current.
+     */
+    private String manifestSha;
+
+    /**
      * Absolute path to the repository this was registered from.
      *
      * <p>Written by the registry, never read from the manifest. A manifest that could name its own
@@ -182,6 +197,19 @@ public class Extension {
     /** Human description of where a write lands; falls back to naming the extension itself. */
     public String writeTarget() {
         return (writesTo == null || writesTo.isBlank()) ? ("whatever " + name + " posts to") : writesTo;
+    }
+
+    public String getManifestSha() {
+        return manifestSha;
+    }
+
+    public void setManifestSha(String manifestSha) {
+        this.manifestSha = manifestSha;
+    }
+
+    /** The manifest file this was registered from, wherever the root now is. */
+    public Path manifestPath() {
+        return rootPath().resolve(MANIFEST);
     }
 
     public String getRoot() {

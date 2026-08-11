@@ -179,6 +179,7 @@ public class ServeCommand implements Callable<Integer> {
             m.put("verbs", new ArrayList<>(e.getVerbs().keySet()));
             m.put("writes", e.getWrites());
             m.put("reachable", ExtensionRunner.isReachable(e));
+            m.put("stale", ExtensionRegistry.isStale(e));
             out.add(m);
         }
         return out;
@@ -289,10 +290,11 @@ public class ServeCommand implements Callable<Integer> {
               $('#list').innerHTML=x.map(e=>`<div class="card">
                 <div class="row"><span class="nm">${esc(e.name)}</span>
                   <span class="kind">${esc(e.kind)}</span>
-                  <span class="${e.reachable?'ok':'bad'}">${e.reachable?'reachable':'MISSING'}</span>
+                  <span class="${e.reachable?(e.stale?'bad':'ok'):'bad'}">${!e.reachable?'MISSING':(e.stale?'STALE':'reachable')}</span>
                   <span style="flex:1"></span>
                   <button class="x" data-detach="${esc(e.name)}">detach</button></div>
                 <div class="sub">${esc(e.description||'')}</div>
+                ${e.stale?'<div class="verbs bad">oss-ext.json changed on disk since it was attached — detach and attach again, or <code>oss-cli ext refresh '+esc(e.name)+'</code>. Dispatch is refused until then.</div>':''}
                 <div class="verbs"><code>${esc(e.root)}</code></div>
                 <div class="verbs">${e.verbs.length} verbs: ${e.verbs.map(esc).join(', ')}
                 ${e.writes&&e.writes.length?' · <b>writes outward:</b> '+e.writes.map(esc).join(', '):''}</div>

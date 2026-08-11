@@ -121,12 +121,54 @@ public class ExtensionRegistry {
             throw new IllegalArgumentException("could not read " + manifest + ": " + e.getMessage(), e);
         }
         ext.setRoot(manifest.getParent().toString());
+        ext.setManifestSha(shaOf(manifest));
         ext.validate();
         if (!Files.isExecutable(ext.execPath())) {
             throw new IllegalArgumentException("\"exec\": " + ext.execPath()
                     + " does not exist or is not executable (chmod +x it, or fix the path)");
         }
         return ext;
+    }
+
+    /**
+     * SHA-256 of a manifest file, or null when it cannot be read.
+     *
+     * <p>A hash rather than a modification time: a checkout, a stash pop or a `touch` all move the
+     * mtime without changing a byte, and a drift warning that fires when nothing changed is one
+     * people learn to ignore -- which is worse than not warning at all.
+     */
+    static String shaOf(Path manifest) {
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(manifest));
+            StringBuilder sb = new StringBuilder(digest.length * 2);
+            for (byte b : digest) {
+                sb.append(Character.forDigit((b >> 4) & 0xF, 16)).append(Character.forDigit(b & 0xF, 16));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Whether the manifest on disk has changed since this was registered.
+     *
+     * <p>A missing manifest is NOT drift -- that is a broken registration, which
+     * {@code isReachable} already reports, and calling it "stale" would send someone to
+     * {@code refresh} for a problem refreshing cannot fix. An entry registered before this field
+     * existed has no recorded hash and is reported as current, so an upgrade does not declare
+     * everything stale on first run.
+     */
+    public static boolean isStale(Extension ext) {
+        if (ext.getManifestSha() == null) {
+            return false;
+        }
+        Path manifest = ext.manifestPath();
+        if (!Files.isRegularFile(manifest)) {
+            return false;
+        }
+        String now = shaOf(manifest);
+        return now != null && !now.equals(ext.getManifestSha());
     }
 
     /** Register, replacing any existing entry of the same name. Returns true when it replaced one. */

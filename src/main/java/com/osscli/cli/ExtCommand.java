@@ -88,16 +88,21 @@ public class ExtCommand implements Callable<Integer> {
             System.out.printf("%-14s %-6s %-9s %s%n", "NAME", "KIND", "STATE", "VERBS");
             for (Extension e : all) {
                 boolean ok = ExtensionRunner.isReachable(e);
+                boolean stale = ExtensionRegistry.isStale(e);
                 System.out.printf(
                         "%-14s %-6s %-9s %s%n",
                         e.getName(),
                         e.kind().lower(),
-                        ok ? "ok" : "MISSING",
+                        !ok ? "MISSING" : stale ? "STALE" : "ok",
                         String.join(", ", e.getVerbs().keySet()));
                 if (!ok) {
                     // Naming the path it expected is the difference between "something is wrong"
                     // and a one-line fix; a moved checkout is the common cause.
                     System.out.println("               expected: " + e.execPath());
+                }
+                if (stale) {
+                    System.out.println("               " + Extension.MANIFEST
+                            + " changed on disk since it was registered — oss-cli ext refresh " + e.getName());
                 }
             }
             return 0;
@@ -175,6 +180,27 @@ public class ExtCommand implements Callable<Integer> {
         public Integer call() {
             try {
                 Extension ext = ExtensionRegistry.resolve(kind(), name);
+
+                // A stale snapshot silently broke an approval once: writesTo was corrected on
+                // disk while the registry kept the old value, so an approval naming the right
+                // repository could never match, and the verb was simply unusable.
+                //
+                // Refuse ALL dispatch while stale, not just verbs the snapshot calls writes. The
+                // snapshot is exactly what cannot be trusted here, and it can under-report: a first
+                // attempt at this warned-and-ran when the stored copy said "writes: []" while the
+                // file on disk had begun declaring that same verb an outward write. Deciding
+                // safety from the stale copy is the bug, not a smaller version of it. One command
+                // clears it, and refusing is the only answer that cannot be wrong in the dangerous
+                // direction.
+                if (ExtensionRegistry.isStale(ext)) {
+                    System.err.println("error  refused — " + ext.getName() + "'s " + Extension.MANIFEST
+                            + " changed on disk since it was registered.");
+                    System.err.println("       What it declares — including which verbs write "
+                            + "outward — may no longer be what is recorded.");
+                    System.err.println("       oss-cli ext refresh " + ext.getName());
+                    return 2;
+                }
+
                 // Gate before starting the process, not inside it. Once the child is running the
                 // post has already left; the only useful place to stop is here.
                 if (ext.writesOutward(verb)) {
