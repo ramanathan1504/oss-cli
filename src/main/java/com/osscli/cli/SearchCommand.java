@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import com.osscli.ui.NextSteps;
 import java.util.concurrent.Callable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -133,6 +134,10 @@ public class SearchCommand implements Callable<Integer> {
             LOGGER.info("   Title: {}", res.issue().title());
         }
 
+        // The moment a search finishes is the moment "which of these is worth my
+        // time" becomes the real question. Answering it should not require going
+        // back to --help to rediscover that `pick` exists.
+        NextSteps.suggest(NextSteps.After.SEARCH, null);
         return 0;
     }
 

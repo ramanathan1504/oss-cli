@@ -4,6 +4,7 @@ import com.osscli.ext.Extension;
 import com.osscli.ext.ExtensionRegistry;
 import com.osscli.ext.ExtensionRunner;
 import com.osscli.safety.UpstreamGuard;
+import com.osscli.ui.NextSteps;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -64,6 +65,8 @@ public class ExtCommand implements Callable<Integer> {
                         ext.getVerbs().size() == 1 ? "" : "s",
                         String.join(", ", ext.getVerbs().keySet()));
                 System.out.println("  root: " + ext.getRoot());
+                // Attaching is the one moment someone has no idea what they just gained.
+                NextSteps.suggest(NextSteps.After.ATTACH, null);
                 return 0;
             } catch (RuntimeException e) {
                 System.err.println("error  " + e.getMessage());
