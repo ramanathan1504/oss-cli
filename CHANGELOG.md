@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.5.0
+
+_2026-08-11_
+
+- Reframe serve: the page is not the point, the open set of benches is
+- Serve on :1504 with a palette you attach benches to
+- Upstream writes: refused by default, approved by name, confirmed every time
+- Extensions: a bench that runs, a kb that remembers, gated when they write
+
+
 ## 1.4.1
 
 _2026-08-10_

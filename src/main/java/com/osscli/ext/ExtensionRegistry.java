@@ -1,8 +1,8 @@
 package com.osscli.ext;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.osscli.AppPaths;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -33,8 +33,7 @@ public class ExtensionRegistry {
     /** {@code ~/.oss-cli/extensions.json} unless OSS_CLI_HOME relocates the base directory. */
     public static final Path REGISTRY_FILE = AppPaths.BASE_DIR.resolve("extensions.json");
 
-    private static final ObjectMapper MAPPER =
-            new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+    private static final ObjectMapper MAPPER = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
 
     private ExtensionRegistry() {}
 
@@ -77,21 +76,23 @@ public class ExtensionRegistry {
      */
     public static Extension resolve(Extension.Kind kind, String name) {
         if (name != null && !name.isBlank()) {
-            Extension found = byName(name).orElseThrow(() -> new IllegalArgumentException(
-                    "no extension named \"" + name + "\" -- see: oss-cli ext list"));
+            Extension found = byName(name)
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "no extension named \"" + name + "\" -- see: oss-cli ext list"));
             if (found.kind() != kind) {
-                throw new IllegalArgumentException("\"" + found.getName() + "\" is a " + found.kind().lower()
-                        + " extension, not a " + kind.lower());
+                throw new IllegalArgumentException("\"" + found.getName() + "\" is a "
+                        + found.kind().lower() + " extension, not a " + kind.lower());
             }
             return found;
         }
         List<Extension> candidates = ofKind(kind);
         if (candidates.isEmpty()) {
-            throw new IllegalArgumentException("no " + kind.lower()
-                    + " extension is registered -- add one with: oss-cli ext add <path-to-repo>");
+            throw new IllegalArgumentException(
+                    "no " + kind.lower() + " extension is registered -- add one with: oss-cli ext add <path-to-repo>");
         }
         if (candidates.size() > 1) {
-            String names = String.join(", ", candidates.stream().map(Extension::getName).toList());
+            String names = String.join(
+                    ", ", candidates.stream().map(Extension::getName).toList());
             throw new IllegalArgumentException("several " + kind.lower() + " extensions are registered (" + names
                     + ") -- name the one you mean with --" + kind.lower() + " <name>");
         }

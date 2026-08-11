@@ -1,13 +1,12 @@
 package com.osscli.cli;
 
+import com.osscli.safety.UpstreamGuard;
 import com.osscli.storage.SqliteStorage;
 import java.util.Scanner;
 import java.util.concurrent.Callable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import com.osscli.safety.UpstreamGuard;
 import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
 
 @Command(
         name = "setup",
@@ -218,9 +217,7 @@ public class SetupCommand implements Callable<Integer> {
         LOGGER.info("Nothing here is required. OSS-CLI works with none of it.");
 
         registerOptionalExtension(
-                scanner,
-                "bench",
-                "a repo that RUNS things (real apps, real JVMs) — e.g. ~/apache/log4j2-workout");
+                scanner, "bench", "a repo that RUNS things (real apps, real JVMs) — e.g. ~/apache/log4j2-workout");
         registerOptionalExtension(
                 scanner, "kb", "a repo that REMEMBERS (files and indexes notes) — e.g. ~/knowledge-creator");
 
@@ -241,15 +238,20 @@ public class SetupCommand implements Callable<Integer> {
         LOGGER.info("Configuration successfully updated in local SQLite!");
         LOGGER.info("==================================================");
         LOGGER.info("Optional, and their state now:");
-        LOGGER.info("  ollama    {}", currentTriageModel == null ? "not set (offline AI features stay off)" : currentTriageModel);
-        LOGGER.info("  claude    {}", currentClaudeModel == null ? "not set (cloud escalation stays off)" : currentClaudeModel);
+        LOGGER.info(
+                "  ollama    {}",
+                currentTriageModel == null ? "not set (offline AI features stay off)" : currentTriageModel);
+        LOGGER.info(
+                "  claude    {}",
+                currentClaudeModel == null ? "not set (cloud escalation stays off)" : currentClaudeModel);
         for (com.osscli.ext.Extension e : com.osscli.ext.ExtensionRegistry.all()) {
             LOGGER.info("  {}<{}>  {}", e.kind().lower(), e.getName(), e.getRoot());
         }
         if (com.osscli.ext.ExtensionRegistry.all().isEmpty()) {
             LOGGER.info("  bench/kb  none registered (oss-cli ext add <repo>)");
         }
-        LOGGER.info("  upstream  refused unless {} names the repo, and confirmed each time", UpstreamGuard.APPROVE_FLAG);
+        LOGGER.info(
+                "  upstream  refused unless {} names the repo, and confirmed each time", UpstreamGuard.APPROVE_FLAG);
 
         return 0;
     }
@@ -276,10 +278,17 @@ public class SetupCommand implements Callable<Integer> {
         try {
             com.osscli.ext.Extension ext = com.osscli.ext.ExtensionRegistry.readManifest(java.nio.file.Path.of(path));
             if (!ext.kind().lower().equals(kind)) {
-                LOGGER.warn("  ⚠ that repo declares kind '{}', not '{}' — registering it anyway", ext.kind().lower(), kind);
+                LOGGER.warn(
+                        "  ⚠ that repo declares kind '{}', not '{}' — registering it anyway",
+                        ext.kind().lower(),
+                        kind);
             }
             com.osscli.ext.ExtensionRegistry.add(ext);
-            LOGGER.info("  ↳ registered {} ({}) — verbs: {}", ext.getName(), ext.kind().lower(), String.join(", ", ext.getVerbs().keySet()));
+            LOGGER.info(
+                    "  ↳ registered {} ({}) — verbs: {}",
+                    ext.getName(),
+                    ext.kind().lower(),
+                    String.join(", ", ext.getVerbs().keySet()));
         } catch (RuntimeException e) {
             LOGGER.warn("  ⚠ not registered: {}", e.getMessage());
             LOGGER.warn("    The rest of your setup is unaffected; add it later with: oss-cli ext add {}", path);

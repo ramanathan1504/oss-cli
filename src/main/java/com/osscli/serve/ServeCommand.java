@@ -127,12 +127,15 @@ public class ServeCommand implements Callable<Integer> {
             String path = raw.startsWith("~") ? System.getProperty("user.home") + raw.substring(1) : raw;
             Extension ext = ExtensionRegistry.readManifest(Path.of(path));
             boolean replaced = ExtensionRegistry.add(ext);
-            sendJson(x, 200, Map.of(
-                    "ok", true,
-                    "name", ext.getName(),
-                    "kind", ext.kind().lower(),
-                    "replaced", replaced,
-                    "extensions", snapshot()));
+            sendJson(
+                    x,
+                    200,
+                    Map.of(
+                            "ok", true,
+                            "name", ext.getName(),
+                            "kind", ext.kind().lower(),
+                            "replaced", replaced,
+                            "extensions", snapshot()));
         } catch (RuntimeException e) {
             // The manifest reader's messages name the field or the file, which is what someone
             // pasting a wrong path needs; passing them through beats a generic failure.
@@ -147,10 +150,16 @@ public class ServeCommand implements Callable<Integer> {
             boolean removed = !name.isEmpty() && ExtensionRegistry.remove(name);
             // Detaching only forgets a path. Nothing under that path is touched, which is worth
             // saying on the page too -- "remove" reads like deletion.
-            sendJson(x, removed ? 200 : 404, Map.of(
-                    "ok", removed,
-                    "error", removed ? "" : "no extension named \"" + name + "\"",
-                    "extensions", snapshot()));
+            sendJson(
+                    x,
+                    removed ? 200 : 404,
+                    Map.of(
+                            "ok",
+                            removed,
+                            "error",
+                            removed ? "" : "no extension named \"" + name + "\"",
+                            "extensions",
+                            snapshot()));
         } catch (RuntimeException e) {
             sendJson(x, 400, Map.of("error", String.valueOf(e.getMessage())));
         }
@@ -200,8 +209,9 @@ public class ServeCommand implements Callable<Integer> {
             String os = System.getProperty("os.name").toLowerCase(java.util.Locale.ROOT);
             String[] cmd = os.contains("mac")
                     ? new String[] {"open", url}
-                    : os.contains("win") ? new String[] {"rundll32", "url.dll,FileProtocolHandler", url}
-                    : new String[] {"xdg-open", url};
+                    : os.contains("win")
+                            ? new String[] {"rundll32", "url.dll,FileProtocolHandler", url}
+                            : new String[] {"xdg-open", url};
             new ProcessBuilder(cmd).start();
         } catch (Exception ignored) {
             // Not being able to open a browser is not a reason to fail to serve.

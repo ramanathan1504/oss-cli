@@ -34,11 +34,7 @@ import picocli.CommandLine.Parameters;
         name = "ext",
         mixinStandardHelpOptions = true,
         description = "Register and inspect bench/kb extensions",
-        subcommands = {
-            ExtCommand.Add.class,
-            ExtCommand.ListExt.class,
-            ExtCommand.Remove.class,
-            ExtCommand.Refresh.class
+        subcommands = {ExtCommand.Add.class, ExtCommand.ListExt.class, ExtCommand.Remove.class, ExtCommand.Refresh.class
         })
 public class ExtCommand implements Callable<Integer> {
 
@@ -136,7 +132,8 @@ public class ExtCommand implements Callable<Integer> {
             try {
                 Extension ext = ExtensionRegistry.refresh(name);
                 System.out.printf(
-                        "  refreshed %s — %s%n", ext.getName(), String.join(", ", ext.getVerbs().keySet()));
+                        "  refreshed %s — %s%n",
+                        ext.getName(), String.join(", ", ext.getVerbs().keySet()));
                 return 0;
             } catch (RuntimeException e) {
                 System.err.println("error  " + e.getMessage());
@@ -154,9 +151,7 @@ public class ExtCommand implements Callable<Integer> {
      */
     abstract static class Dispatch implements Callable<Integer> {
 
-        @Option(
-                names = "--name",
-                description = "Which extension, when more than one of this kind is registered")
+        @Option(names = "--name", description = "Which extension, when more than one of this kind is registered")
         String name;
 
         // Declared here, on the dispatcher, so it is consumed before the passthrough and can never
@@ -168,9 +163,7 @@ public class ExtCommand implements Callable<Integer> {
                 description = "Permit ONE outward write to exactly this repository. Still confirmed at the terminal.")
         String approveUpstream;
 
-        @Parameters(
-                index = "0",
-                description = "Verb to dispatch, e.g. run, matrix, review, file, index, search")
+        @Parameters(index = "0", description = "Verb to dispatch, e.g. run, matrix, review, file, index, search")
         String verb;
 
         @Parameters(index = "1..*", description = "Arguments passed through untouched")

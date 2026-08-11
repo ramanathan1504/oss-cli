@@ -1,10 +1,9 @@
- package com.osscli.ext;
+package com.osscli.ext;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Runs a registered extension as a child process.
