@@ -29,6 +29,7 @@ public final class Live implements AutoCloseable {
 
     /** Braille dots: one cell wide in every terminal font, unlike most emoji or block spinners. */
     private static final String[] FRAMES = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"};
+
     private static final long TICK_MS = 90;
 
     private final PrintStream out = System.err;
@@ -129,8 +130,8 @@ public final class Live implements AutoCloseable {
 
     public void fail(String why) {
         stop();
-        out.println("\u001b[31m✗\u001b[0m " + title + (why == null || why.isEmpty() ? "" : " — " + why)
-                + " \u001b[2m" + elapsed() + "\u001b[0m");
+        out.println("\u001b[31m✗\u001b[0m " + title + (why == null || why.isEmpty() ? "" : " — " + why) + " \u001b[2m"
+                + elapsed() + "\u001b[0m");
     }
 
     private void stop() {

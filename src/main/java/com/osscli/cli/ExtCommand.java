@@ -85,7 +85,7 @@ public class ExtCommand implements Callable<Integer> {
                 System.out.println("No extensions registered.");
                 System.out.println();
                 System.out.println("  oss-cli ext add <repo>     a repo with an oss-ext.json at its root");
-                    System.out.println("  kinds: runner (executes something real) · memory (remembers)");
+                System.out.println("  kinds: runner (executes something real) · memory (remembers)");
                 return 0;
             }
             System.out.printf("%-14s %-6s %-9s %s%n", "NAME", "KIND", "STATE", "VERBS");

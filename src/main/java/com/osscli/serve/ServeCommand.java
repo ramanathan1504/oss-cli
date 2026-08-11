@@ -234,7 +234,8 @@ public class ServeCommand implements Callable<Integer> {
         for (String pair : raw.split("&")) {
             int eq = pair.indexOf('=');
             if (eq > 0) {
-                out.put(java.net.URLDecoder.decode(pair.substring(0, eq), StandardCharsets.UTF_8),
+                out.put(
+                        java.net.URLDecoder.decode(pair.substring(0, eq), StandardCharsets.UTF_8),
                         java.net.URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8));
             }
         }
@@ -327,7 +328,8 @@ public class ServeCommand implements Callable<Integer> {
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
         // KeepAlive with a throttle: a crash loop retries once a minute rather than spinning.
         // RunAtLoad so it is there after a reboot without being started by hand.
-        String plist = """
+        String plist =
+                """
                 <?xml version="1.0" encoding="UTF-8"?>
                 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"                 "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
                 <plist version="1.0"><dict>
@@ -344,9 +346,7 @@ public class ServeCommand implements Callable<Integer> {
                   <key>StandardErrorPath</key><string>%s</string>
                 </dict></plist>
                 """
-                .formatted(LABEL, java, jar,
-                        port,
-                        logFile("out"), logFile("err"));
+                        .formatted(LABEL, java, jar, port, logFile("out"), logFile("err"));
         try {
             Files.createDirectories(plistPath().getParent());
             Files.writeString(plistPath(), plist);
@@ -386,7 +386,11 @@ public class ServeCommand implements Callable<Integer> {
     /** The jar this JVM is running, so the agent starts the same build. */
     private Path jarPath() {
         try {
-            Path p = Path.of(ServeCommand.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            Path p = Path.of(ServeCommand.class
+                    .getProtectionDomain()
+                    .getCodeSource()
+                    .getLocation()
+                    .toURI());
             return p.toString().endsWith(".jar") ? p : null;
         } catch (Exception e) {
             return null;
@@ -394,11 +398,15 @@ public class ServeCommand implements Callable<Integer> {
     }
 
     private String logFile(String which) {
-        return com.osscli.AppPaths.BASE_DIR.resolve("logs").resolve("serve." + which + ".log").toString();
+        return com.osscli.AppPaths.BASE_DIR
+                .resolve("logs")
+                .resolve("serve." + which + ".log")
+                .toString();
     }
 
     private static String uid() {
-        return String.valueOf(ProcessHandle.current().pid() > 0 ? new com.sun.security.auth.module.UnixSystem().getUid() : 0);
+        return String.valueOf(
+                ProcessHandle.current().pid() > 0 ? new com.sun.security.auth.module.UnixSystem().getUid() : 0);
     }
 
     private static int run(String... cmd) {

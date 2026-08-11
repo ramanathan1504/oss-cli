@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.6.0
+
+_2026-08-11_
+
+- Call them runners and memories, not benches and kbs
+- Offer what is worth doing next, where the last thing finished
+- Show what a command is doing while it does it
+- Serve: keep it running if asked, and read attached extensions' docs
+- Add an installation guide, and say where everything ends up
+
+
 ## 1.5.1
 
 _2026-08-11_
