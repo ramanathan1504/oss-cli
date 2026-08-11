@@ -88,13 +88,18 @@ public class Extension {
      *
      * <p>Declared by the extension because only the extension knows. OSS-CLI cannot tell from the
      * outside that {@code followup} is read-only while {@code followup --comment} posts, so guessing
-     * from a verb name would be both wrong and quietly reassuring. Anything listed here is gated by
-     * a passphrase; anything not listed runs freely, which is why the default is the empty list and
-     * an author has to opt a verb in deliberately.
+     * from a verb name would be both wrong and quietly reassuring. Anything listed here is refused
+     * unless the operator named this repository with {@code --approve-upstream} and confirms at the
+     * terminal; anything not listed runs freely, which is why the default is the empty list and an
+     * author has to opt a verb in deliberately.
      */
     private List<String> writes = List.of();
 
-    /** Where those writes land, shown in the confirmation prompt, e.g. {@code apache/…}. */
+    /**
+     * Where those writes land, as {@code owner/name} — compared for equality against
+     * {@code --approve-upstream}, so it must be the bare repository and nothing else. A sentence
+     * here (it once held one) can never match an approval, silently making the verb unusable.
+     */
     private String writesTo;
 
     /**
