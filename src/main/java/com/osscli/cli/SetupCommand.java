@@ -5,7 +5,9 @@ import java.util.Scanner;
 import java.util.concurrent.Callable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import com.osscli.safety.UpstreamGuard;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
 
 @Command(
         name = "setup",
@@ -15,8 +17,20 @@ public class SetupCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(SetupCommand.class);
 
+    @Option(
+            names = "--upstream-guard",
+            description = "Set only the upstream-write passphrase, then exit")
+    boolean onlyUpstreamGuard;
+
     @Override
     public Integer call() throws Exception {
+        // A single-purpose entry, because the guard is the one setting someone may need to change
+        // in a hurry, and making them page through the whole wizard to reach it invites turning it
+        // off instead.
+        if (onlyUpstreamGuard) {
+            return UpstreamGuard.arm() ? 0 : 1;
+        }
+
         Scanner scanner = new Scanner(System.in);
 
         LOGGER.info("==================================================");
@@ -207,11 +221,88 @@ public class SetupCommand implements Callable<Integer> {
                     "    Run: security add-generic-password -a \"$USER\" -s anthropic_api_key -w \"<YOUR_KEY>\" -U");
         }
 
-        LOGGER.info("==================================================");
+        // 11. Optional capabilities — a bench that runs, an archive that remembers.
+        //
+        // Everything below is optional by design. OSS-CLI is useful with none of it: it reads any
+        // repository through the API and needs no clone. These only add the two things it cannot do
+        // alone, and each is skipped by pressing Enter.
+        LOGGER.info("\n--- Optional capabilities (press Enter to skip any) ---");
+        LOGGER.info("Nothing here is required. OSS-CLI works with none of it.");
+
+        registerOptionalExtension(
+                scanner,
+                "bench",
+                "a repo that RUNS things (real apps, real JVMs) — e.g. ~/apache/log4j2-workout");
+        registerOptionalExtension(
+                scanner, "kb", "a repo that REMEMBERS (files and indexes notes) — e.g. ~/knowledge-creator");
+
+        // 12. Upstream-write guard.
+        LOGGER.info("\n--- Upstream-write guard ---");
+        if (UpstreamGuard.isArmed()) {
+            LOGGER.info("  ✔ Armed. Any extension verb marked as writing outward asks for the passphrase.");
+            LOGGER.info("    Change it with: oss-cli setup --upstream-guard");
+        } else {
+            LOGGER.info("  Posting to a public repo is not undoable: a comment reaches everyone");
+            LOGGER.info("  watching the thread, and the mailing list, the moment it is sent.");
+            LOGGER.info("  Set a passphrase now, so no write goes out on a stray Enter? [y/N]");
+            String armAnswer = scanner.nextLine().trim();
+            if (armAnswer.equalsIgnoreCase("y") || armAnswer.equalsIgnoreCase("yes")) {
+                UpstreamGuard.arm();
+            } else {
+                // Not armed does not mean unguarded: writes are refused outright, which is the safe
+                // direction to fail. Saying so here stops that reading as a broken command later.
+                LOGGER.info("  Skipped. Outward writes stay REFUSED until a passphrase is set.");
+            }
+        }
+
+        // 13. What is on, and what is simply not configured.
+        LOGGER.info("\n==================================================");
         LOGGER.info("Configuration successfully updated in local SQLite!");
         LOGGER.info("==================================================");
+        LOGGER.info("Optional, and their state now:");
+        LOGGER.info("  ollama    {}", currentTriageModel == null ? "not set (offline AI features stay off)" : currentTriageModel);
+        LOGGER.info("  claude    {}", currentClaudeModel == null ? "not set (cloud escalation stays off)" : currentClaudeModel);
+        for (com.osscli.ext.Extension e : com.osscli.ext.ExtensionRegistry.all()) {
+            LOGGER.info("  {}<{}>  {}", e.kind().lower(), e.getName(), e.getRoot());
+        }
+        if (com.osscli.ext.ExtensionRegistry.all().isEmpty()) {
+            LOGGER.info("  bench/kb  none registered (oss-cli ext add <repo>)");
+        }
+        LOGGER.info("  guard     {}", UpstreamGuard.isArmed() ? "armed" : "NOT set — outward writes refused");
 
         return 0;
+    }
+
+    /**
+     * Offer to register one optional extension.
+     *
+     * <p>Failure here is reported and stepped over rather than aborting: someone half way through
+     * the wizard with a mistyped path should not lose the model and token settings they already
+     * entered.
+     */
+    private void registerOptionalExtension(Scanner scanner, String kind, String hint) {
+        LOGGER.info("\nRegister a {} extension? {}", kind, hint);
+        LOGGER.info("Path to the repo (or press Enter to skip):");
+        String path = scanner.nextLine().trim();
+        if (path.isEmpty()) {
+            LOGGER.info("  ↳ skipped");
+            return;
+        }
+        // Shell tilde expansion never happened -- this came from a Scanner, not a shell.
+        if (path.startsWith("~")) {
+            path = System.getProperty("user.home") + path.substring(1);
+        }
+        try {
+            com.osscli.ext.Extension ext = com.osscli.ext.ExtensionRegistry.readManifest(java.nio.file.Path.of(path));
+            if (!ext.kind().lower().equals(kind)) {
+                LOGGER.warn("  ⚠ that repo declares kind '{}', not '{}' — registering it anyway", ext.kind().lower(), kind);
+            }
+            com.osscli.ext.ExtensionRegistry.add(ext);
+            LOGGER.info("  ↳ registered {} ({}) — verbs: {}", ext.getName(), ext.kind().lower(), String.join(", ", ext.getVerbs().keySet()));
+        } catch (RuntimeException e) {
+            LOGGER.warn("  ⚠ not registered: {}", e.getMessage());
+            LOGGER.warn("    The rest of your setup is unaffected; add it later with: oss-cli ext add {}", path);
+        }
     }
 
     private boolean checkMacKeychain(String serviceName) throws Exception {
