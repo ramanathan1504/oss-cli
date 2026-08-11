@@ -159,6 +159,15 @@ public class ExtCommand implements Callable<Integer> {
                 description = "Which extension, when more than one of this kind is registered")
         String name;
 
+        // Declared here, on the dispatcher, so it is consumed before the passthrough and can never
+        // be forwarded to the extension by accident -- an approval that reached the child as an
+        // ordinary argument would be an approval the child could act on unsupervised.
+        @Option(
+                names = UpstreamGuard.APPROVE_FLAG,
+                paramLabel = "owner/name",
+                description = "Permit ONE outward write to exactly this repository. Still confirmed at the terminal.")
+        String approveUpstream;
+
         @Parameters(
                 index = "0",
                 description = "Verb to dispatch, e.g. run, matrix, review, file, index, search")
@@ -175,9 +184,11 @@ public class ExtCommand implements Callable<Integer> {
                 Extension ext = ExtensionRegistry.resolve(kind(), name);
                 // Gate before starting the process, not inside it. Once the child is running the
                 // post has already left; the only useful place to stop is here.
-                if (ext.writesOutward(verb)
-                        && !UpstreamGuard.confirm(ext.getName() + " " + verb, ext.writeTarget())) {
-                    return 2;
+                if (ext.writesOutward(verb)) {
+                    String approved = UpstreamGuard.normaliseRepo(approveUpstream);
+                    if (!UpstreamGuard.allow(ext.getName() + " " + verb, ext.writeTarget(), approved)) {
+                        return 2;
+                    }
                 }
                 return ExtensionRunner.run(ext, verb, passthrough);
             } catch (RuntimeException e) {

@@ -17,20 +17,8 @@ public class SetupCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(SetupCommand.class);
 
-    @Option(
-            names = "--upstream-guard",
-            description = "Set only the upstream-write passphrase, then exit")
-    boolean onlyUpstreamGuard;
-
     @Override
     public Integer call() throws Exception {
-        // A single-purpose entry, because the guard is the one setting someone may need to change
-        // in a hurry, and making them page through the whole wizard to reach it invites turning it
-        // off instead.
-        if (onlyUpstreamGuard) {
-            return UpstreamGuard.arm() ? 0 : 1;
-        }
-
         Scanner scanner = new Scanner(System.in);
 
         LOGGER.info("==================================================");
@@ -236,24 +224,17 @@ public class SetupCommand implements Callable<Integer> {
         registerOptionalExtension(
                 scanner, "kb", "a repo that REMEMBERS (files and indexes notes) — e.g. ~/knowledge-creator");
 
-        // 12. Upstream-write guard.
-        LOGGER.info("\n--- Upstream-write guard ---");
-        if (UpstreamGuard.isArmed()) {
-            LOGGER.info("  ✔ Armed. Any extension verb marked as writing outward asks for the passphrase.");
-            LOGGER.info("    Change it with: oss-cli setup --upstream-guard");
-        } else {
-            LOGGER.info("  Posting to a public repo is not undoable: a comment reaches everyone");
-            LOGGER.info("  watching the thread, and the mailing list, the moment it is sent.");
-            LOGGER.info("  Set a passphrase now, so no write goes out on a stray Enter? [y/N]");
-            String armAnswer = scanner.nextLine().trim();
-            if (armAnswer.equalsIgnoreCase("y") || armAnswer.equalsIgnoreCase("yes")) {
-                UpstreamGuard.arm();
-            } else {
-                // Not armed does not mean unguarded: writes are refused outright, which is the safe
-                // direction to fail. Saying so here stops that reading as a broken command later.
-                LOGGER.info("  Skipped. Outward writes stay REFUSED until a passphrase is set.");
-            }
-        }
+        // 12. Upstream writes.
+        //
+        // Nothing to configure, deliberately. There is no setting here that permits an outward
+        // write, because a setting is switched on once and then forgotten -- after which the
+        // protection exists only in the belief that it exists. Approval is per invocation, names
+        // its target, and is confirmed at the terminal every time.
+        LOGGER.info("\n--- Upstream writes ---");
+        LOGGER.info("  Refused by default, everywhere, and there is no setting to change that.");
+        LOGGER.info("  To permit ONE write, name the repository on the command line:");
+        LOGGER.info("    oss-cli bench hub {} apache/logging-log4j2", UpstreamGuard.APPROVE_FLAG);
+        LOGGER.info("  You are still asked to confirm, every time, at the terminal.");
 
         // 13. What is on, and what is simply not configured.
         LOGGER.info("\n==================================================");
@@ -268,7 +249,7 @@ public class SetupCommand implements Callable<Integer> {
         if (com.osscli.ext.ExtensionRegistry.all().isEmpty()) {
             LOGGER.info("  bench/kb  none registered (oss-cli ext add <repo>)");
         }
-        LOGGER.info("  guard     {}", UpstreamGuard.isArmed() ? "armed" : "NOT set — outward writes refused");
+        LOGGER.info("  upstream  refused unless {} names the repo, and confirmed each time", UpstreamGuard.APPROVE_FLAG);
 
         return 0;
     }
