@@ -1,0 +1,38 @@
+# Dependency updates, opened as pull requests.
+#
+# Grouped, not one PR per bump. Ungrouped Dependabot on a Maven project opens a
+# dozen PRs a week, each costing a CI run and a review, and the result is that
+# they are merged unread -- which is worse than not having them, because it
+# looks like the dependencies are being watched.
+#
+# Security updates are deliberately NOT grouped: a CVE fix should arrive on its
+# own, land fast, and not wait behind an unrelated version bump someone is still
+# thinking about.
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # Everything routine in one PR. Patch and minor bumps of libraries that
+      # are already trusted are reviewed as a set, or not usefully at all.
+      routine:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "deps"
+
+  # The workflows themselves pin action versions, and a stale action is how a
+  # supply-chain problem arrives in a repository nobody thought had dependencies.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: "ci"
