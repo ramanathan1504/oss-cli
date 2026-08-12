@@ -107,6 +107,7 @@ jobs:
           # everywhere is simpler to reason about than one whose contents depend on
           # the platform. `oss run` says plainly that it needs WSL there.
           cp -R runner "$out/runner"
+          cp -R tools "$out/tools"
           cp LICENSE README.md "$out/" 2>/dev/null || true
 
           if [ "${{ runner.os }}" = "Windows" ]; then
