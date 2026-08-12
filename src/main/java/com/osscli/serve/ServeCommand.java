@@ -47,7 +47,7 @@ import picocli.CommandLine.Option;
  * directory that contains an {@code oss-ext.json}.
  *
  * <p>The point is not the web page. The page is only the least ceremonious way to paste a path and
- * see what is attached; everything it does is equally available as {@code oss-cli ext …}. What
+ * see what is attached; everything it does is equally available as {@code oss ext …}. What
  * matters is that <b>the set of things this can run against is open, and grows from other people's
  * machines</b> -- someone writes one file in their own repository and their bench is in the list.
  *
@@ -68,7 +68,7 @@ import picocli.CommandLine.Option;
  *       the confirmation can actually happen.
  *   <li><b>It holds no state of its own.</b> Every request re-reads the registry from disk, so a
  *       change made on the CLI shows up on the next reload and the page can never disagree with
- *       what {@code oss-cli ext list} would say.
+ *       what {@code oss ext list} would say.
  * </ul>
  */
 @Command(
@@ -118,7 +118,7 @@ public class ServeCommand implements Callable<Integer> {
             server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
         } catch (IOException e) {
             System.err.println("error  could not listen on port " + port + ": " + e.getMessage());
-            System.err.println("       Another oss-cli may already be serving. Try --port <n>.");
+            System.err.println("       Another instance may already be serving. Try --port <n>.");
             return 1;
         }
 
@@ -130,7 +130,7 @@ public class ServeCommand implements Callable<Integer> {
         server.start();
 
         String url = "http://localhost:" + port + "/";
-        System.out.println("oss-cli serving on " + url + "   (ctrl-c to stop)");
+        System.out.println("oss serving on " + url + "   (ctrl-c to stop)");
         System.out.println("  attach an extension: paste the path of a repo containing oss-ext.json");
         if (!noOpen) {
             openBrowser(url);
@@ -277,7 +277,7 @@ public class ServeCommand implements Callable<Integer> {
         if (yes) {
             doInstall();
         } else {
-            System.out.println("  Left as-is. Change your mind later with: oss-cli serve --install");
+            System.out.println("  Left as-is. Change your mind later with: oss serve --install");
         }
         System.out.println();
     }
@@ -352,7 +352,7 @@ public class ServeCommand implements Callable<Integer> {
     private static final String PAGE = """
             <!doctype html><html><head><meta charset="utf-8">
             <meta name="viewport" content="width=device-width,initial-scale=1">
-            <title>oss-cli</title><style>
+            <title>oss</title><style>
             :root{--bg:#fbfaf8;--fg:#1c1b19;--mut:#6b675f;--line:#e2ded6;--card:#fff;
                   --acc:#8a5a2b;--ok:#2f6f43;--bad:#a33;--code:#f3f0ea}
             @media(prefers-color-scheme:dark){:root{--bg:#151412;--fg:#e8e4dc;--mut:#9a948a;
@@ -386,7 +386,7 @@ public class ServeCommand implements Callable<Integer> {
                   padding-top:14px}
             .doc h1{font-size:19px} .doc h2{font-size:16px} .doc h3{font-size:14px}
             </style></head><body><div class="wrap">
-            <h1>oss-cli</h1>
+            <h1>oss</h1>
             <div class="sub">One core that knows. A <b>bench</b> runs something real; a <b>kb</b> remembers.</div>
 
             <div class="grp">palette</div>
@@ -406,7 +406,7 @@ public class ServeCommand implements Callable<Integer> {
               ordinary repository. Detaching only forgets the path; it deletes nothing.<br><br>
               This page attaches and reports. It deliberately does not <em>run</em> anything: an
               outward write must be confirmed at a terminal, and a browser has none. Run verbs from
-              the CLI — <code>oss-cli bench &lt;verb&gt;</code>, <code>oss-cli kb &lt;verb&gt;</code>.
+              the CLI — <code>oss run &lt;verb&gt;</code>, <code>oss memory &lt;verb&gt;</code>.
             </div>
             </div><script>
             const $=s=>document.querySelector(s);
@@ -421,7 +421,7 @@ public class ServeCommand implements Callable<Integer> {
                   <span style="flex:1"></span>
                   <button class="x" data-detach="${esc(e.name)}">detach</button></div>
                 <div class="sub">${esc(e.description||'')}</div>
-                ${e.stale?'<div class="verbs bad">oss-ext.json changed on disk since it was attached — detach and attach again, or <code>oss-cli ext refresh '+esc(e.name)+'</code>. Dispatch is refused until then.</div>':''}
+                ${e.stale?'<div class="verbs bad">oss-ext.json changed on disk since it was attached — detach and attach again, or <code>oss ext refresh '+esc(e.name)+'</code>. Dispatch is refused until then.</div>':''}
                 <div class="verbs"><code>${esc(e.root)}</code></div>
                 <div class="verbs">${e.verbs.length} verbs: ${e.verbs.map(esc).join(', ')}
                 ${e.writes&&e.writes.length?' · <b>writes outward:</b> '+e.writes.map(esc).join(', '):''}</div>

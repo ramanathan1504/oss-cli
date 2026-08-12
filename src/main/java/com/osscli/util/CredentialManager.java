@@ -60,7 +60,7 @@ public class CredentialManager {
 
     private static String requireKey(String key, String displayName, String keychainName) {
         if (key == null) {
-            String error = String.format("%s is missing. Run 'oss-cli setup' to register it.", displayName);
+            String error = String.format("%s is missing. Run 'oss setup' to register it.", displayName);
             LOGGER.error(error);
             throw new RuntimeException(error);
         }

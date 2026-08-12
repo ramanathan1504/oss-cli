@@ -124,7 +124,7 @@ public class InspectCommand implements Callable<Integer> {
                     String.format("%-5d", includedTokens),
                     contextLimit,
                     String.format("%-5d", includedTokens - contextLimit));
-            LOGGER.info("  │     Run: oss-cli prompt {} --force-prompt               │", issueNumber);
+            LOGGER.info("  │     Run: oss prompt {} --force-prompt               │", issueNumber);
             LOGGER.info("  └─────────────────────────────────────────────────────────┘");
         }
         LOGGER.info("");
