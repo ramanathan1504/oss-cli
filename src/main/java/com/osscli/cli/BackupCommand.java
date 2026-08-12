@@ -29,6 +29,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -38,6 +39,7 @@ import java.util.zip.ZipOutputStream;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
 
 @Command(
         name = "backup",
@@ -49,56 +51,119 @@ public class BackupCommand implements Callable<Integer> {
     private static final Logger LOGGER = LogManager.getLogger(BackupCommand.class);
     private static final int MAX_BACKUPS = 5;
 
+    /**
+     * What a backup must contain, and what it must not.
+     *
+     * <p>Everything here either cannot be re-derived or costs real work to rebuild. Left out: the
+     * model, which re-downloads; logs, which are noise; and old backups, because a backup
+     * containing backups grows until it stops being written at all.
+     *
+     * <p>Vectors ARE included even though they could be recomputed. They are a few kilobytes each
+     * and keyed by content hash, so restoring them means the first search after a restore is
+     * instant instead of re-embedding a whole corpus — and a restore that leaves you waiting is one
+     * people interrupt.
+     *
+     * <p>The one that matters most is {@code reviews}. A synced issue can be synced again; a review
+     * write-up and the head SHA it was written at exist nowhere else in the world.
+     */
+    private static final List<String> INCLUDE = List.of("data", "reviews", "memory", "vectors");
+
+    @Option(
+            names = "--to",
+            description =
+                    "Write it here instead — point at a synced folder (iCloud, Dropbox, Drive) for off-machine copies")
+    Path to;
+
+    @Option(
+            names = "--include",
+            description = "Also back up this directory. Repeatable. Use it for an archive an extension owns")
+    List<Path> include = new ArrayList<>();
+
     @Override
     public Integer call() throws Exception {
-        Path dataDir = AppPaths.DATA_DIR;
-        if (!Files.exists(dataDir)) {
-            LOGGER.error("No 'data' directory found. There is nothing to backup.");
+        Path base = AppPaths.BASE_DIR;
+
+        List<Path> sources = new ArrayList<>();
+        for (String name : INCLUDE) {
+            Path d = base.resolve(name);
+            if (Files.isDirectory(d)) {
+                sources.add(d);
+            }
+        }
+        // An attached archive is somebody else's directory, so it is included when it can be
+        // found and never guessed at. KB_ARCHIVE is what the archive extension itself reads, so
+        // honouring it means the two agree without this having to know anything about DEVONthink.
+        String kb = System.getenv("KB_ARCHIVE");
+        if (kb != null && !kb.isBlank() && Files.isDirectory(Path.of(kb))) {
+            sources.add(Path.of(kb));
+        }
+        for (Path extra : include) {
+            if (Files.isDirectory(extra)) {
+                sources.add(extra);
+            } else {
+                LOGGER.warn("  skipped --include {} (not a directory)", extra);
+            }
+        }
+
+        if (sources.isEmpty()) {
+            LOGGER.error("Nothing to back up yet under {}.", base);
             return 1;
         }
 
-        // 1. Resolve target backup directory from configuration
-        String backupPathStr = SqliteStorage.loadConfig("backup.path");
+        // 1. Resolve target backup directory: the flag, then configuration, then the default.
         Path targetBackupDir;
-        if (backupPathStr == null || backupPathStr.trim().isEmpty()) {
-            targetBackupDir = AppPaths.BACKUPS_DIR; // Use global backups folder
+        if (to != null) {
+            targetBackupDir = to;
         } else {
-            targetBackupDir = Paths.get(backupPathStr);
+            String backupPathStr = SqliteStorage.loadConfig("backup.path");
+            targetBackupDir = (backupPathStr == null || backupPathStr.trim().isEmpty())
+                    ? AppPaths.BACKUPS_DIR
+                    : Paths.get(backupPathStr);
         }
-
         if (!Files.exists(targetBackupDir)) {
             Files.createDirectories(targetBackupDir);
         }
 
         // 2. Perform the backup archiving
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-        Path backupFile = targetBackupDir.resolve("sa_brain_backup_" + timestamp + ".zip");
+        Path backupFile = targetBackupDir.resolve("oss_backup_" + timestamp + ".zip");
 
-        LOGGER.info("Starting automated backup of your local AI Memory into '{}'...", targetBackupDir.toAbsolutePath());
+        LOGGER.info("Backing up {} into '{}'...", INCLUDE, targetBackupDir.toAbsolutePath());
 
+        long[] count = {0};
         try (FileOutputStream fos = new FileOutputStream(backupFile.toFile());
                 ZipOutputStream zos = new ZipOutputStream(fos)) {
 
-            Files.walkFileTree(dataDir, new SimpleFileVisitor<Path>() {
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                    String fileName = file.getFileName().toString();
-                    if (fileName.endsWith(".db") || fileName.endsWith(".txt")) {
-                        zos.putNextEntry(new ZipEntry(dataDir.relativize(file).toString()));
+            for (Path dir : sources) {
+                Files.walkFileTree(dir, new SimpleFileVisitor<Path>() {
+                    @Override
+                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                        // Paths are relative to BASE_DIR, not to each source, so a restore knows
+                        // which directory every entry came out of.
+                        // Inside BASE_DIR, keep the path relative to it so a restore knows where
+                        // each file belongs. Outside it, prefix with external/<name>/ rather than
+                        // an absolute path -- an absolute path in a zip restores onto whatever that
+                        // path happens to be on the machine unpacking it.
+                        String entry = file.startsWith(base)
+                                ? base.relativize(file).toString()
+                                : "external/" + dir.getFileName() + "/" + dir.relativize(file);
+                        zos.putNextEntry(new ZipEntry(entry));
                         try (FileInputStream fis = new FileInputStream(file.toFile())) {
-                            byte[] buffer = new byte[1024];
+                            byte[] buffer = new byte[8192];
                             int len;
                             while ((len = fis.read(buffer)) > 0) {
                                 zos.write(buffer, 0, len);
                             }
                         }
                         zos.closeEntry();
+                        count[0]++;
+                        return FileVisitResult.CONTINUE;
                     }
-                    return FileVisitResult.CONTINUE;
-                }
-            });
+                });
+            }
 
-            LOGGER.info("  ✔ Backup successfully created: {}", backupFile.getFileName());
+            LOGGER.info("  {} file(s) archived", count[0]);
+            LOGGER.info("  Backup created: {}", backupFile.toAbsolutePath());
 
             // 3. Enforce Log Rotation: Keep only the 5 most recent backups
             enforceBackupLimit(targetBackupDir);
