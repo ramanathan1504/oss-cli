@@ -68,8 +68,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # --compress=2, not zip-6: the zip-N spelling arrived in JDK 21 and this
+          # builds on 17, where it fails outright with "Invalid compression level".
           jlink --add-modules "${{ steps.mods.outputs.list }}" \
-                --strip-debug --no-header-files --no-man-pages --compress=zip-6 \
+                --strip-debug --no-header-files --no-man-pages --compress=2 \
                 --output runtime
 
       - name: Assemble
