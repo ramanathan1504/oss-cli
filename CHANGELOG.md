@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.7.0
+
+_2026-08-12_
+
+- Stop one unavailable runner blocking the whole release (#31)
+- jlink: --compress=2, not zip-6 (#30)
+- Apply the formatter, and stop merging red (#29)
+- Ship a self-contained oss for every platform (#28)
+- Embeddings that run inside the process, with no server (#27)
+- Keep the service running on Linux and Windows too, not only macOS (#26)
+- Search your own data with no model at all (#25)
+- search needs Ollama; the table said it did not (#24)
+- Move pr and issue into the core too (#23)
+- Move followup into the core, where it never needed a bench (#22)
+- Stop bumping the tap from the release workflow (#21)
+
+
 ## 1.6.1
 
 _2026-08-11_
