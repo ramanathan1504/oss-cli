@@ -213,7 +213,8 @@ public class SearchCommand implements Callable<Integer> {
         int rank = 1;
         for (com.osscli.retrieval.TextIndex.Hit hit : hits) {
             Issue issue = issueMap.get(hit.id());
-            LOGGER.info("{}. [{}] {}  (score {})",
+            LOGGER.info(
+                    "{}. [{}] {}  (score {})",
                     rank++,
                     hit.id(),
                     issue == null ? hit.title() : issue.title(),
