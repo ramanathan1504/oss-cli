@@ -102,6 +102,11 @@ jobs:
           mkdir -p "$out/lib"
           cp "$(ls target/oss-cli-*.jar | grep -v original | head -1)" "$out/lib/oss.jar"
           cp -R runtime "$out/runtime"
+          # The matrix engine ships beside the jar. It is POSIX shell, so it is of
+          # no use on Windows -- but it is small, and an archive that carries it
+          # everywhere is simpler to reason about than one whose contents depend on
+          # the platform. `oss run` says plainly that it needs WSL there.
+          cp -R runner "$out/runner"
           cp LICENSE README.md "$out/" 2>/dev/null || true
 
           if [ "${{ runner.os }}" = "Windows" ]; then
