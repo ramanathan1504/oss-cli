@@ -93,6 +93,18 @@ public class BackupCommand implements Callable<Integer> {
         // An attached archive is somebody else's directory, so it is included when it can be
         // found and never guessed at. KB_ARCHIVE is what the archive extension itself reads, so
         // honouring it means the two agree without this having to know anything about DEVONthink.
+        // Any attached extension that declares where its data lives gets backed up with
+        // everything else. Declared, never guessed: an archive lives wherever its owner put it,
+        // and guessing is how a backup quietly misses the thing it existed to protect.
+        for (com.osscli.ext.Extension ext : com.osscli.ext.ExtensionRegistry.all()) {
+            Path a = ext.archivePath();
+            if (a != null && Files.isDirectory(a)) {
+                LOGGER.info("  including {}'s archive: {}", ext.getName(), a);
+                sources.add(a);
+            } else if (a != null) {
+                LOGGER.warn("  {} declares an archive at {} — not found, skipped", ext.getName(), a);
+            }
+        }
         String kb = System.getenv("KB_ARCHIVE");
         if (kb != null && !kb.isBlank() && Files.isDirectory(Path.of(kb))) {
             sources.add(Path.of(kb));
