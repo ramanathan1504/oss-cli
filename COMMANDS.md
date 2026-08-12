@@ -299,7 +299,7 @@ oss-cli restore /path/to/sa_brain_backup_20260627_104000.zip
 | `duplicates`      | Offline        | Ollama                  | Vector-based duplicate detection             |
 | `prompt`          | Offline/Online | Ollama + Optional cloud | **Generate expert prompt from full context** |
 | `inspect`         | Offline        | No                      | Show retrieved context for an issue          |
-| `search`          | Offline        | No                      | Semantic vector search                       |
+| `search`          | Offline        | Ollama (embeddings) | Semantic vector search                       |
 | `triage`          | Offline        | Ollama                  | Full triage audit for one issue              |
 | `guide`           | Offline        | Ollama                  | Step-by-step resolution blueprint            |
 | `chat`            | Online         | Ollama + Cloud          | Live interactive REPL                        |
