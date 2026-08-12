@@ -84,9 +84,23 @@ else
   BENCH_PACK="log4j"
 fi
 [[ -f $PACK_FILE ]] || {
-  printf '\033[31merror\033[0m no pack at %s\n' "${PACK_FILE#"$ROOT"/}" >&2
-  printf '  packs available:%s\n' \
-    "$(for d in "$ROOT"/packs/*/pack.sh; do [[ -f $d ]] && printf ' %s' "$(basename "$(dirname "$d")")"; done)" >&2
+  printf '\033[31merror\033[0m no pack in %s\n\n' "$ROOT" >&2
+  printf '  A pack is a directory with a pack.sh in it — your applications, your\n' >&2
+  printf '  configurations, your versions. Point at one:\n\n' >&2
+  printf '    oss run --pack /path/to/your/pack <verb> ...\n' >&2
+  printf '    cd /path/to/your/pack && oss run <verb> ...\n\n' >&2
+  _avail=""
+  # `|| true` is load-bearing. With no packs/ the glob stays literal, `[[ -f ]]`
+  # is false, and the for loop's status IS that failed test -- so the assignment
+  # returns 1 and set -e kills the script before it finishes explaining itself.
+  _avail="$(for d in "$ROOT"/packs/*/pack.sh; do [[ -f $d ]] && printf ' %s' "$(basename "$(dirname "$d")")"; done || true)"
+  # An `[[ ]] && printf` here returns 1 when there are no packs, and under set -e
+  # that kills the script before the line below ever prints. Same trap as every
+  # other top-level && in this file.
+  if [[ -n "$_avail" ]]; then
+    printf '  this directory carries packs:%s (BENCH_PACK=<name>)\n' "$_avail" >&2
+  fi
+  printf '  A worked example, about thirty lines: %s\n' "$ENGINE_DIR/packs/example/pack.sh" >&2
   exit 1
 }
 # shellcheck source=packs/log4j/pack.sh
