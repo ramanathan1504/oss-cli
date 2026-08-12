@@ -53,6 +53,7 @@ import picocli.CommandLine.Command;
             AliasCommand.class,
             FollowupCommand.class,
             HubCommand.class,
+            BacklogCommand.class,
             IssueCommand.class,
             PrCommand.class,
             ExtCommand.class,

@@ -36,8 +36,18 @@ public final class Engine {
 
     /** The engine script, or null when it was not shipped with this build. */
     public static Path script() {
+        return shipped(DIR + "/" + SCRIPT);
+    }
+
+    /**
+     * A file shipped beside this jar, by path relative to the install root.
+     *
+     * <p>Shared rather than copied, because "where did my own files go" has exactly one right
+     * answer per layout and two copies of it would drift the first time a layout changed.
+     */
+    public static Path shipped(String relative) {
         for (Path root : candidateRoots()) {
-            Path p = root.resolve(DIR).resolve(SCRIPT);
+            Path p = root.resolve(relative);
             if (Files.isRegularFile(p)) {
                 return p;
             }
