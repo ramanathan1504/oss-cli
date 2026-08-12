@@ -3,6 +3,7 @@ package com.osscli.cli;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.osscli.github.GitHubClient;
+import com.osscli.ui.NextSteps;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -79,6 +80,9 @@ public class IssueCommand implements Callable<Integer> {
             }
 
             System.out.printf("%n  https://github.com/%s/issues/%d%n", repo, number);
+            // A bug report's first question is whether it reproduces. That is a runner's
+            // job, and the suggestion only appears when one is actually attached.
+            NextSteps.suggest(NextSteps.After.TRIAGE, String.valueOf(number));
             return 0;
         } catch (Exception e) {
             System.err.println("error  " + e.getMessage());

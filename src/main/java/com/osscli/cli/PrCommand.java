@@ -3,6 +3,7 @@ package com.osscli.cli;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.osscli.github.GitHubClient;
+import com.osscli.ui.NextSteps;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -117,6 +118,10 @@ public class PrCommand implements Callable<Integer> {
                     f.path("filename").asText()));
             System.out.println();
             System.out.printf("  https://github.com/%s/pull/%d%n", repo, number);
+            // Reading a pull request is the moment "does this actually work" becomes the
+            // question, and it is the one thing reading cannot answer. If a runner is
+            // attached, say so here rather than leaving someone to remember it exists.
+            NextSteps.suggest(NextSteps.After.REVIEW, String.valueOf(number));
             return 0;
         } catch (Exception e) {
             System.err.println("error  " + e.getMessage());
