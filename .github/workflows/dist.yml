@@ -28,13 +28,18 @@ jobs:
         include:
           - os: macos-14         # Apple Silicon
             label: macos-arm64
-          - os: macos-13         # Intel
-            label: macos-x64
+          # macos-13 (Intel) is being retired by GitHub and jobs now sit waiting for a
+          # runner that may never arrive. Intel Macs are not stranded: brew still
+          # installs there against a system JDK. Removed rather than left to hang,
+          # because a job queued forever blocks everything that depends on it.
           - os: ubuntu-latest
             label: linux-x64
           - os: windows-latest
             label: windows-x64
     runs-on: ${{ matrix.os }}
+    # A build that cannot get a runner should fail in twenty minutes, not sit
+    # amber indefinitely. Waiting forever is indistinguishable from being stuck.
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -135,12 +140,15 @@ jobs:
 
   attach:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    # always(), so one unavailable platform cannot withhold the archives that DID
+    # build. A release missing one architecture beats a release missing all four.
+    if: ${{ always() && startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           merge-multiple: true
+        continue-on-error: true
       - name: Attach to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
