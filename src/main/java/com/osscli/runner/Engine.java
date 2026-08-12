@@ -76,9 +76,11 @@ public final class Engine {
             return 2;
         }
         if (packDir == null) {
-            System.err.println("error  which pack? oss run --pack <dir> <verb> ...");
-            System.err.println("       A pack is a directory with a pack.sh in it.");
-            return 2;
+            // `cd my-pack && oss run list` is the documented short form, so no flag means the
+            // current directory -- the same default the engine itself uses. When there is no pack
+            // here either, the engine's own error explains what a pack is and both ways to point
+            // at one, which beats duplicating that explanation in two places.
+            packDir = Path.of(System.getProperty("user.dir", "."));
         }
         if (!Files.isDirectory(packDir)) {
             System.err.println("error  no directory at " + packDir);
