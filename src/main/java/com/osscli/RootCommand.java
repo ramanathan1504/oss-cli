@@ -54,6 +54,7 @@ import picocli.CommandLine.Command;
             FollowupCommand.class,
             HubCommand.class,
             BacklogCommand.class,
+            PickCommand.class,
             IssueCommand.class,
             PrCommand.class,
             ExtCommand.class,
