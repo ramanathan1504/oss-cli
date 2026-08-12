@@ -52,6 +52,7 @@ import picocli.CommandLine.Command;
             // than one so `oss run …` and `oss memory …` read as first-class capabilities.
             AliasCommand.class,
             FollowupCommand.class,
+            HubCommand.class,
             IssueCommand.class,
             PrCommand.class,
             ExtCommand.class,

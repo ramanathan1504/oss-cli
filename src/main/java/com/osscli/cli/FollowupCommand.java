@@ -2,11 +2,10 @@ package com.osscli.cli;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.osscli.AppPaths;
 import com.osscli.github.GitHubClient;
+import com.osscli.review.ReviewLedger;
 import com.osscli.storage.SqliteStorage;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,7 +23,6 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -52,11 +50,6 @@ import picocli.CommandLine.Parameters;
         mixinStandardHelpOptions = true,
         description = "What moved on a reviewed pull request since you reviewed it")
 public class FollowupCommand implements Callable<Integer> {
-
-    /** Kept beside the database, not inside any clone: it outlives every checkout it describes. */
-    static final Path REVIEWS_DIR = AppPaths.BASE_DIR.resolve("reviews");
-
-    private static final Path LEDGER = REVIEWS_DIR.resolve("ledger.tsv");
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -117,14 +110,14 @@ public class FollowupCommand implements Callable<Integer> {
             if (record != null) {
                 return doRecord(record);
             }
-            List<Row> rows = read();
+            List<ReviewLedger.Row> rows = ReviewLedger.read();
             if (rows.isEmpty()) {
                 System.out.println("Nothing recorded yet.");
                 System.out.println();
                 System.out.println("  oss followup --record <pr> --repo owner/name --verdict take");
                 return 0;
             }
-            for (Row r : rows) {
+            for (ReviewLedger.Row r : rows) {
                 if (only != null && r.pr != only) {
                     continue;
                 }
@@ -156,14 +149,14 @@ public class FollowupCommand implements Callable<Integer> {
             System.err.println("error  could not read " + target + "#" + pr);
             return 1;
         }
-        List<Row> rows = read();
-        Row previous = rows.stream()
+        List<ReviewLedger.Row> rows = ReviewLedger.read();
+        ReviewLedger.Row previous = rows.stream()
                 .filter(r -> r.pr == pr && r.repo.equalsIgnoreCase(target))
                 .findFirst()
                 .orElse(null);
         rows.removeIf(r -> r.pr == pr && r.repo.equalsIgnoreCase(target));
 
-        Row row = new Row();
+        ReviewLedger.Row row = new ReviewLedger.Row();
         row.repo = target;
         row.pr = pr;
         // Re-recording an already-reviewed PR is the common case, and it should not silently discard
@@ -178,7 +171,7 @@ public class FollowupCommand implements Callable<Integer> {
         row.head = pull.path("head").path("sha").asText("");
         row.author = pull.path("user").path("login").asText("?");
         rows.add(row);
-        write(rows);
+        ReviewLedger.write(rows);
 
         System.out.printf("  recorded %s#%d at %s%n", target, pr, shortSha(row.head));
         System.out.println("  Only do this after actually reading it at that head.");
@@ -187,7 +180,7 @@ public class FollowupCommand implements Callable<Integer> {
 
     // ------------------------------------------------------------------ report ---
 
-    private void report(Row r) throws Exception {
+    private void report(ReviewLedger.Row r) throws Exception {
         JsonNode pull = fetch(r.repo, r.pr);
         if (pull == null) {
             System.out.printf("  %-28s #%-6d %s%n", r.repo, r.pr, "unreachable");
@@ -271,7 +264,7 @@ public class FollowupCommand implements Callable<Integer> {
      * first parent, so a merge of the base branch reports the entire base branch as its file list.
      */
     private Integer sinceReport(int pr) throws Exception {
-        Row r = read().stream()
+        ReviewLedger.Row r = ReviewLedger.read().stream()
                 .filter(row -> row.pr == pr && (repo == null || row.repo.equalsIgnoreCase(repo.trim())))
                 .findFirst()
                 .orElse(null);
@@ -365,7 +358,7 @@ public class FollowupCommand implements Callable<Integer> {
     }
 
     private void printSince(
-            Row r,
+            ReviewLedger.Row r,
             int pr,
             String state,
             String title,
@@ -439,7 +432,7 @@ public class FollowupCommand implements Callable<Integer> {
     // -------------------------------------------------------------------- write ---
 
     private Integer appendToReview(
-            Row r,
+            ReviewLedger.Row r,
             int pr,
             Path rf,
             String base,
@@ -453,7 +446,8 @@ public class FollowupCommand implements Callable<Integer> {
             int merges)
             throws IOException {
         if (rf == null) {
-            System.err.println("error  no review file for PR " + pr + " in " + REVIEWS_DIR + " — nothing to append to");
+            System.err.println(
+                    "error  no review file for PR " + pr + " in " + ReviewLedger.DIR + " — nothing to append to");
             return 1;
         }
         String existing = Files.readString(rf);
@@ -597,7 +591,7 @@ public class FollowupCommand implements Callable<Integer> {
     private Integer pasteReady(int pr) throws IOException {
         Path rf = reviewFile(pr);
         if (rf == null) {
-            System.err.println("error  no review file for PR " + pr + " in " + REVIEWS_DIR);
+            System.err.println("error  no review file for PR " + pr + " in " + ReviewLedger.DIR);
             return 1;
         }
         StringBuilder out = new StringBuilder();
@@ -717,7 +711,7 @@ public class FollowupCommand implements Callable<Integer> {
         }
         // Falling back to the row means `--record` after a re-read needs only the number, which is
         // the common case and the one worth making short.
-        return read().stream()
+        return ReviewLedger.read().stream()
                 .filter(r -> r.pr == pr)
                 .map(r -> r.repo)
                 .findFirst()
@@ -737,18 +731,7 @@ public class FollowupCommand implements Callable<Integer> {
      * covers several related pull requests, and is named for all of them.
      */
     static Path reviewFile(int pr) {
-        if (!Files.isDirectory(REVIEWS_DIR)) {
-            return null;
-        }
-        try (Stream<Path> s = Files.list(REVIEWS_DIR)) {
-            return s.filter(p -> p.getFileName().toString().endsWith(".md"))
-                    .filter(p -> p.getFileName().toString().contains(String.valueOf(pr)))
-                    .sorted()
-                    .findFirst()
-                    .orElse(null);
-        } catch (IOException e) {
-            return null;
-        }
+        return ReviewLedger.writeUp(pr);
     }
 
     private static Set<String> namedFiles(Path reviewFile) throws IOException {
@@ -790,82 +773,5 @@ public class FollowupCommand implements Callable<Integer> {
         String by = "?";
         String kind = "";
         String body = "";
-    }
-
-    // ------------------------------------------------------------------ ledger ---
-
-    /** One reviewed pull request, as it was when it was reviewed. */
-    private static final class Row {
-        String repo = "";
-        int pr;
-        String verdict = "none";
-        String reviewed = "";
-        String head = "";
-        String author = "";
-        String posted = "no";
-        String note = "";
-    }
-
-    private List<Row> read() {
-        List<Row> rows = new ArrayList<>();
-        if (!Files.isRegularFile(LEDGER)) {
-            return rows;
-        }
-        try {
-            for (String line : Files.readAllLines(LEDGER)) {
-                if (line.isBlank() || line.startsWith("#")) {
-                    continue;
-                }
-                String[] f = line.split("\t", -1);
-                if (f.length < 6) {
-                    continue;
-                }
-                Row r = new Row();
-                r.repo = f[0];
-                try {
-                    r.pr = Integer.parseInt(f[1].trim());
-                } catch (NumberFormatException e) {
-                    continue; // a malformed row is skipped, not fatal: the rest is still useful
-                }
-                r.verdict = f[2];
-                r.reviewed = f[3];
-                r.head = f[4];
-                r.author = f[5];
-                r.posted = f.length > 6 ? f[6] : "no";
-                r.note = f.length > 7 ? f[7] : "";
-                rows.add(r);
-            }
-        } catch (IOException e) {
-            throw new UncheckedIOException("could not read " + LEDGER, e);
-        }
-        return rows;
-    }
-
-    private void write(List<Row> rows) {
-        try {
-            Files.createDirectories(LEDGER.getParent());
-            StringBuilder sb =
-                    new StringBuilder("# repo\tpr\tverdict\treviewed\thead_at_review\tauthor\tposted\tnote\n");
-            for (Row r : rows) {
-                sb.append(String.join(
-                                "\t",
-                                r.repo,
-                                String.valueOf(r.pr),
-                                r.verdict,
-                                r.reviewed,
-                                r.head,
-                                r.author,
-                                r.posted,
-                                r.note.replace('\t', ' ')))
-                        .append('\n');
-            }
-            Path tmp = LEDGER.resolveSibling(LEDGER.getFileName() + ".tmp");
-            Files.writeString(tmp, sb.toString());
-            // Write-then-move: an interrupted write must not leave a ledger that every later run
-            // fails to parse, because the ledger is the only thing that cannot be re-derived.
-            Files.move(tmp, LEDGER, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException e) {
-            throw new UncheckedIOException("could not write " + LEDGER, e);
-        }
     }
 }
