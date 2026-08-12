@@ -93,13 +93,6 @@ public class ServeCommand implements Callable<Integer> {
     @Option(names = "--uninstall", description = "Stop starting it at login")
     boolean uninstall;
 
-    /** launchd label and plist path. One agent, named for what it is. */
-    private static final String LABEL = "com.osscli.serve";
-
-    private static Path plistPath() {
-        return Path.of(System.getProperty("user.home"), "Library", "LaunchAgents", LABEL + ".plist");
-    }
-
     /**
      * Remembers that the "keep this running?" question was already asked.
      *
@@ -262,7 +255,7 @@ public class ServeCommand implements Callable<Integer> {
      * otherwise be read as consent.
      */
     private void offerAutostart() {
-        if (Files.exists(plistPath()) || Files.exists(askedMarker())) {
+        if (Autostart.isInstalled() || Files.exists(askedMarker())) {
             return;
         }
         Console console = System.console();
@@ -292,61 +285,35 @@ public class ServeCommand implements Callable<Integer> {
     private boolean doInstall() {
         Path jar = jarPath();
         if (jar == null) {
-            System.err.println("error  could not locate the running jar, so the agent would not know what to start");
+            System.err.println("error  could not locate the running jar, so the service would not know what to start");
             return false;
         }
-        String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
-        // KeepAlive with a throttle: a crash loop retries once a minute rather than spinning.
-        // RunAtLoad so it is there after a reboot without being started by hand.
-        String plist = """
-                <?xml version="1.0" encoding="UTF-8"?>
-                <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"                 "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-                <plist version="1.0"><dict>
-                  <key>Label</key><string>%s</string>
-                  <key>ProgramArguments</key>
-                  <array>
-                    <string>%s</string><string>-jar</string><string>%s</string>
-                    <string>serve</string><string>--no-open</string><string>--port</string><string>%d</string>
-                  </array>
-                  <key>RunAtLoad</key><true/>
-                  <key>KeepAlive</key><true/>
-                  <key>ThrottleInterval</key><integer>60</integer>
-                  <key>StandardOutPath</key><string>%s</string>
-                  <key>StandardErrorPath</key><string>%s</string>
-                </dict></plist>
-                """.formatted(LABEL, java, jar, port, logFile("out"), logFile("err"));
+        Path java = Path.of(System.getProperty("java.home"), "bin", "java");
         try {
-            Files.createDirectories(plistPath().getParent());
-            Files.writeString(plistPath(), plist);
-            // bootout first so --install is a safe way to APPLY A CHANGE, not only a first-time
-            // action: without it, editing the port and re-installing leaves the old agent running.
-            run("launchctl", "bootout", "gui/" + uid() + "/" + LABEL);
-            int rc = run("launchctl", "bootstrap", "gui/" + uid(), plistPath().toString());
-            if (rc != 0) {
-                System.err.println("error  launchctl refused the agent (exit " + rc + "): " + plistPath());
+            String what = Autostart.install(java, jar, port);
+            if (what == null) {
+                System.err.println("error  " + Autostart.unsupportedAdvice(port));
                 return false;
             }
-            System.out.println("  ✓ will start at login — " + plistPath());
-            System.out.println("    logs: " + logFile("err"));
-            System.out.println("    stop it with: oss-cli serve --uninstall");
+            System.out.println("  ✓ starts at login — " + what);
+            System.out.println("    stop it with: oss serve --uninstall");
             return true;
         } catch (IOException e) {
-            System.err.println("error  could not write " + plistPath() + ": " + e.getMessage());
+            System.err.println("error  could not install: " + e.getMessage());
             return false;
         }
     }
 
     private Integer doUninstall() {
-        run("launchctl", "bootout", "gui/" + uid() + "/" + LABEL);
         try {
-            boolean removed = Files.deleteIfExists(plistPath());
-            System.out.println(removed ? "  ✓ removed — it will not start at login" : "  nothing installed");
-            // Clear the marker too: having uninstalled, being asked again next time is the
-            // reasonable behaviour, not a question that can never return.
+            boolean had = Autostart.uninstall();
+            System.out.println(had ? "  ✓ removed — it will not start at login" : "  nothing installed");
+            // Clearing the marker means the question is asked again next time, which is the
+            // reasonable behaviour after an explicit uninstall.
             Files.deleteIfExists(askedMarker());
             return 0;
         } catch (IOException e) {
-            System.err.println("error  could not remove " + plistPath() + ": " + e.getMessage());
+            System.err.println("error  could not remove: " + e.getMessage());
             return 1;
         }
     }
@@ -362,26 +329,6 @@ public class ServeCommand implements Callable<Integer> {
             return p.toString().endsWith(".jar") ? p : null;
         } catch (Exception e) {
             return null;
-        }
-    }
-
-    private String logFile(String which) {
-        return com.osscli.AppPaths.BASE_DIR
-                .resolve("logs")
-                .resolve("serve." + which + ".log")
-                .toString();
-    }
-
-    private static String uid() {
-        return String.valueOf(
-                ProcessHandle.current().pid() > 0 ? new com.sun.security.auth.module.UnixSystem().getUid() : 0);
-    }
-
-    private static int run(String... cmd) {
-        try {
-            return new ProcessBuilder(cmd).redirectErrorStream(true).start().waitFor();
-        } catch (Exception e) {
-            return -1;
         }
     }
 
