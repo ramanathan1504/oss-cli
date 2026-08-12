@@ -19,6 +19,7 @@ package com.osscli.cli;
 import com.osscli.ext.Extension;
 import com.osscli.ext.ExtensionRegistry;
 import com.osscli.ext.ExtensionRunner;
+import com.osscli.memory.BuiltinMemory;
 import com.osscli.safety.UpstreamGuard;
 import com.osscli.ui.NextSteps;
 import java.nio.file.Path;
@@ -195,9 +196,26 @@ public class ExtCommand implements Callable<Integer> {
 
         abstract Extension.Kind kind();
 
+        /**
+         * What to do when no extension of this kind is registered.
+         *
+         * <p>Null means "there is nothing to fall back to", which is the honest answer for a runner:
+         * nothing in the core can execute somebody's project for them. A memory can fall back,
+         * because a folder of markdown is a real answer.
+         */
+        Integer fallback(String verb, List<String> args) {
+            return null;
+        }
+
         @Override
         public Integer call() {
             try {
+                if (name == null && ExtensionRegistry.ofKind(kind()).isEmpty()) {
+                    Integer handled = fallback(verb, passthrough);
+                    if (handled != null) {
+                        return handled;
+                    }
+                }
                 Extension ext = ExtensionRegistry.resolve(kind(), name);
 
                 // A stale snapshot silently broke an approval once: writesTo was corrected on
@@ -258,11 +276,25 @@ public class ExtCommand implements Callable<Integer> {
             name = "memory",
             aliases = {"kb"},
             mixinStandardHelpOptions = true,
-            description = "File, index or search through an attached memory")
+            description = "File, index or search through your memory (built in; an extension takes over)")
     public static class KbDispatch extends Dispatch {
         @Override
         Extension.Kind kind() {
             return Extension.Kind.MEMORY;
+        }
+
+        /**
+         * Fall back to the built-in memory when no archive is attached.
+         *
+         * <p>Requiring an extension before anything could be remembered made the most useful thing
+         * here the one thing a new install could not do. An attached archive still wins — it is a
+         * richer place to put a note than a folder of markdown — but its absence now costs features
+         * rather than the whole capability.
+         */
+        @Override
+        Integer fallback(String verb, List<String> args) {
+            System.out.println("  built-in memory (no memory extension attached)");
+            return BuiltinMemory.run(verb, args);
         }
     }
 }
