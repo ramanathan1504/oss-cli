@@ -33,6 +33,7 @@ public final class LocalEmbedder implements AutoCloseable {
 
     /** Where weights live. Beside the database, never inside a clone. */
     private static final Path DIR = AppPaths.BASE_DIR.resolve("models").resolve("all-MiniLM-L6-v2");
+
     private static final Path MODEL = DIR.resolve("model.onnx");
     private static final Path VOCAB = DIR.resolve("vocab.txt");
 

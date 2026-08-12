@@ -27,6 +27,7 @@ final class Autostart {
 
     /** Reverse-DNS on macOS, a unit name on Linux, a task name on Windows. */
     private static final String LABEL = "com.osscli.serve";
+
     private static final String UNIT = "oss-serve";
     private static final String TASK = "oss serve";
 
@@ -87,8 +88,7 @@ final class Autostart {
 
         switch (platform) {
             case MAC -> {
-                String plist =
-                        """
+                String plist = """
                         <?xml version="1.0" encoding="UTF-8"?>
                         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" \
                         "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -106,8 +106,7 @@ final class Autostart {
                           <key>StandardOutPath</key><string>%s</string>
                           <key>StandardErrorPath</key><string>%s</string>
                         </dict></plist>
-                        """
-                                .formatted(LABEL, java, jar, port, out, err);
+                        """.formatted(LABEL, java, jar, port, out, err);
                 Path p = descriptor();
                 Files.createDirectories(p.getParent());
                 Files.writeString(p, plist);
@@ -118,8 +117,7 @@ final class Autostart {
                 return rc == 0 ? "launchd agent installed: " + p : null;
             }
             case LINUX -> {
-                String unit =
-                        """
+                String unit = """
                         [Unit]
                         Description=oss local service
                         After=network.target
@@ -133,8 +131,7 @@ final class Autostart {
 
                         [Install]
                         WantedBy=default.target
-                        """
-                                .formatted(java, jar, port, out, err);
+                        """.formatted(java, jar, port, out, err);
                 Path p = descriptor();
                 Files.createDirectories(p.getParent());
                 Files.writeString(p, unit);
@@ -207,7 +204,10 @@ final class Autostart {
 
     private static int exec(String... cmd) {
         try {
-            return new ProcessBuilder(List.of(cmd)).redirectErrorStream(true).start().waitFor();
+            return new ProcessBuilder(List.of(cmd))
+                    .redirectErrorStream(true)
+                    .start()
+                    .waitFor();
         } catch (Exception e) {
             // A missing launchctl/systemctl/schtasks is reported by the caller as "install failed",
             // which is the truth, rather than as a stack trace nobody can act on.

@@ -131,7 +131,8 @@ public class FollowupCommand implements Callable<Integer> {
         }
         String head = pull.path("head").path("sha").asText("");
         String state = pull.path("state").asText("?");
-        boolean merged = !pull.path("merged_at").isNull() && pull.path("merged_at").asText("").length() > 0;
+        boolean merged = !pull.path("merged_at").isNull()
+                && pull.path("merged_at").asText("").length() > 0;
 
         List<String> moved = new ArrayList<>();
         if (!head.isEmpty() && !head.equals(r.head)) {
@@ -157,7 +158,8 @@ public class FollowupCommand implements Callable<Integer> {
         System.out.printf("%n  %s #%d  %s  (%s)%n", r.repo, r.pr, state, r.author);
         System.out.printf("  verdict     %s%s%n", r.verdict, r.note.isEmpty() ? "" : "   " + r.note);
         System.out.printf("  reviewed    %s at %s%n", r.reviewed, shortSha(r.head));
-        System.out.printf("  head now    %s%s%n", shortSha(head), moved.contains("pushed") ? "   <- author pushed" : "");
+        System.out.printf(
+                "  head now    %s%s%n", shortSha(head), moved.contains("pushed") ? "   <- author pushed" : "");
         if (!moved.isEmpty()) {
             System.out.println();
             System.out.println("  Re-read before trusting the verdict above, then:");
@@ -182,7 +184,11 @@ public class FollowupCommand implements Callable<Integer> {
         }
         // Falling back to the row means `--record` after a re-read needs only the number, which is
         // the common case and the one worth making short.
-        return read().stream().filter(r -> r.pr == pr).map(r -> r.repo).findFirst().orElse(null);
+        return read().stream()
+                .filter(r -> r.pr == pr)
+                .map(r -> r.repo)
+                .findFirst()
+                .orElse(null);
     }
 
     private static String shortSha(String sha) {
@@ -241,7 +247,14 @@ public class FollowupCommand implements Callable<Integer> {
             Files.createDirectories(LEDGER.getParent());
             StringBuilder sb = new StringBuilder("# repo\tpr\tverdict\treviewed\thead_at_review\tauthor\tnote\n");
             for (Row r : rows) {
-                sb.append(String.join("\t", r.repo, String.valueOf(r.pr), r.verdict, r.reviewed, r.head, r.author,
+                sb.append(String.join(
+                                "\t",
+                                r.repo,
+                                String.valueOf(r.pr),
+                                r.verdict,
+                                r.reviewed,
+                                r.head,
+                                r.author,
                                 r.note.replace('\t', ' ')))
                         .append('\n');
             }

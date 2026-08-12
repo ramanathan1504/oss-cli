@@ -17,10 +17,7 @@ import picocli.CommandLine.Parameters;
  *
  * <p>In the core, because reading an issue is an API call. Nothing about it needs a clone.
  */
-@Command(
-        name = "issue",
-        mixinStandardHelpOptions = true,
-        description = "Read an issue as it was filed")
+@Command(name = "issue", mixinStandardHelpOptions = true, description = "Read an issue as it was filed")
 public class IssueCommand implements Callable<Integer> {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -50,13 +47,14 @@ public class IssueCommand implements Callable<Integer> {
 
             System.out.printf("%n  %s #%d%s%n", repo, number, isPr ? "  (this is a pull request)" : "");
             System.out.printf("  %s%n%n", issue.path("title").asText(""));
-            System.out.printf("  author      %s%n", issue.path("user").path("login").asText("?"));
+            System.out.printf(
+                    "  author      %s%n", issue.path("user").path("login").asText("?"));
             System.out.printf("  state       %s%n", issue.path("state").asText("?"));
             System.out.printf("  opened      %s%n", issue.path("created_at").asText(""));
 
             StringBuilder labels = new StringBuilder();
-            issue.path("labels").forEach(l ->
-                    labels.append(labels.length() == 0 ? "" : ", ").append(l.path("name").asText()));
+            issue.path("labels").forEach(l -> labels.append(labels.length() == 0 ? "" : ", ")
+                    .append(l.path("name").asText()));
             if (labels.length() > 0) {
                 System.out.printf("  labels      %s%n", labels);
             }
@@ -68,12 +66,14 @@ public class IssueCommand implements Callable<Integer> {
             System.out.println(body.isBlank() ? "  (no description)" : body);
 
             if (comments) {
-                JsonNode all = MAPPER.readTree(
-                        gh.getJson("/repos/" + repo + "/issues/" + number + "/comments?per_page=100"));
+                JsonNode all =
+                        MAPPER.readTree(gh.getJson("/repos/" + repo + "/issues/" + number + "/comments?per_page=100"));
                 System.out.printf("%n  ── %d comment(s) ──%n", all.size());
                 all.forEach(c -> {
-                    System.out.printf("%n  %s  %s%n%n",
-                            c.path("user").path("login").asText("?"), c.path("created_at").asText(""));
+                    System.out.printf(
+                            "%n  %s  %s%n%n",
+                            c.path("user").path("login").asText("?"),
+                            c.path("created_at").asText(""));
                     System.out.println(c.path("body").asText(""));
                 });
             }

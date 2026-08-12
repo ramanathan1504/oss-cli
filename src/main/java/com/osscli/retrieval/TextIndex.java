@@ -44,10 +44,10 @@ public final class TextIndex {
      * though they are everywhere.
      */
     private static final Set<String> STOP = Set.of(
-            "the", "and", "for", "that", "this", "with", "from", "have", "has", "was", "are", "but",
-            "not", "you", "your", "all", "can", "will", "would", "should", "when", "then", "than",
-            "there", "here", "what", "which", "into", "over", "under", "about", "just", "like",
-            "some", "any", "its", "it's", "our", "out", "get", "got", "how", "why", "does", "did");
+            "the", "and", "for", "that", "this", "with", "from", "have", "has", "was", "are", "but", "not", "you",
+            "your", "all", "can", "will", "would", "should", "when", "then", "than", "there", "here", "what", "which",
+            "into", "over", "under", "about", "just", "like", "some", "any", "its", "it's", "our", "out", "get", "got",
+            "how", "why", "does", "did");
 
     /** One indexed document: what it is, and what it is made of. */
     public record Doc(String id, String title, double[] weights, Map<String, Double> terms) {}

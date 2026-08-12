@@ -18,10 +18,7 @@ import picocli.CommandLine.Parameters;
  * <p>In the core rather than a runner: reading a pull request needs an API call and nothing else.
  * What genuinely needs a bench is checking the branch out and building it, and that stays there.
  */
-@Command(
-        name = "pr",
-        mixinStandardHelpOptions = true,
-        description = "Every mechanical fact about a pull request")
+@Command(name = "pr", mixinStandardHelpOptions = true, description = "Every mechanical fact about a pull request")
 public class PrCommand implements Callable<Integer> {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -59,20 +56,32 @@ public class PrCommand implements Callable<Integer> {
             if (filesOnly) {
                 fileNodes.forEach(f -> System.out.printf(
                         "  +%-5d -%-5d %s%n",
-                        f.path("additions").asInt(), f.path("deletions").asInt(), f.path("filename").asText()));
+                        f.path("additions").asInt(),
+                        f.path("deletions").asInt(),
+                        f.path("filename").asText()));
                 return 0;
             }
 
             System.out.printf("%n  %s #%d%n", repo, number);
             System.out.printf("  %s%n%n", pr.path("title").asText(""));
-            System.out.printf("  author      %s%n", pr.path("user").path("login").asText("?"));
-            System.out.printf("  state       %s%s%n", pr.path("state").asText("?"),
-                    pr.path("draft").asBoolean(false) ? " (draft)" : "");
+            System.out.printf(
+                    "  author      %s%n", pr.path("user").path("login").asText("?"));
+            System.out.printf(
+                    "  state       %s%s%n",
+                    pr.path("state").asText("?"), pr.path("draft").asBoolean(false) ? " (draft)" : "");
             System.out.printf("  base        %s%n", pr.path("base").path("ref").asText("?"));
-            System.out.printf("  head        %s%n", shortSha(pr.path("head").path("sha").asText("")));
-            System.out.printf("  size        +%d −%d, %d file(s)%n",
-                    pr.path("additions").asInt(), pr.path("deletions").asInt(), pr.path("changed_files").asInt());
-            System.out.printf("  mergeable   %s%n", pr.path("mergeable").isNull() ? "unknown" : pr.path("mergeable").asText());
+            System.out.printf(
+                    "  head        %s%n", shortSha(pr.path("head").path("sha").asText("")));
+            System.out.printf(
+                    "  size        +%d −%d, %d file(s)%n",
+                    pr.path("additions").asInt(),
+                    pr.path("deletions").asInt(),
+                    pr.path("changed_files").asInt());
+            System.out.printf(
+                    "  mergeable   %s%n",
+                    pr.path("mergeable").isNull()
+                            ? "unknown"
+                            : pr.path("mergeable").asText());
 
             // Checks come from the head commit rather than the pull request, because a pull request
             // has no status of its own -- asking it returns nothing and reads like "CI is green".
@@ -83,7 +92,8 @@ public class PrCommand implements Callable<Integer> {
                 StringBuilder failing = new StringBuilder();
                 checks.path("check_runs").forEach(c -> {
                     if ("failure".equalsIgnoreCase(c.path("conclusion").asText(""))) {
-                        failing.append(failing.length() == 0 ? "" : ", ").append(c.path("name").asText());
+                        failing.append(failing.length() == 0 ? "" : ", ")
+                                .append(c.path("name").asText());
                     }
                 });
                 if (total == 0) {
@@ -91,7 +101,10 @@ public class PrCommand implements Callable<Integer> {
                     // reported on this head at all, which is the state a stale or unrun CI is in.
                     System.out.println("  checks      none reported on this head (not the same as passing)");
                 } else {
-                    System.out.printf("  checks      %d run%s%s%n", total, total == 1 ? "" : "s",
+                    System.out.printf(
+                            "  checks      %d run%s%s%n",
+                            total,
+                            total == 1 ? "" : "s",
                             failing.length() == 0 ? "  all green" : "  FAILING: " + failing);
                 }
             }
@@ -99,7 +112,9 @@ public class PrCommand implements Callable<Integer> {
             System.out.println();
             fileNodes.forEach(f -> System.out.printf(
                     "    +%-5d -%-5d %s%n",
-                    f.path("additions").asInt(), f.path("deletions").asInt(), f.path("filename").asText()));
+                    f.path("additions").asInt(),
+                    f.path("deletions").asInt(),
+                    f.path("filename").asText()));
             System.out.println();
             System.out.printf("  https://github.com/%s/pull/%d%n", repo, number);
             return 0;
