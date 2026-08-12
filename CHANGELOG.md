@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.1
+
+_2026-08-12_
+
+- Resolve relative symlinks against the link, not the working directory (#33)
+- Point at the runner from the place the question arises (#32)
+
+
 ## 1.7.0
 
 _2026-08-12_
