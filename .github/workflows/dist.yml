@@ -98,8 +98,21 @@ jobs:
             cat > "$out/oss" <<'EOF'
           #!/bin/sh
           # Resolve symlinks so this works when linked onto PATH.
+          #
+          # A relative link must be resolved against the DIRECTORY OF THE LINK, not
+          # the current directory. Homebrew installs exactly such a link
+          # (bin/oss -> ../Cellar/oss/<v>/bin/oss), so resolving it naively produced
+          # "cd: ../Cellar/...: No such file or directory" from anywhere except one
+          # folder -- and the command was unusable after a perfectly successful
+          # install.
           self=$0
-          while [ -L "$self" ]; do self=$(readlink "$self"); done
+          while [ -L "$self" ]; do
+            link=$(readlink "$self")
+            case "$link" in
+              /*) self=$link ;;
+              *)  self=$(dirname "$self")/$link ;;
+            esac
+          done
           here=$(cd "$(dirname "$self")" && pwd)
           exec "$here/runtime/bin/java" -jar "$here/lib/oss.jar" "$@"
           EOF
