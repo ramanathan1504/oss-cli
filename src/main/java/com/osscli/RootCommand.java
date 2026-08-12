@@ -52,6 +52,8 @@ import picocli.CommandLine.Command;
             // than one so `oss-cli bench …` and `oss-cli kb …` read as first-class capabilities.
             AliasCommand.class,
             FollowupCommand.class,
+            IssueCommand.class,
+            PrCommand.class,
             ExtCommand.class,
             com.osscli.serve.ServeCommand.class,
             ExtCommand.BenchDispatch.class,
