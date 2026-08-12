@@ -207,10 +207,19 @@ public class ExtCommand implements Callable<Integer> {
             return null;
         }
 
+        /** True when this invocation names the built-in path explicitly. */
+        boolean preferFallback() {
+            return false;
+        }
+
         @Override
         public Integer call() {
             try {
-                if (name == null && ExtensionRegistry.ofKind(kind()).isEmpty()) {
+                // An explicit choice wins over a registered extension: someone who typed
+                // --pack said which one they meant, and silently dispatching elsewhere because
+                // an extension happens to be attached would be the wrong kind of helpful.
+                if (preferFallback()
+                        || (name == null && ExtensionRegistry.ofKind(kind()).isEmpty())) {
                     Integer handled = fallback(verb, passthrough);
                     if (handled != null) {
                         return handled;
@@ -266,9 +275,39 @@ public class ExtCommand implements Callable<Integer> {
             mixinStandardHelpOptions = true,
             description = "Run something real through an attached runner")
     public static class BenchDispatch extends Dispatch {
+
+        @Option(names = "--pack", description = "The pack to run: a directory containing pack.sh")
+        java.nio.file.Path pack;
+
         @Override
         Extension.Kind kind() {
             return Extension.Kind.RUNNER;
+        }
+
+        @Override
+        boolean preferFallback() {
+            return pack != null;
+        }
+
+        /**
+         * Run the built-in engine against a pack.
+         *
+         * <p>A runner extension is still how you attach a repository that drives itself. This is for
+         * the other case, which turned out to be the common one: the thing you want to run is not a
+         * program at all, it is a description of your applications and versions. The engine that
+         * walks them is the same work for every project, so it ships here.
+         */
+        @Override
+        Integer fallback(String verb, List<String> args) {
+            java.util.List<String> all = new java.util.ArrayList<>();
+            all.add(verb);
+            all.addAll(args);
+            try {
+                return com.osscli.runner.Engine.run(pack, all);
+            } catch (Exception e) {
+                System.err.println("error  " + e.getMessage());
+                return 1;
+            }
         }
     }
 
