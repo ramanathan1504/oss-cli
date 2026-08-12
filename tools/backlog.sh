@@ -103,7 +103,11 @@ DATE_LABEL="$(date -u '+%Y-%m-%d %H:%M UTC')"
 DATE_TAG="$(date +%Y%m%d)"
 REPO_SLUG="${REPO//\//-}"
 OUT="triage-${DATE_TAG}-${REPO_SLUG}.html"
-CACHE_DIR=".triage-cache/${REPO_SLUG}"
+# Beside the database, not in whatever directory you happened to be standing in.
+# As a script in a checkout, a relative .triage-cache/ was fine; as an installed
+# command it would litter every directory it was ever run from, and two runs from
+# two places would silently not share a cache.
+CACHE_DIR="${OSS_CLI_HOME:-$HOME/.oss-cli}/cache/backlog/${REPO_SLUG}"
 
 
 # ── fetch (read-only) or load from cache (--dry-run) ─────────────────────────
@@ -207,7 +211,7 @@ jq --argjson top "$TOP_ISSUES" "$HELPERS"'
            labs: (labelnames | join(", "))})
   | sort_by(-.score) | .[0:$top]' "$WORK/issues.json" > "$WORK/b3.json" \
   || { echo "error: failed to score issues — check issues.json shape" >&2
-       echo "  Tip: inspect with: jq '.[0] | {comments,reactionGroups}' .triage-cache/${REPO_SLUG}/issues.json" >&2
+       echo "  Tip: inspect with: jq '.[0] | {comments,reactionGroups}' ${CACHE_DIR}/issues.json" >&2
        exit 6; }
 
 B1_COUNT=$(jq length "$WORK/b1.json")
