@@ -139,6 +139,15 @@ public class Extension {
     private String writesTo;
 
     /**
+     * Where this extension keeps the data it owns, if it keeps any.
+     *
+     * <p>Declared rather than discovered, because an archive lives wherever its owner put it and
+     * guessing is how a backup quietly misses the thing it existed to protect. Supports {@code ~}
+     * so a manifest stays portable between machines.
+     */
+    private String archive;
+
+    /**
      * SHA-256 of the manifest exactly as it was when this was registered.
      *
      * <p>The registry stores a snapshot rather than re-reading every manifest on every command, so
@@ -215,6 +224,26 @@ public class Extension {
 
     public void setWrites(List<String> writes) {
         this.writes = writes == null ? List.of() : writes;
+    }
+
+    public String getArchive() {
+        return archive;
+    }
+
+    public void setArchive(String archive) {
+        this.archive = archive;
+    }
+
+    /** The declared data directory, expanded, or null when it declares none. */
+    public java.nio.file.Path archivePath() {
+        if (archive == null || archive.isBlank()) {
+            return null;
+        }
+        String a = archive.trim();
+        if (a.startsWith("~")) {
+            a = System.getProperty("user.home") + a.substring(1);
+        }
+        return java.nio.file.Path.of(a);
     }
 
     public String getWritesTo() {
