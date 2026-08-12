@@ -32,7 +32,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <ul>
  *   <li><b>It writes to stderr, never stdout.</b> Output is piped, redirected and parsed;
- *       {@code oss-cli ext list > file} must not collect spinner frames. Progress is commentary, not
+ *       {@code oss ext list > file} must not collect spinner frames. Progress is commentary, not
  *       result, and the two go to different places.
  *   <li><b>It degrades to plain lines when there is no terminal.</b> Carriage-return animation in a
  *       log file produces one unreadable mega-line. Not a TTY means one line per step, no cursor

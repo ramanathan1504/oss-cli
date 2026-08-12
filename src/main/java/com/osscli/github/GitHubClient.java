@@ -107,7 +107,7 @@ public class GitHubClient {
             case 401 ->
                 "GitHub rejected the token (401 Bad credentials)" + detail
                         + ". The stored token is expired or revoked -- create a new one at "
-                        + "https://github.com/settings/tokens and register it with 'oss-cli setup'.";
+                        + "https://github.com/settings/tokens and register it with 'oss setup'.";
             case 403, 429 -> {
                 boolean exhausted = response.headers()
                         .firstValue("x-ratelimit-remaining")

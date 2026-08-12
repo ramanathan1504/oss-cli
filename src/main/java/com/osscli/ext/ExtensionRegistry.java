@@ -93,8 +93,8 @@ public class ExtensionRegistry {
     public static Extension resolve(Extension.Kind kind, String name) {
         if (name != null && !name.isBlank()) {
             Extension found = byName(name)
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "no extension named \"" + name + "\" -- see: oss-cli ext list"));
+                    .orElseThrow(() ->
+                            new IllegalArgumentException("no extension named \"" + name + "\" -- see: oss ext list"));
             if (found.kind() != kind) {
                 throw new IllegalArgumentException("\"" + found.getName() + "\" is a "
                         + found.kind().lower() + " extension, not a " + kind.lower());
@@ -104,7 +104,7 @@ public class ExtensionRegistry {
         List<Extension> candidates = ofKind(kind);
         if (candidates.isEmpty()) {
             throw new IllegalArgumentException(
-                    "no " + kind.lower() + " extension is registered -- add one with: oss-cli ext add <path-to-repo>");
+                    "no " + kind.lower() + " extension is registered -- add one with: oss ext add <path-to-repo>");
         }
         if (candidates.size() > 1) {
             String names = String.join(

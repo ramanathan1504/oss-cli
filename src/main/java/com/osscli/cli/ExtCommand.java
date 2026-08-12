@@ -41,10 +41,10 @@ import picocli.CommandLine.Parameters;
  * against OSS-CLI at all.
  *
  * <pre>{@code
- * oss-cli ext add ~/apache/log4j2-workout    # register whatever that repo declares
- * oss-cli ext list                           # what is wired up, and is it still reachable
- * oss-cli bench review 4234                  # dispatch to the bench extension
- * oss-cli kb file notes.md                   # dispatch to the archive
+ * oss ext add ~/apache/log4j2-workout    # register whatever that repo declares
+ * oss ext list                           # what is wired up, and is it still reachable
+ * oss run review 4234                  # dispatch to the bench extension
+ * oss memory file notes.md                   # dispatch to the archive
  * }</pre>
  */
 @Command(
@@ -100,7 +100,7 @@ public class ExtCommand implements Callable<Integer> {
             if (all.isEmpty()) {
                 System.out.println("No extensions registered.");
                 System.out.println();
-                System.out.println("  oss-cli ext add <repo>     a repo with an oss-ext.json at its root");
+                System.out.println("  oss ext add <repo>     a repo with an oss-ext.json at its root");
                 System.out.println("  kinds: runner (executes something real) · memory (remembers)");
                 return 0;
             }
@@ -121,7 +121,7 @@ public class ExtCommand implements Callable<Integer> {
                 }
                 if (stale) {
                     System.out.println("               " + Extension.MANIFEST
-                            + " changed on disk since it was registered — oss-cli ext refresh " + e.getName());
+                            + " changed on disk since it was registered — oss ext refresh " + e.getName());
                 }
             }
             return 0;
@@ -169,7 +169,7 @@ public class ExtCommand implements Callable<Integer> {
     /**
      * Shared implementation of the two dispatching aliases.
      *
-     * <p>{@code oss-cli bench <verb> …} reads better than {@code oss-cli ext run --kind bench …} and
+     * <p>{@code oss run <verb> …} reads better than {@code oss ext run --kind bench …} and
      * is what the motto asks for -- OSS-CLI mingling with a bench and a knowledge base as first
      * class capabilities rather than as a generic escape hatch.
      */
@@ -216,7 +216,7 @@ public class ExtCommand implements Callable<Integer> {
                             + " changed on disk since it was registered.");
                     System.err.println("       What it declares — including which verbs write "
                             + "outward — may no longer be what is recorded.");
-                    System.err.println("       oss-cli ext refresh " + ext.getName());
+                    System.err.println("       oss ext refresh " + ext.getName());
                     return 2;
                 }
 
@@ -237,7 +237,7 @@ public class ExtCommand implements Callable<Integer> {
     }
 
     // stopAtPositional is what makes this a dispatcher rather than a parser. Without it picocli
-    // claims any flag it recognises out of the passthrough -- `oss-cli bench list --apps` printed
+    // claims any flag it recognises out of the passthrough -- `oss run list --apps` printed
     // this command's own usage, because --apps was unknown HERE and never reached the bench. After
     // the verb, nothing is ours.
     // Renamed, with the old spelling kept as an alias. Anything already in a script, a note or

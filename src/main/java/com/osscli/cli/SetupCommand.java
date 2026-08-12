@@ -37,7 +37,7 @@ public class SetupCommand implements Callable<Integer> {
         Scanner scanner = new Scanner(System.in);
 
         LOGGER.info("==================================================");
-        LOGGER.info("          oss-cli Interactive Setup Wizard        ");
+        LOGGER.info("            oss Interactive Setup Wizard          ");
         LOGGER.info("==================================================");
 
         // 1. Configure GitHub Username
@@ -246,7 +246,7 @@ public class SetupCommand implements Callable<Integer> {
         LOGGER.info("\n--- Upstream writes ---");
         LOGGER.info("  Refused by default, everywhere, and there is no setting to change that.");
         LOGGER.info("  To permit ONE write, name the repository on the command line:");
-        LOGGER.info("    oss-cli bench hub {} apache/logging-log4j2", UpstreamGuard.APPROVE_FLAG);
+        LOGGER.info("    oss run hub {} apache/logging-log4j2", UpstreamGuard.APPROVE_FLAG);
         LOGGER.info("  You are still asked to confirm, every time, at the terminal.");
 
         // 13. What is on, and what is simply not configured.
@@ -264,7 +264,7 @@ public class SetupCommand implements Callable<Integer> {
             LOGGER.info("  {}<{}>  {}", e.kind().lower(), e.getName(), e.getRoot());
         }
         if (com.osscli.ext.ExtensionRegistry.all().isEmpty()) {
-            LOGGER.info("  bench/kb  none registered (oss-cli ext add <repo>)");
+            LOGGER.info("  bench/kb  none registered (oss ext add <repo>)");
         }
         LOGGER.info(
                 "  upstream  refused unless {} names the repo, and confirmed each time", UpstreamGuard.APPROVE_FLAG);
@@ -307,7 +307,7 @@ public class SetupCommand implements Callable<Integer> {
                     String.join(", ", ext.getVerbs().keySet()));
         } catch (RuntimeException e) {
             LOGGER.warn("  ⚠ not registered: {}", e.getMessage());
-            LOGGER.warn("    The rest of your setup is unaffected; add it later with: oss-cli ext add {}", path);
+            LOGGER.warn("    The rest of your setup is unaffected; add it later with: oss ext add {}", path);
         }
     }
 
