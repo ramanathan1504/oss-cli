@@ -212,6 +212,9 @@ public class ExtCommand implements Callable<Integer> {
             return false;
         }
 
+        /** Anything the core should record even when an extension handles the verb. */
+        void alsoLocally(String verb, List<String> args) {}
+
         @Override
         public Integer call() {
             try {
@@ -255,7 +258,11 @@ public class ExtCommand implements Callable<Integer> {
                         return 2;
                     }
                 }
-                return ExtensionRunner.run(ext, verb, passthrough);
+                int code = ExtensionRunner.run(ext, verb, passthrough);
+                if (code == 0) {
+                    alsoLocally(verb, passthrough);
+                }
+                return code;
             } catch (RuntimeException e) {
                 System.err.println("error  " + e.getMessage());
                 return 1;
@@ -334,6 +341,23 @@ public class ExtCommand implements Callable<Integer> {
         Integer fallback(String verb, List<String> args) {
             System.out.println("  built-in memory (no memory extension attached)");
             return BuiltinMemory.run(verb, args);
+        }
+
+        /**
+         * Keep a copy locally even when an archive takes the original.
+         *
+         * <p>Without this the compounding only half works. Filing a note with an archive attached
+         * sent it out of reach, so `oss pick` scored against reviews alone and every note you wrote
+         * made the suggestions no better -- which is the opposite of the promise.
+         *
+         * <p>The archive is still where the note LIVES: classified, linked, searchable in a year.
+         * This is a working copy for the corpus, and it costs a few kilobytes.
+         */
+        @Override
+        void alsoLocally(String verb, List<String> args) {
+            if ("file".equals(verb) && !args.isEmpty()) {
+                BuiltinMemory.run("file", args);
+            }
         }
     }
 }

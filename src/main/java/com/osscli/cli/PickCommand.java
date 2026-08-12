@@ -1,19 +1,13 @@
 package com.osscli.cli;
 
-import com.osscli.memory.BuiltinMemory;
 import com.osscli.model.Issue;
 import com.osscli.model.RepoIssue;
-import com.osscli.retrieval.TextIndex;
-import com.osscli.review.ReviewLedger;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import com.osscli.retrieval.Corpus;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.Callable;
-import java.util.stream.Stream;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -55,7 +49,7 @@ public class PickCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         try {
-            TextIndex profile = buildProfile();
+            Corpus profile = Corpus.load(m -> System.err.println("  " + m));
             if (profile.size() == 0) {
                 System.out.println("Nothing to score against yet.");
                 System.out.println();
@@ -86,11 +80,11 @@ public class PickCommand implements Callable<Integer> {
                     continue;
                 }
                 String text = (i.title() == null ? "" : i.title()) + " " + (i.body() == null ? "" : i.body());
-                List<TextIndex.Hit> hits = profile.search(text, 3);
+                List<Corpus.Hit> hits = profile.search(text, 3);
                 if (hits.isEmpty()) {
                     continue;
                 }
-                double s = hits.stream().mapToDouble(TextIndex.Hit::score).sum();
+                double s = hits.stream().mapToDouble(Corpus.Hit::score).sum();
                 scored.add(new Scored(ri, s, hits));
             }
 
@@ -101,7 +95,9 @@ public class PickCommand implements Callable<Integer> {
             }
 
             scored.sort(Comparator.comparingDouble((Scored x) -> -x.score));
-            System.out.printf("%n  Scored against %d thing(s) you have written or reviewed%n%n", profile.size());
+            System.out.printf(
+                    "%n  Scored against %d thing(s) you have written or reviewed — %s%n%n",
+                    profile.size(), profile.semantic() ? "by meaning" : "by shared terms");
             int n = 0;
             for (Scored x : scored) {
                 if (n++ >= limit) {
@@ -113,7 +109,7 @@ public class PickCommand implements Callable<Integer> {
                 // Naming what matched is the difference between a ranking you can act on and one you
                 // have to take on faith. It is also how you notice when it matched on nothing useful.
                 String why = x.hits.stream()
-                        .map(TextIndex.Hit::title)
+                        .map(Corpus.Hit::title)
                         .filter(t -> t != null && !t.isBlank())
                         .distinct()
                         .limit(2)
@@ -133,55 +129,6 @@ public class PickCommand implements Callable<Integer> {
         }
     }
 
-    /**
-     * Your corpus: reviews first, then notes.
-     *
-     * <p>An attached memory extension is not consulted. It could be, and deliberately is not yet —
-     * every archive stores things differently, and guessing at someone's folder layout to score
-     * against it would produce confident nonsense. What is here is what this tool knows it can read.
-     */
-    private TextIndex buildProfile() throws IOException {
-        TextIndex ix = new TextIndex();
-
-        for (ReviewLedger.Row r : ReviewLedger.read()) {
-            Path up = ReviewLedger.writeUp(r.pr);
-            String body = up == null ? r.note : Files.readString(up);
-            if (body == null || body.isBlank()) {
-                continue;
-            }
-            String label = r.repo + "#" + r.pr + (r.note.isBlank() ? "" : " — " + r.note);
-            for (int w = 0; w < WEIGHT_REVIEWED; w++) {
-                // Repeating a document is how a TF-IDF index is told something counts for more.
-                ix.add("review:" + r.repo + "#" + r.pr + ":" + w, label, body);
-            }
-        }
-
-        if (Files.isDirectory(BuiltinMemory.DIR)) {
-            try (Stream<Path> s = Files.list(BuiltinMemory.DIR)) {
-                for (Path p : s.filter(f -> f.getFileName().toString().endsWith(".md"))
-                        .toList()) {
-                    String body = Files.readString(p);
-                    String title = firstHeading(body, p.getFileName().toString());
-                    for (int w = 0; w < WEIGHT_NOTE; w++) {
-                        ix.add("note:" + p.getFileName() + ":" + w, title, body);
-                    }
-                }
-            }
-        }
-        ix.build();
-        return ix;
-    }
-
-    private static String firstHeading(String body, String fallback) {
-        for (String line : body.split("\n", 40)) {
-            String t = line.trim();
-            if (t.startsWith("# ")) {
-                return t.substring(2).trim();
-            }
-        }
-        return fallback.replaceAll("\\.md$", "").replace('-', ' ');
-    }
-
     private static String trim(String s, int n) {
         if (s == null) {
             return "";
@@ -189,7 +136,7 @@ public class PickCommand implements Callable<Integer> {
         return s.length() <= n ? s : s.substring(0, n - 1) + "…";
     }
 
-    private record Scored(RepoIssue ri, double score, List<TextIndex.Hit> hits) {}
+    private record Scored(RepoIssue ri, double score, List<Corpus.Hit> hits) {}
 
     static {
         // Keeps Locale-sensitive formatting predictable in the table above.
