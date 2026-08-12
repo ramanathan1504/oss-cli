@@ -1,0 +1,150 @@
+# Build a self-contained oss for each platform: no Java required to run it.
+#
+# Until now the answer to "how do I install this" was "first install Java 17".
+# That is a fine answer for a Java developer and a bad one for everybody else,
+# and it is a strange thing to require from a tool whose whole claim is that it
+# needs almost nothing.
+#
+# jlink builds a runtime containing only the modules this actually uses, so each
+# archive carries its own Java. Built ON the target platform rather than
+# cross-compiled, because a jlink image contains native launchers and libraries
+# for the machine that made it -- cross-building produces something that looks
+# right and does not run.
+name: Distributions
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14         # Apple Silicon
+            label: macos-arm64
+          - os: macos-13         # Intel
+            label: macos-x64
+          - os: ubuntu-latest
+            label: linux-x64
+          - os: windows-latest
+            label: windows-x64
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Build the jar
+        shell: bash
+        run: mvn -q package -DskipTests
+
+      - name: Work out which modules are actually needed
+        id: mods
+        shell: bash
+        # Asked of the jar rather than listed by hand. A hand-written module list
+        # is right until someone adds a dependency, and then fails at runtime with
+        # a NoClassDefFoundError that points at the wrong thing.
+        run: |
+          jar=$(ls target/oss-cli-*.jar | grep -v original | head -1)
+          mods=$(jdeps --multi-release 17 --print-module-deps --ignore-missing-deps "$jar" 2>/dev/null || true)
+          [ -z "$mods" ] && mods="java.base,java.net.http,java.sql,java.desktop,java.management,jdk.crypto.ec"
+          # jdk.crypto.ec is easy to lose and only fails when TLS negotiates a
+          # curve that needs it -- which is to say, on some machines and not others.
+          case "$mods" in *jdk.crypto.ec*) ;; *) mods="$mods,jdk.crypto.ec" ;; esac
+          echo "list=$mods" >> "$GITHUB_OUTPUT"
+          echo "modules: $mods"
+
+      - name: Build a runtime that carries its own Java
+        shell: bash
+        run: |
+          set -euo pipefail
+          jlink --add-modules "${{ steps.mods.outputs.list }}" \
+                --strip-debug --no-header-files --no-man-pages --compress=zip-6 \
+                --output runtime
+
+      - name: Assemble
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=oss-${{ matrix.label }}
+          mkdir -p "$out/lib"
+          cp "$(ls target/oss-cli-*.jar | grep -v original | head -1)" "$out/lib/oss.jar"
+          cp -R runtime "$out/runtime"
+          cp LICENSE README.md "$out/" 2>/dev/null || true
+
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cat > "$out/oss.cmd" <<'EOF'
+          @echo off
+          "%~dp0runtime\bin\java.exe" -jar "%~dp0lib\oss.jar" %*
+          EOF
+          else
+            cat > "$out/oss" <<'EOF'
+          #!/bin/sh
+          # Resolve symlinks so this works when linked onto PATH.
+          self=$0
+          while [ -L "$self" ]; do self=$(readlink "$self"); done
+          here=$(cd "$(dirname "$self")" && pwd)
+          exec "$here/runtime/bin/java" -jar "$here/lib/oss.jar" "$@"
+          EOF
+            chmod +x "$out/oss"
+          fi
+
+      - name: Check it runs WITHOUT any Java on the path
+        shell: bash
+        # The whole point of this workflow. Running it with the runner's Java
+        # still present would prove nothing at all.
+        run: |
+          set -euo pipefail
+          out=oss-${{ matrix.label }}
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cmd //c "$out\\oss.cmd --version"
+          else
+            env -i HOME="$HOME" PATH=/usr/bin:/bin "./$out/oss" --version
+          fi
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=oss-${{ matrix.label }}
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a -tzip "$out.zip" "$out" >/dev/null
+          else
+            tar -czf "$out.tar.gz" "$out"
+          fi
+          ls -lh oss-${{ matrix.label }}.* | awk '{print "  " $5, $9}'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oss-${{ matrix.label }}
+          path: |
+            oss-*.tar.gz
+            oss-*.zip
+
+  attach:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # --clobber so re-running a release replaces its archives rather than
+          # failing on an asset that already exists.
+          gh release upload "${GITHUB_REF_NAME}" oss-*.tar.gz oss-*.zip \
+            --repo "${GITHUB_REPOSITORY}" --clobber
