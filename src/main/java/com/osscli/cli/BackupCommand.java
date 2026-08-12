@@ -139,11 +139,17 @@ public class BackupCommand implements Callable<Integer> {
         // 2. Perform the backup archiving
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
         Path backupFile = targetBackupDir.resolve("oss_backup_" + timestamp + ".zip");
+        // Written under a temporary name and renamed only on success. The failure mode this
+        // prevents was observed, not imagined: an iCloud read timed out mid-walk, the exception
+        // aborted everything, and a 277 MB partial zip stayed on disk looking exactly like a
+        // backup. A partial backup that looks whole is worse than no backup at all.
+        Path partial = targetBackupDir.resolve("oss_backup_" + timestamp + ".zip.partial");
 
         LOGGER.info("Backing up {} into '{}'...", INCLUDE, targetBackupDir.toAbsolutePath());
 
         long[] count = {0};
-        try (FileOutputStream fos = new FileOutputStream(backupFile.toFile());
+        List<String> unreadable = new ArrayList<>();
+        try (FileOutputStream fos = new FileOutputStream(partial.toFile());
                 ZipOutputStream zos = new ZipOutputStream(fos)) {
 
             for (Path dir : sources) {
@@ -175,13 +181,26 @@ public class BackupCommand implements Callable<Integer> {
             }
 
             LOGGER.info("  {} file(s) archived", count[0]);
+            if (!unreadable.isEmpty()) {
+                LOGGER.warn("  {} file(s) could not be read and are NOT in this backup:", unreadable.size());
+                for (String u : unreadable) {
+                    LOGGER.warn("    {}", u);
+                }
+                LOGGER.warn("  (iCloud files may not be downloaded — open the folder once, or run again)");
+            }
             LOGGER.info("  Backup created: {}", backupFile.toAbsolutePath());
 
             // 3. Enforce Log Rotation: Keep only the 5 most recent backups
             enforceBackupLimit(targetBackupDir);
 
+            Files.move(partial, backupFile);
         } catch (IOException e) {
             LOGGER.error("Failed to create backup archive: {}", e.getMessage());
+            try {
+                Files.deleteIfExists(partial);
+            } catch (IOException ignored) {
+                // Deleting the debris is best-effort; the .partial suffix already says what it is.
+            }
             return 1;
         }
 
