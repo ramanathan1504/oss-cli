@@ -62,6 +62,17 @@
             <artifactId>onnxruntime</artifactId>
             <version>1.22.0</version>
         </dependency>
+
+        <!--
+            Tests. There were none, which is how a fresh database came to be stamped at the current
+            schema version while missing three tables, with nothing to notice.
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.11.4</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -86,6 +97,40 @@
             </resource>
         </resources>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.2</version>
+                <configuration>
+                    <!--
+                        Tests that touch the database must never find the real one. AppPaths reads
+                        this property, so pointing it at target/ keeps a test run out of ~/.oss-cli.
+                        A suite that damages the thing it tests is worse than no suite.
+                    -->
+                    <systemPropertyVariables>
+                        <oss.cli.home>${project.build.directory}/test-home</oss.cli.home>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>

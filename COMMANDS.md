@@ -168,11 +168,18 @@ Core new command. Runs the full **Retrieve → local model → Adaptive Response
 Retrieves from all local sources:
 - Issue body, labels, and comments
 - Related issues and linked PRs
+- Issues, pull requests and commits this one **references**, and the ones that reference it
 - Similar past fixes (vector similarity)
 - Extracted stack traces
 - Previous AI conversation transcripts
 - Personal notes from Google Drive
 - Cross-project JIRA dependencies
+
+Two of those are not similarity, and are worth stating precisely:
+
+**References are followed in both directions.** A stated reference is not a resemblance to be scored: a pull request whose entire body is "fixes #4100" shares almost no wording with the issue it closes, so ranked by similarity the two look unrelated at exactly the moment they are most related. The incoming direction is the one nobody records — an issue does not know which pull request closed it, because the claim lives in the pull request. `fixes/closes/resolves #N` is stored as a stronger edge than a bare `#N` and scores higher here, because somebody said so rather than a ranking inferring it. Fenced and inline code are stripped before matching, so a stack trace or log line mentioning `#1` does not become an edge. Commits are recorded from a full 40-character SHA, a `/commit/<sha>` URL, or the literal word "commit" followed by a hash; they stay in the index but are not spent on prompt budget, since without a clone there is nothing local to say about them. References to a repository you have not synced are recorded too — retrieval simply only follows the ones whose target it has.
+
+**Collected discussion ranks below your own work.** Notes are classified as knowledge or reference (see [`sync --me`](#sync)). Reference passages still compete for the budget, at a 0.75 discount, and are labelled `reference` rather than `chat_memory` in the assembled prompt so it is visible which passages came from a discussion you had no part in.
 
 ```bash
 oss prompt 1666                   # Ollama answers, or builds expert prompt if too complex
@@ -198,7 +205,7 @@ oss inspect 1666 -r owner/name
 ```
 
 *   **Output includes:**
-    *   Each retrieved document (source type, reference, relevance score, token count)
+    *   Each retrieved document (source type, reference, relevance score, token count). Source types include `referenced_issue` for a stated reference, and `reference` for a passage from collected material rather than your own notes (`chat_memory`)
     *   Documents dropped due to token budget limits (marked `excluded`)
     *   Total token estimate vs. `ollama.context_limit`
     *   **Decision preview:** `✔ Ollama will answer locally` OR `⚠ Context too large — prompt will be built`

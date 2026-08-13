@@ -96,6 +96,26 @@ oss review 4234
 
 ---
 
+## 🔗 Stated references, not only resemblance
+
+Retrieval ranked everything by similarity, which is the right tool when nobody has said what relates to what, and the wrong one when somebody has. A pull request whose entire body is "fixes #4100" shares almost no wording with the issue it closes, so the two scored as unrelated at exactly the moment they were most related.
+
+References are now read out of issue and pull request titles and bodies at sync time and stored as edges, and retrieval walks them **in both directions** — what this issue points at, and what points at it. The incoming direction is the one nobody records: an issue never knows which pull request closed it, because the claim lives in the pull request.
+
+`fixes/closes/resolves #N` is a stronger edge than a bare `#N` and ranks higher, because the author said so rather than a ranking inferring it. `#123`, `owner/name#123` and commits (a full 40-character SHA, a `/commit/<sha>` URL, or the literal word "commit" and a hash) are all recognised, and fenced and inline code are stripped first, so a stack trace mentioning `#1` no longer becomes an edge to a real, unrelated issue. Cross-repository references are recorded even when that repository has not been synced; retrieval only follows the targets it actually has.
+
+---
+
+## 🧾 What you worked out, and what you only collected
+
+Notes are classified as **knowledge** — your own work — or **reference**, a discussion collected for context that you had no part in. Both belong in the corpus and they are not the same thing: ranked identically, the collected material wins on volume alone, and answers start being assembled out of conversations you have never read.
+
+The classification comes from the note's own frontmatter: a note is reference only when `my_role: none` and `source: repo-scan` both appear. Anything else is knowledge, including a thread found by scanning that you turn out to have authored or reviewed, and including notes with no frontmatter at all — those are your own writing and this tool's own recorded resolutions.
+
+Retrieval prefers knowledge without discarding reference: reference passages still compete for the token budget, at a 0.75 discount, and are labelled `reference` in the assembled prompt so provenance is visible. Nothing is hidden. Promotion is automatic — the tier is re-read every time a note is embedded, so taking part in a thread you had only collected moves it to knowledge on the next harvest and `oss sync --me`.
+
+---
+
 ## 🚀 Setup & Installation
 
 1. **Compile the Project:**
@@ -155,6 +175,8 @@ oss duplicates -t 0.85
 # 5. Generate your Personal Contribution Roadmap Report
 oss report --me
 ```
+
+The two slowest operations — fetching the embedding model with `oss model --fetch`, and building a repository's vector index during `sync` — print a live status line with elapsed time, because a command that says nothing for forty seconds is indistinguishable from one that has hung. It goes to **stderr**, never stdout, so piping and redirecting results is unaffected. The spinner and colour appear only when attached to a terminal; a pipe, cron or CI gets plain one-line-per-step output and no colour. `NO_COLOR` is honoured. After 8 seconds of waiting the line adds a rotating one-line quip in its dim tail, which `OSS_NO_QUIPS=1` turns off on its own.
 
 ### Prompt Intelligence Flow (New — Adaptive)
 

@@ -19,7 +19,8 @@ com.osscli
 │                       Embeddings / LocalEmbedder — the in-process embedder
 ├── storage/            DatabaseManager (schema), SqliteStorage (queries)
 ├── model/              records
-└── report/             Markdown report writers
+├── report/             Markdown report writers
+└── ui/                 Live — the status line, on stderr
 ```
 
 Four LLM clients behind one shape is deliberate: **no provider is load-bearing.**
@@ -38,16 +39,31 @@ generate text.
 an `execute(Connection)`. On boot, every migration above the stored version runs
 in order, then the version is bumped.
 
+`CURRENT_SCHEMA_VERSION` is **13**.
+
 **Adding a migration:**
 
 1. Append to `MIGRATIONS` with the next version number.
 2. Bump `CURRENT_SCHEMA_VERSION`.
-3. Update the fresh-install `getCreate…TableSql()` too, so new databases skip it.
+3. Keep the `getCreate…TableSql()` the migration uses in one place, so the
+   fresh-install path and the upgrade path create the identical table.
 4. Guard everything — `columnExists`, `addColumnIfMissing`, `CREATE TABLE IF NOT
    EXISTS`. Migrations must be re-runnable without error.
 
 Never drop or rewrite a column that holds user data. The engine is
 non-destructive by contract; users trust it to run unattended at startup.
+
+**A fresh database runs the real migrations.** It executes Migration 1 to build
+the core schema, is stamped 2, and then every later migration runs on top of it
+exactly as it would on an existing database. It used to be stamped
+`CURRENT_SCHEMA_VERSION` instead, which asserted "Migration 1 already contains
+everything the later ones add" — nothing enforced that and it had drifted: a
+database created that way was stamped 11 while missing `personal_chat_chunk` from
+Migration 10 and `pr_cache` and `repo_profile` from Migration 11. A new install
+had no passage index, no review cache and no repository profiles, and reported a
+schema version claiming otherwise. Running the migrations is what keeps a new
+database and an upgraded one identical, rather than a promise someone has to
+remember to keep — which is also why step 4 above is not optional.
 
 ### Embedding provenance (v9)
 
@@ -82,6 +98,57 @@ Rules when touching vectors:
 
 `SqliteStorage.countVectorsByModel(table)` reports the current mix.
 
+### The issue reference index (v12)
+
+`issue_references` stores what one issue says about another: `(repository,
+from_number, kind, to_ref, to_repository, to_number, to_sha)`, indexed on
+`(repository, from_number)` and on `(to_repository, to_number)` — the outgoing
+direction is read constantly, the incoming one only when asked.
+
+`References.parse(text, defaultRepository)` is the single parser, and
+`SqliteStorage.saveIssues` is its only caller: title and body, for issues and pull
+requests alike, since both go through that method. It used to hold its own pair of
+regexes there, which meant a second and laxer idea of what a reference is than the
+one retrieval used, and it read straight through fenced code so a stack frame
+mentioning `#1` became an edge to a real issue.
+
+Three properties worth not breaking:
+
+- **Precision over recall.** A wrong edge pulls an unrelated issue into the
+  context of every question about this one, silently. Hence: code fences and
+  inline code stripped first, seven-digit cap on issue numbers, and a bare short
+  hex string is *not* a commit — only a full 40-character SHA, a `/commit/<sha>`
+  URL, or the literal word "commit" and a hash.
+- **`CLOSES` outranks `MENTIONS`**, and deduplication is keyed on the target
+  rather than kind-and-target, so "fixes #12 … see also #12" stays one edge and
+  keeps the kind it was first matched as.
+- **Writes are delete-then-insert** for one `from_number`. The body is the truth
+  and the edges are derived; a merge would keep a reference an edit removed.
+
+`cross_repo_links` still exists and still feeds the ecosystem report, fed from the
+same parse. Edges into an unsynced repository are recorded — retrieval just skips
+the ones whose target it does not hold.
+
+### Knowledge and reference tiers (v13)
+
+`personal_chat_memory.tier` is `TEXT DEFAULT 'KNOWLEDGE'`. `Tier.of(content)`
+reads it from the first 2 KB of the note — frontmatter only, so a body quoting
+`my_role:` in a pasted log is not a claim about the note — and returns `REFERENCE`
+only when `my_role: none` **and** `source: repo-scan` both appear.
+
+- **The default is `KNOWLEDGE`, deliberately.** Anything without that frontmatter
+  is a note the user wrote, a resolution this tool recorded, or an export of their
+  own conversation. Only a harvester can know otherwise, and only it marks it.
+- **The tier lives on the note, not the passage.** `loadPersonalChatChunkVectors`
+  `LEFT JOIN`s `personal_chat_memory` for it — one note is one provenance, and a
+  column on both would be two places to disagree.
+- **It is re-read on every write.** `savePersonalChatMemory` calls `Tier.of` itself
+  rather than taking it as an argument, so no caller can forget and promotion
+  needs no separate step.
+
+Existing rows were backfilled to `KNOWLEDGE`: they all predate harvesting whole
+repositories, so every one of them is the user's own.
+
 ### The legacy path
 
 The project was renamed from `issue-ai`. `AppPaths` still declares
@@ -100,9 +167,9 @@ build. A silent empty database is indistinguishable from data loss.
 
 `ContextRetriever.retrieve(issueNumber, repository)` assembles chunks in
 priority order — the issue itself, an extracted stack trace, label-related
-issues, similar past PRs, similar past conversations, JIRA links, cross-repo
-links — each scored, token-counted, and flagged `included` against
-`TOKEN_BUDGET`.
+issues, referenced issues, similar past PRs, similar past conversations, JIRA
+links, cross-repo links — each scored, token-counted, and flagged `included`
+against `TOKEN_BUDGET`.
 
 Two things to keep in mind:
 
@@ -114,6 +181,34 @@ Two things to keep in mind:
   exists only in `SearchCommand`, and only over the issue `embeddings` table —
   `personal_chat_memory` carries vectors that no free-text path currently
   reaches. That is the clearest gap in the codebase.
+
+### Reference edges (step 3b)
+
+Stated, not inferred, so these do not go through `SIMILARITY_THRESHOLD` at all —
+they are read from `issue_references` in both directions, `loadReferences` plus
+`loadReferencedBy`. Fixed scores: `0.95` for `CLOSES`, `0.85` otherwise, both
+above the `0.7` given to label overlap, because somebody wrote this down rather
+than the two happening to share a word.
+
+- The **incoming** direction is the one that matters and the one nobody records:
+  an issue does not know which pull request closed it.
+- Commit edges are skipped here. Without a clone there is nothing local to say
+  about a SHA, so it stays in the index and out of the prompt budget.
+- Targets in another repository are skipped: an unsynced repo has no text to
+  offer. Capped at 8 edges.
+- The whole block is wrapped in a `try`/`catch` that logs at debug. The reference
+  index is an addition to retrieval, not a precondition for it — a database
+  predating v12 costs these edges and nothing else.
+
+### Tier-aware chat passages
+
+`ChatChunk` carries the note's `Tier`. A `REFERENCE` passage is scored at
+`similarity * 0.75` and labelled `reference` instead of `chat_memory`, so the
+assembled prompt shows where a passage came from rather than implying it is all
+the user's own reasoning. It is a discount, not a filter: collected material is
+often the only account of a problem, but on an equal footing there is enough of
+it to fill the budget by weight of numbers. Do not turn this into an exclusion,
+and do not push it far enough to make reference material unreachable.
 
 ### Passage-level embedding
 
@@ -191,6 +286,16 @@ reasons are user-facing diagnostics — keep `timeout`, `parse_error`,
 - Formatting is enforced by spotless; run it before committing.
 - Log at the level the user cares about. `LOGGER.info` is user-facing output
   here, not debug noise.
+- **Anything that can take more than a second says what it is doing while it
+  does it** — `try (Live live = Live.start(title))`, then `live.step(...)` per
+  stage. `Live` writes to `System.err` so that `oss ext list > file` collects
+  results and not spinner frames; progress is commentary, not result. It draws
+  no cursor tricks and no colour without a console or with `NO_COLOR` set, always
+  erases the line it drew, and its ticker thread is a daemon so it can never hold
+  the JVM open. Any new escape sequence added there needs the same
+  animated-or-not branch: `settle()` once emitted colour unconditionally and
+  carried raw ANSI into redirected logs and CI transcripts, a promise kept in
+  three places and broken in the fourth.
 - Dry-run or report-only defaults where a command mutates anything.
 - Comments explain **why**, especially where the code guards against a silent
   failure. Those are the ones that get "simplified" away by someone who does not
