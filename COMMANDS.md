@@ -30,6 +30,18 @@ oss model            # present or not, and what it would be searching
 oss model --fetch
 ```
 
+While it downloads, a live status line reports the stage it is on and how long it
+has been running. 22 MB over an unknown connection is the longest silence this
+tool has, and the point at which a user is most likely to decide it has hung.
+
+*   It is written to **stderr**, never stdout, so piping or redirecting a
+    command's real output is unaffected.
+*   The spinner and elapsed time appear only when attached to a terminal. Not a
+    TTY — a pipe, cron, CI — means one plain line per step and no colour at all.
+*   `NO_COLOR` is honoured, and drops it to that same plain output.
+*   After 8 seconds of waiting the line grows a rotating one-line quip in its dim
+    tail. `OSS_NO_QUIPS=1` removes just the quips and changes nothing else.
+
 Without it nothing breaks — `search`, `duplicates` and note indexing rank by shared terms instead of by meaning, which needs nothing installed.
 
 ---
@@ -47,7 +59,11 @@ Fetches issues, pull requests, author profiles, and ecosystem dependencies from 
 
 Every sync builds the vector index for the repositories it touched, using the built-in embedder that runs inside this process — no model server is involved. Indexing is incremental (only issues without a current vector), resumable (vectors commit in batches of 50), and model-aware (vectors produced by the older Ollama embedder are ignored and re-indexed here, rather than mixed into a vector space they cannot be compared against). If the embedding model has not been fetched, nothing is downloaded mid-sync: the issue data is still saved, and a warning names how many issues have no vector and how to fetch the model.
 
-`sync --me` is the exception. Everything it builds is vectors, so it requires the embedder and stops with the fetch hint rather than running to no effect. Its development stories are the one part that still wants Ollama; when Ollama is absent they are skipped with a warning and everything else is indexed as usual.
+Indexing prints the same live status line as `oss model --fetch` — on stderr, with elapsed time and a running count of issues embedded. Thousands of model calls on a first index is otherwise the longest stretch of silence in a sync, and silence is indistinguishable from a hang. The same rules apply: animation only on a terminal, plain one-line-per-step output otherwise, `NO_COLOR` and `OSS_NO_QUIPS` honoured.
+
+Sync also reads the **references** out of every issue and pull request it saves — `fixes #123`, a bare `#123`, `owner/name#123`, and commits — and stores them as edges that retrieval follows. See [`prompt`](#prompt) for what is done with them.
+
+`sync --me` is the exception. Everything it builds is vectors, so it requires the embedder and stops with the fetch hint rather than running to no effect. Its development stories are the one part that still wants Ollama; when Ollama is absent they are skipped with a warning and everything else is indexed as usual. It also records, per note, whether the note is **your own work or material you merely collected** — see [`prompt`](#prompt).
 
 `--add` also builds the repository profile — see [`profile`](#profile).
 
