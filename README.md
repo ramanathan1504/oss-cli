@@ -59,7 +59,8 @@ Every capability is a layer, and each is optional. The tool reports which layers
 | You have | You get |
 |---|---|
 | A GitHub token only | Sync, issue tracking, PR facts, commits, diffs, CI state, and convention checks |
-| ...plus a local model | Local answers, semantic search, vector indexing, PR verdicts |
+| ...plus the embedding model | Semantic search, vector indexing, duplicate detection |
+| ...plus a local model | Local answers and PR verdicts |
 | ...plus a cloud API key | Escalation when local context or confidence is not enough |
 | ...plus your own notes | Your history and past reasoning blended into retrieval |
 
@@ -72,7 +73,8 @@ A brand-new user with none of the optional pieces still gets working commands. M
 * **Java 17**
 * **Apache Maven**
 * **A GitHub token** — the only hard requirement
-* **Ollama** *(optional)* — enables local answers and vector search. Models are your choice; defaults are `qwen2.5-coder:7b`, `qwen2.5:0.5b`, `all-minilm`.
+* **The embedding model** *(optional)* — all-MiniLM-L6-v2, quantised to about 22 MB, Apache-2.0. It runs inside this process; there is no server to install. `oss-cli model --fetch` puts it under `~/.oss-cli/models`, once. Nothing fetches it on your behalf, and until it is there everything that would search by meaning searches by shared terms instead.
+* **Ollama** *(optional)* — local text *generation* only: guidance, triage verdicts and PR verdicts. Nothing indexes or searches through it. Models are your choice; defaults are `llama3.2:3b` and `qwen2.5:0.5b`.
 * **A cloud API key** *(optional)* — any major provider, for escalation
 
 ---
@@ -144,7 +146,7 @@ oss-cli sync --me
 # 3. Fast offline ranking — no AI required
 oss-cli critical
 
-# 4. AI severity analysis + duplicate detection (Ollama)
+# 4. AI severity analysis (Ollama) + duplicate detection (the built-in embedder)
 oss-cli analyze
 oss-cli duplicates -t 0.85
 
@@ -222,7 +224,7 @@ Planned and in-progress work:
 
 * Retrieval pipeline (9 context source types)
 * Prompt Builder engine and template structure
-* Ollama-powered context organizer
+* Context organizer, written by the local generation model
 * Streaming JSON API contract
 * Tauri desktop UI architecture
 * Plugin interface for future data sources

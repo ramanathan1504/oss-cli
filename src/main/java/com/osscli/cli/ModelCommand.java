@@ -1,7 +1,7 @@
 package com.osscli.cli;
 
 import com.osscli.retrieval.Corpus;
-import com.osscli.retrieval.LocalEmbedder;
+import com.osscli.retrieval.Embeddings;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -29,7 +29,7 @@ public class ModelCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        if (LocalEmbedder.isDownloaded()) {
+        if (Embeddings.isReady()) {
             System.out.println("  model  present — search and pick answer by meaning");
             report();
             return 0;
@@ -46,7 +46,7 @@ public class ModelCommand implements Callable<Integer> {
             return 0;
         }
         try {
-            LocalEmbedder.load(m -> System.out.println("  " + m)).close();
+            Embeddings.fetch(m -> System.out.println("  " + m));
             System.out.println("  model  ready");
             report();
             return 0;

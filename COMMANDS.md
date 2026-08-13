@@ -16,6 +16,21 @@ oss-cli setup
 ```
 *   **Security:** Checks active environment variables and the macOS Keychain for `GITHUB_TOKEN`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, and `ANTHROPIC_API_KEY`.
 *   **Storage:** Saves all configurations to the local SQLite `system_config` table.
+*   The embedding model is reported, not asked for — it ships with the tool, so there is no endpoint to point at and no name to get wrong.
+
+### `model`
+Reports whether the embedding model is present, and fetches it if you ask for it.
+
+The embedder is all-MiniLM-L6-v2 (quantised, about 22 MB, Apache-2.0). It runs in this process rather than behind a server, and lives under `~/.oss-cli/models`. Nothing downloads it on your behalf: 22 MB arriving in the middle of a search looks like a hang, and a tool that fetches things unasked is one people stop pointing at their work.
+
+*   `--fetch` : Download it. Once, about 22 MB.
+
+```bash
+oss-cli model            # present or not, and what it would be searching
+oss-cli model --fetch
+```
+
+Without it nothing breaks — `search`, `duplicates` and note indexing rank by shared terms instead of by meaning, which needs nothing installed.
 
 ---
 
@@ -30,7 +45,9 @@ Fetches issues, pull requests, author profiles, and ecosystem dependencies from 
 
 *   `--no-embed` : Skip building the local vector index. Sync is faster, but issues fetched in that run are not semantically searchable until a later sync indexes them.
 
-Every sync builds the vector index for the repositories it touched. Indexing is incremental (only issues without a current vector), resumable (vectors commit in batches of 50), and model-aware (changing `ollama.model.embedding` re-indexes rather than mixing incomparable vector spaces). If no local model is running, the issue data is still saved and a warning names how many issues are not yet searchable.
+Every sync builds the vector index for the repositories it touched, using the built-in embedder that runs inside this process — no model server is involved. Indexing is incremental (only issues without a current vector), resumable (vectors commit in batches of 50), and model-aware (vectors produced by the older Ollama embedder are ignored and re-indexed here, rather than mixed into a vector space they cannot be compared against). If the embedding model has not been fetched, nothing is downloaded mid-sync: the issue data is still saved, and a warning names how many issues have no vector and how to fetch the model.
+
+`sync --me` is the exception. Everything it builds is vectors, so it requires the embedder and stops with the fetch hint rather than running to no effect. Its development stories are the one part that still wants Ollama; when Ollama is absent they are skipped with a warning and everything else is indexed as usual.
 
 `--add` also builds the repository profile — see [`profile`](#profile).
 
@@ -216,11 +233,12 @@ oss-cli critical -r apache/kafka
 *   **Options:** `-r`, `--repo` — Target repository (defaults to `default.repository` if not provided).
 
 ### `search`
-Performs an offline semantic vector lookup on your backlog.
+Performs an offline semantic vector lookup on your backlog, using the built-in embedder. No model server is involved.
 *   `-g`, `--global` : Run the search across all synced repositories simultaneously.
 ```bash
 oss-cli search "deadlock in network appender" --global
 ```
+When nothing has been indexed yet, or the embedding model has not been fetched, the search ranks by shared terms instead of refusing — the issues are already local, and declining to search data you have is the wrong answer to a missing optional layer.
 
 ### `report`
 Compiles SQLite data into a unified Weekly Health Report in Markdown format.
@@ -244,7 +262,8 @@ oss-cli analyze
 ```
 
 ### `duplicates`
-Identifies duplicate issue clusters using local vector embeddings (Cosine Similarity).
+Identifies duplicate issue clusters using local vector embeddings (Cosine Similarity). The vectors come from the built-in embedder, so no model server is involved; anything not indexed yet is embedded here and cached. Near-duplicates are the one thing shared terms cannot find — they say the same thing in different words — so without the model this clusters only what was indexed earlier and says how many issues it left out.
+*   `-t`, `--threshold` : Cosine similarity threshold, 0.0 to 1.0 (default: `0.80`).
 ```bash
 oss-cli duplicates -t 0.85
 ```
@@ -284,22 +303,23 @@ oss-cli restore /path/to/sa_brain_backup_20260627_104000.zip
 | Command           | Mode           | AI Required             | Description                                  |
 |-------------------|----------------|-------------------------|----------------------------------------------|
 | `setup`           | Interactive    | No                      | Configure API keys, paths, models            |
+| `model`           | Local          | No                      | Report or fetch the built-in embedding model |
 | `serve`           | Local service  | No                      | **Runs locally on http://localhost:1504; attach benches by path** |
 | `ext add <path>`  | Local          | No                      | Attach a bench/kb from a local repo containing `oss-ext.json` |
 | `ext list`        | Local          | No                      | What is attached, and whether it is still reachable |
 | `bench <verb>`    | Local          | No                      | Dispatch to an attached **bench** (runs something real) |
 | `kb <verb>`       | Local          | No                      | Dispatch to an attached **kb** (files and indexes) |
 | `sync --all`      | Online         | No                      | Sync all registered repositories             |
-| `sync --me`       | Online         | No                      | Sync personal PR profile + Drive logs        |
+| `sync --me`       | Online         | Embedder (required)     | Sync personal PR profile + Drive logs        |
 | `profile`         | Online         | No                      | Language, build, toolchain, conventions      |
 | `review`          | Online         | Optional Ollama         | **Review a PR from every connected source**  |
 | `onboard`         | Online         | Optional Ollama         | What a project expects before you contribute |
 | `critical`        | Offline        | No                      | Fast keyword-score severity ranking          |
 | `analyze`         | Offline        | Ollama                  | AI batch severity scoring                    |
-| `duplicates`      | Offline        | Ollama                  | Vector-based duplicate detection             |
+| `duplicates`      | Offline        | Embedder                | Vector-based duplicate detection             |
 | `prompt`          | Offline/Online | Ollama + Optional cloud | **Generate expert prompt from full context** |
 | `inspect`         | Offline        | No                      | Show retrieved context for an issue          |
-| `search`          | Offline        | Ollama (embeddings) | Semantic vector search                       |
+| `search`          | Offline        | Optional embedder       | Semantic vector search, else shared terms    |
 | `triage`          | Offline        | Ollama                  | Full triage audit for one issue              |
 | `guide`           | Offline        | Ollama                  | Step-by-step resolution blueprint            |
 | `chat`            | Online         | Ollama + Cloud          | Live interactive REPL                        |
@@ -308,3 +328,5 @@ oss-cli restore /path/to/sa_brain_backup_20260627_104000.zip
 | `hidden-critical` | Offline        | No                      | Underestimated security threat detection     |
 | `backup`          | Offline        | No                      | Export AI memory to zip archive              |
 | `restore`         | Offline        | No                      | Restore AI memory from zip archive           |
+
+**Embedder** means the built-in all-MiniLM-L6-v2 that runs in this process — `oss-cli model --fetch`, once, and nothing is running afterwards. **Ollama** means local text generation, and nothing in this table indexes or searches through it.

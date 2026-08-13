@@ -225,10 +225,7 @@ public class SyncCommand implements Callable<Integer> {
      */
     private void embedMissingIssues(String repository) {
         try {
-            String embedModel = SqliteStorage.loadConfig("ollama.model.embedding");
-            if (embedModel == null || embedModel.isBlank()) {
-                embedModel = "all-minilm";
-            }
+            String embedModel = com.osscli.retrieval.Embeddings.MODEL;
 
             List<Issue> stored = SqliteStorage.loadIssues(repository);
             java.util.Set<Long> alreadyEmbedded = SqliteStorage.loadEmbeddedIssueNumbers(repository, embedModel);
@@ -245,13 +242,17 @@ public class SyncCommand implements Callable<Integer> {
                 return;
             }
 
-            OllamaClient embedder = new OllamaClient(embedModel);
-            if (!embedder.isServerReachable()) {
+            // Presence, not acquisition: sync will not pull 22 MB on your behalf mid-command. It
+            // says what the model would add and carries on, because the issue data is the point of
+            // sync and search still answers by shared terms without any of this.
+            com.osscli.retrieval.LocalEmbedder embedder =
+                    com.osscli.retrieval.Embeddings.ifPresent(m -> LOGGER.info("    {}", m));
+            if (embedder == null) {
                 LOGGER.warn(
-                        "  ⚠ Ollama unreachable — {} issue(s) in '{}' have no vector and will not be searchable.",
+                        "  ⚠ No local model — {} issue(s) in '{}' have no vector, so search answers by shared terms.",
                         pending.size(),
                         repository);
-                LOGGER.warn("    Issue data was saved. Start Ollama and re-run sync to build the index.");
+                LOGGER.warn("    {}", com.osscli.retrieval.Embeddings.ABSENT_HINT);
                 return;
             }
 
@@ -264,8 +265,7 @@ public class SyncCommand implements Callable<Integer> {
             for (Issue issue : pending) {
                 String content = "Title: " + issue.title() + "\nBody: " + (issue.body() == null ? "" : issue.body());
                 try {
-                    batch.add(new com.osscli.model.IssueEmbedding(
-                            repository, issue.number(), embedder.generateEmbedding(content)));
+                    batch.add(new com.osscli.model.IssueEmbedding(repository, issue.number(), embedder.embed(content)));
                 } catch (Exception e) {
                     // One malformed or oversized issue must not abandon the rest of the repository.
                     failed++;
@@ -322,7 +322,7 @@ public class SyncCommand implements Callable<Integer> {
 
     private int syncPersonalProfile() throws Exception {
         String username = SqliteStorage.loadConfig("github.username");
-        String embedModel = SqliteStorage.loadConfig("ollama.model.embedding");
+        String embedModel = com.osscli.retrieval.Embeddings.MODEL;
         String guidanceModel = SqliteStorage.loadConfig("ollama.model.guidance");
         String drivePathsStr = SqliteStorage.loadConfig("drive.paths");
 
@@ -334,36 +334,33 @@ public class SyncCommand implements Callable<Integer> {
             LOGGER.error("No GitHub username configured. Please run 'setup' first.");
             return 1;
         }
-        if (embedModel == null) {
-            embedModel = "all-minilm";
-        }
         if (guidanceModel == null) {
             guidanceModel = com.osscli.Defaults.GUIDANCE_MODEL;
         }
 
-        // --- PRE-FLIGHT OLLAMA VERIFICATION (The Rate-Limit Shield) ---
-        LOGGER.info("Performing pre-flight Ollama verification check...");
-        OllamaClient embedOllama = new OllamaClient(embedModel);
-        OllamaClient guideOllama = new OllamaClient(guidanceModel);
+        // --- PRE-FLIGHT VERIFICATION ---
+        // Everything this command produces is a vector, so the embedder is the one hard requirement
+        // -- and it is in this process, so the check is whether a file exists rather than whether a
+        // daemon is up. It is still not fetched here: 22 MB arriving in the middle of a sync is the
+        // surprise the tool promises not to spring.
+        com.osscli.retrieval.LocalEmbedder embedder =
+                com.osscli.retrieval.Embeddings.ifPresent(m -> LOGGER.info("  {}", m));
+        if (embedder == null) {
+            LOGGER.error("No local model, and 'sync --me' builds nothing but vectors.");
+            LOGGER.error("  {}", com.osscli.retrieval.Embeddings.ABSENT_HINT);
+            return 1;
+        }
 
-        if (!embedOllama.isServerReachable()) {
-            LOGGER.error("Error: Cannot reach the Ollama daemon at http://localhost:11434.");
-            LOGGER.error("Start it with: ollama serve   (or launch the Ollama app)");
-            return 1;
+        // The guidance model writes the development stories, and it is the one part of this that
+        // still wants Ollama. Optional, therefore: an absent daemon costs the narrative summaries
+        // and nothing else, so it is reported once here rather than failing the whole sync.
+        OllamaClient guideOllama = new OllamaClient(guidanceModel);
+        boolean canNarrate = guideOllama.isModelAvailable();
+        if (!canNarrate) {
+            LOGGER.warn("  ⚠ Guidance model '{}' unavailable — development stories will be skipped.", guidanceModel);
+            LOGGER.warn("    Everything else is indexed as usual. 'ollama pull {}' adds them.", guidanceModel);
         }
-        if (!embedOllama.isModelAvailable()) {
-            LOGGER.error("Error: Required embedding model '{}' is not pulled locally.", embedModel);
-            LOGGER.error("Please run: ollama pull {}", embedModel);
-            LOGGER.error("Or run 'setup' to choose an available model.");
-            return 1;
-        }
-        if (!guideOllama.isModelAvailable()) {
-            LOGGER.error("Error: Required guidance model '{}' is not pulled locally.", guidanceModel);
-            LOGGER.error("Please run: ollama pull {}", guidanceModel);
-            LOGGER.error("Or run 'setup' to choose an available model (like qwen2.5:0.5b).");
-            return 1;
-        }
-        LOGGER.info("  ✔ Pre-flight verification successful. All local AI models are ready.");
+        LOGGER.info("  ✔ Pre-flight verification successful (embedder '{}' ready).", embedModel);
 
         String searchQuery;
         if (lastSyncedMe != null && !lastSyncedMe.trim().isEmpty()) {
@@ -421,7 +418,7 @@ public class SyncCommand implements Callable<Integer> {
 
                 // Generate PR Story Note if it does not exist in SQLite
                 try {
-                    if (!SqliteStorage.hasPersonalPrMemory(sourceRepo, pr.number())) {
+                    if (canNarrate && !SqliteStorage.hasPersonalPrMemory(sourceRepo, pr.number())) {
                         LOGGER.info(
                                 "    Generating automated Development Story for PR #{} using model '{}'...",
                                 pr.number(),
@@ -444,7 +441,7 @@ public class SyncCommand implements Callable<Integer> {
                                 """, pr.title(), pr.body(), String.join(", ", modifiedFiles));
 
                         String generatedStory = guideOllama.generateJson(summaryPrompt);
-                        double[] storyVector = embedOllama.generateEmbedding(generatedStory);
+                        double[] storyVector = embedder.embed(generatedStory);
 
                         SqliteStorage.savePersonalPrMemory(
                                 sourceRepo,
@@ -466,10 +463,12 @@ public class SyncCommand implements Callable<Integer> {
             // Generate Semantic Developer Expertise Vector
             LOGGER.info("Generating semantic Developer Expertise Vector using model '{}'...", embedModel);
             try {
-                double[] vector =
-                        embedOllama.generateEmbedding(experienceDoc.toString().trim());
+                double[] vector = embedder.embed(experienceDoc.toString().trim());
                 String jsonVector = MAPPER.writeValueAsString(vector);
                 SqliteStorage.saveConfig("developer.vector", jsonVector);
+                // Provenance travels with it. The vector tables carry an embedding_model column for
+                // this reason; this one lives in config, so the model is written beside it by hand.
+                SqliteStorage.saveConfig("developer.vector.model", embedModel);
                 LOGGER.info("  ↳ Personal Developer Expertise Vector successfully saved to SQLite.");
             } catch (Exception e) {
                 LOGGER.error("  ↳ [Error] Failed to generate embedding vector: {}", e.getMessage());
@@ -595,7 +594,7 @@ public class SyncCommand implements Callable<Integer> {
                                                 chatContent = chatContent.substring(chatContent.length() - 5000);
                                             }
 
-                                            double[] chatVector = embedOllama.generateEmbedding(chatContent);
+                                            double[] chatVector = embedder.embed(chatContent);
                                             String subFileName = title.replaceAll("[^a-zA-Z0-9-_]", "_") + ".json";
                                             // Save chunk with uniquely appended hash path
                                             SqliteStorage.savePersonalChatMemory(
@@ -619,7 +618,7 @@ public class SyncCommand implements Callable<Integer> {
 
                             // 2. STANDARD TEXT PARSER (For Markdown / TXT or non-array JSON)
                             try {
-                                double[] chatVector = embedOllama.generateEmbedding(content);
+                                double[] chatVector = embedder.embed(content);
                                 SqliteStorage.savePersonalChatMemory(
                                         absolutePath, fileName, lastModified, content, chatVector, embedModel);
 
@@ -629,7 +628,7 @@ public class SyncCommand implements Callable<Integer> {
                                 java.util.List<String> passages = com.osscli.retrieval.PassageSplitter.split(content);
                                 java.util.List<double[]> passageVectors = new java.util.ArrayList<>();
                                 for (String passage : passages) {
-                                    passageVectors.add(embedOllama.generateEmbedding(passage));
+                                    passageVectors.add(embedder.embed(passage));
                                 }
                                 SqliteStorage.savePersonalChatChunks(
                                         absolutePath, passages, passageVectors, embedModel);

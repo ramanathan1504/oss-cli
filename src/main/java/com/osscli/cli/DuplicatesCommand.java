@@ -16,9 +16,9 @@
  */
 package com.osscli.cli;
 
-import com.osscli.llm.OllamaClient;
 import com.osscli.model.Issue;
 import com.osscli.model.IssueEmbedding;
+import com.osscli.retrieval.Embeddings;
 import com.osscli.storage.SqliteStorage;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -47,11 +47,6 @@ public class DuplicatesCommand implements Callable<Integer> {
     private String repository;
 
     @Option(
-            names = {"-m", "--model"},
-            description = "Ollama embedding model to use")
-    private String modelName;
-
-    @Option(
             names = {"-t", "--threshold"},
             description = "Cosine similarity threshold (0.0 to 1.0)",
             defaultValue = "0.80")
@@ -68,14 +63,6 @@ public class DuplicatesCommand implements Callable<Integer> {
                 return 1;
             }
         }
-        // Resolve dynamic embedding model
-        if (modelName == null) {
-            modelName = SqliteStorage.loadConfig("ollama.model.embedding");
-            if (modelName == null) {
-                modelName = "all-minilm";
-            }
-        }
-
         List<Issue> issues = SqliteStorage.loadIssues(repository);
         if (issues.isEmpty()) {
             LOGGER.error("No local issues found for '{}'. Please run 'sync' first.", repository);
@@ -91,31 +78,50 @@ public class DuplicatesCommand implements Callable<Integer> {
         LOGGER.info(
                 "Starting duplicate analysis for '{}' (Model: {}, Threshold: {})...",
                 repository,
-                modelName,
+                Embeddings.MODEL,
                 String.format("%.2f", threshold));
-        OllamaClient client = new OllamaClient(modelName);
+
+        // Clustering is the one thing here that genuinely cannot be done by shared terms: near
+        // duplicates are near duplicates precisely when they say the same thing in different words.
+        // So an absent model is reported rather than worked around -- but whatever was indexed
+        // earlier still clusters, because refusing to use vectors already on disk helps nobody.
+        com.osscli.retrieval.LocalEmbedder embedder = Embeddings.ifPresent(m -> LOGGER.info("  {}", m));
         boolean cacheUpdated = false;
 
         for (Issue issue : issues) {
             if (!vectorMap.containsKey(issue.number())) {
+                if (embedder == null) {
+                    continue;
+                }
                 LOGGER.info("  Generating embedding vector for Issue #{}...", issue.number());
                 String content = "Title: " + issue.title() + "\nBody: " + (issue.body() == null ? "" : issue.body());
                 try {
-                    double[] vector = client.generateEmbedding(content);
-                    vectorMap.put(issue.number(), vector);
+                    vectorMap.put(issue.number(), embedder.embed(content));
                     cacheUpdated = true;
-                } catch (IOException | InterruptedException e) {
-                    LOGGER.error(
-                            "  ↳ [Error] Failed to generate embedding for #{}: {}", issue.number(), e.getMessage());
-                    return 1;
+                } catch (IOException e) {
+                    // One issue that will not embed must not abandon the rest of the repository.
+                    LOGGER.warn("  ↳ Skipped #{}: {}", issue.number(), e.getMessage());
                 }
             }
+        }
+
+        if (vectorMap.isEmpty()) {
+            LOGGER.error("No vectors for '{}', so there is nothing to cluster.", repository);
+            LOGGER.error("  {}", Embeddings.ABSENT_HINT);
+            return 1;
+        }
+        if (embedder == null && vectorMap.size() < issues.size()) {
+            LOGGER.warn(
+                    "No local model — clustering the {} of {} issue(s) already indexed.",
+                    vectorMap.size(),
+                    issues.size());
+            LOGGER.warn("  {}", Embeddings.ABSENT_HINT);
         }
 
         if (cacheUpdated) {
             List<IssueEmbedding> newCacheList = new ArrayList<>();
             vectorMap.forEach((k, v) -> newCacheList.add(new IssueEmbedding(repository, k, v)));
-            SqliteStorage.saveEmbeddings(repository, newCacheList, modelName);
+            SqliteStorage.saveEmbeddings(repository, newCacheList, Embeddings.MODEL);
             LOGGER.info("  ↳ Local embeddings database updated.");
         }
 

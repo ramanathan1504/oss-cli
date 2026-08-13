@@ -16,7 +16,6 @@
  */
 package com.osscli.retrieval;
 
-import com.osscli.llm.OllamaClient;
 import com.osscli.model.PromptContextChunk;
 import com.osscli.storage.SqliteStorage;
 import java.util.ArrayList;
@@ -49,7 +48,7 @@ public final class NoteRetriever {
     /**
      * Returns the most relevant note passages for {@code queryText}, highest scoring first.
      *
-     * <p>Returns empty rather than throwing when Ollama is unreachable or the corpus is unindexed. This is an
+     * <p>Returns empty rather than throwing when the model is absent or the corpus is unindexed. This is an
      * enrichment layer: a review must still be produced for a user who has no notes at all.
      *
      * @param excludePathSubstring notes whose path contains this are skipped; used to keep a review from being handed
@@ -61,22 +60,15 @@ public final class NoteRetriever {
         }
 
         try {
-            String embedModel = SqliteStorage.loadConfig("ollama.model.embedding");
-            if (embedModel == null || embedModel.isBlank()) {
-                embedModel = "all-minilm";
-            }
-
-            OllamaClient embedder = new OllamaClient(embedModel);
-            if (!embedder.isServerReachable()) {
-                return List.of();
-            }
-
             List<SqliteStorage.ChatChunk> chunks = SqliteStorage.loadPersonalChatChunkVectors();
             if (chunks.isEmpty()) {
                 return List.of();
             }
 
-            double[] queryVector = embedder.generateEmbedding(queryText);
+            double[] queryVector = Embeddings.embed(queryText, m -> LOGGER.debug("{}", m));
+            if (queryVector == null) {
+                return List.of();
+            }
             double threshold = ContextRetriever.similarityThreshold();
 
             Map<String, SqliteStorage.ChatChunk> bestPerFile = new HashMap<>();

@@ -17,7 +17,6 @@
 package com.osscli.knowledge;
 
 import com.osscli.AppPaths;
-import com.osscli.llm.OllamaClient;
 import com.osscli.retrieval.PassageSplitter;
 import com.osscli.storage.SqliteStorage;
 import com.osscli.util.Redactor;
@@ -116,9 +115,15 @@ public final class ResolutionWriter {
 
             Files.writeString(file, content, StandardCharsets.UTF_8);
 
-            index(file, content);
-
-            LOGGER.info("  ✔ {} recorded and indexed → {}", capitalize(label), file.toAbsolutePath());
+            // Said separately because they are separate outcomes. Reporting "recorded and indexed" after the
+            // indexing half was skipped is the exact shape of the failure this class exists to prevent: the loop
+            // looks closed, and only much later does an answer that should have been found fail to appear.
+            if (index(file, content)) {
+                LOGGER.info("  ✔ {} recorded and indexed → {}", capitalize(label), file.toAbsolutePath());
+            } else {
+                LOGGER.info("  ✔ {} recorded → {}", capitalize(label), file.toAbsolutePath());
+                LOGGER.info("    Not yet indexed, so it will not come back in a search until it is.");
+            }
             return file;
 
         } catch (Exception e) {
@@ -128,39 +133,41 @@ public final class ResolutionWriter {
         }
     }
 
-    /** Embeds the note so the next question can retrieve it. Skipped with a warning when Ollama is unavailable. */
-    private static void index(Path file, String content) throws Exception {
-        String embedModel = SqliteStorage.loadConfig("ollama.model.embedding");
-        if (embedModel == null || embedModel.isBlank()) {
-            embedModel = "all-minilm";
-        }
+    /**
+     * Embeds the note so the next question can retrieve it. Skipped with a warning when the model is absent.
+     *
+     * <p>This is the return arc of the loop, and the one step whose absence is invisible: the answer is still
+     * printed and the file is still written, so nothing looks wrong -- it simply never becomes part of what the
+     * next question can find. So a skip says so, and says what recovers it. The note on disk is the durable
+     * record; indexing is replayable from it at any later point.
+     */
+    private static boolean index(Path file, String content) throws Exception {
+        String embedModel = com.osscli.retrieval.Embeddings.MODEL;
 
-        OllamaClient embedder = new OllamaClient(embedModel);
-        if (!embedder.isServerReachable()) {
-            LOGGER.warn("  ⚠ Ollama unreachable — the note was saved but is not yet searchable.");
-            LOGGER.warn("    Run 'sync --me' once Ollama is running to index it.");
-            return;
+        com.osscli.retrieval.LocalEmbedder embedder =
+                com.osscli.retrieval.Embeddings.ifPresent(m -> LOGGER.info("  {}", m));
+        if (embedder == null) {
+            LOGGER.warn("  ⚠ No local model — the note was saved but is not yet searchable.");
+            LOGGER.warn("    {}", com.osscli.retrieval.Embeddings.ABSENT_HINT);
+            LOGGER.warn("    Then 'sync --me' indexes it, along with anything else written meanwhile.");
+            return false;
         }
 
         String path = file.toAbsolutePath().toString();
         long modified = Files.getLastModifiedTime(file).toMillis();
 
         SqliteStorage.savePersonalChatMemory(
-                path,
-                file.getFileName().toString(),
-                modified,
-                content,
-                embedder.generateEmbedding(content),
-                embedModel);
+                path, file.getFileName().toString(), modified, content, embedder.embed(content), embedModel);
 
         // Chunk as well as whole-document: retrieval ranks passages, so a long note that matches in one paragraph
         // would otherwise be diluted by the rest of its own text and lose to a shorter, weaker match.
         List<String> passages = PassageSplitter.split(content);
         List<double[]> vectors = new ArrayList<>(passages.size());
         for (String passage : passages) {
-            vectors.add(embedder.generateEmbedding(passage));
+            vectors.add(embedder.embed(passage));
         }
         SqliteStorage.savePersonalChatChunks(path, passages, vectors, embedModel);
+        return true;
     }
 
     private static String buildNote(

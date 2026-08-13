@@ -73,17 +73,17 @@ public class SetupCommand implements Callable<Integer> {
             LOGGER.info("  ↳ Updated AI Triage Model to: {}", currentTriageModel);
         }
 
-        // 3. Configure Embedding Model
-        String currentEmbeddingModel = SqliteStorage.loadConfig("ollama.model.embedding");
-        LOGGER.info(
-                "Current Vector Embedding Model: [ {} ]",
-                currentEmbeddingModel == null ? "(none)" : currentEmbeddingModel);
-        LOGGER.info("Enter new Embedding Model (or press Enter to keep current):");
-        String inputEmbedding = scanner.nextLine().trim();
-        if (!inputEmbedding.isEmpty()) {
-            SqliteStorage.saveConfig("ollama.model.embedding", inputEmbedding);
-            currentEmbeddingModel = inputEmbedding;
-            LOGGER.info("  ↳ Updated Vector Embedding Model to: {}", currentEmbeddingModel);
+        // 3. Report the Embedding Model
+        // Not a question, because there is nothing to answer. The embedder runs inside this process
+        // and ships with the tool, so there is no endpoint to point at and no name to get wrong.
+        // Asking used to imply otherwise, and a wrong answer here silently produced vectors that
+        // nothing else could be compared against.
+        LOGGER.info("Vector Embedding Model: [ {} ] (built in, runs in-process)", com.osscli.Defaults.EMBEDDING_MODEL);
+        if (com.osscli.retrieval.Embeddings.isReady()) {
+            LOGGER.info("  ↳ Present. Search and pick answer by meaning.");
+        } else {
+            LOGGER.info("  ↳ Not fetched yet. Search answers by shared terms until it is.");
+            LOGGER.info("    {}", com.osscli.retrieval.Embeddings.ABSENT_HINT);
         }
 
         // 4. Configure Guidance Model
@@ -96,6 +96,21 @@ public class SetupCommand implements Callable<Integer> {
             SqliteStorage.saveConfig("ollama.model.guidance", inputGuidance);
             currentGuidanceModel = inputGuidance;
             LOGGER.info("  ↳ Updated Deep Guidance Model to: {}", currentGuidanceModel);
+        }
+
+        // 4b. Where Ollama is
+        // Asked because it is answerable: the daemon does not have to be on this machine, and a
+        // laptop borrowing a desktop's GPU is the ordinary reason to move it. The key existed and
+        // was honoured nowhere, so there was no supported way to say this at all.
+        String currentOllamaUrl = SqliteStorage.loadConfig("ollama.url");
+        LOGGER.info(
+                "Current Ollama address: [ {} ]",
+                currentOllamaUrl == null ? com.osscli.Defaults.OLLAMA_URL : currentOllamaUrl);
+        LOGGER.info("Enter new Ollama address (e.g. http://gpu-box.local:11434) or press Enter to keep current:");
+        String inputOllamaUrl = scanner.nextLine().trim();
+        if (!inputOllamaUrl.isEmpty()) {
+            SqliteStorage.saveConfig("ollama.url", inputOllamaUrl);
+            LOGGER.info("  ↳ Updated Ollama address to: {}", inputOllamaUrl);
         }
 
         // 5. Configure Cloud Agent (Gemini Model)
