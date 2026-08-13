@@ -1,3 +1,19 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.osscli.ui;
 
 import com.osscli.ext.Extension;
@@ -73,45 +89,45 @@ public final class NextSteps {
         Map<String, String> options = new LinkedHashMap<>();
         switch (after) {
             case SEARCH -> {
-                options.put("oss-cli pick", "let it choose one worth your time");
-                options.put("oss-cli inspect " + s, "see the context behind one result");
+                options.put("oss pick", "let it choose one worth your time");
+                options.put("oss inspect " + s, "see the context behind one result");
                 if (hasBench) {
-                    options.put("oss-cli bench repro " + s, "does it actually reproduce?");
+                    options.put("oss run repro " + s, "does it actually reproduce?");
                 }
             }
             case REVIEW -> {
                 if (hasBench) {
-                    options.put("oss-cli bench review " + s, "build it, run it, red/green");
+                    options.put("oss run review " + s, "build it, run it, red/green");
                 }
-                options.put("oss-cli guide " + s, "a step-by-step resolution blueprint");
+                options.put("oss guide " + s, "a step-by-step resolution blueprint");
                 if (hasKb) {
-                    options.put("oss-cli kb file <draft.md>", "keep the reasoning, not just the verdict");
+                    options.put("oss memory file <draft.md>", "keep the reasoning, not just the verdict");
                 }
             }
             case TRIAGE -> {
-                options.put("oss-cli duplicates", "is this the same as something already open?");
-                options.put("oss-cli guide " + s, "how would it actually be fixed?");
+                options.put("oss duplicates", "is this the same as something already open?");
+                options.put("oss guide " + s, "how would it actually be fixed?");
                 if (hasBench) {
-                    options.put("oss-cli bench repro " + s, "confirm it before answering");
+                    options.put("oss run repro " + s, "confirm it before answering");
                 }
             }
             case SYNC -> {
-                options.put("oss-cli report", "what changed, and what is waiting on you");
-                options.put("oss-cli critical", "rank what arrived by severity");
-                options.put("oss-cli search <words>", "find something specific");
+                options.put("oss report", "what changed, and what is waiting on you");
+                options.put("oss critical", "rank what arrived by severity");
+                options.put("oss search <words>", "find something specific");
             }
             case ATTACH -> {
                 if (hasBench) {
-                    options.put("oss-cli bench list", "what that bench can run");
+                    options.put("oss run list", "what that bench can run");
                 }
                 if (hasKb) {
-                    options.put("oss-cli kb doctor", "is the archive reachable?");
+                    options.put("oss memory doctor", "is the archive reachable?");
                 }
-                options.put("oss-cli serve", "see everything attached, on one page");
+                options.put("oss serve", "see everything attached, on one page");
             }
             case PROFILE -> {
-                options.put("oss-cli onboard", "what this project expects before you contribute");
-                options.put("oss-cli review " + s, "judge a pull request against those conventions");
+                options.put("oss onboard", "what this project expects before you contribute");
+                options.put("oss review " + s, "judge a pull request against those conventions");
             }
         }
 

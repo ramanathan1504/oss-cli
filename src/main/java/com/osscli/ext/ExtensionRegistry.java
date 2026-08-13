@@ -1,3 +1,19 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.osscli.ext;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -77,8 +93,8 @@ public class ExtensionRegistry {
     public static Extension resolve(Extension.Kind kind, String name) {
         if (name != null && !name.isBlank()) {
             Extension found = byName(name)
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "no extension named \"" + name + "\" -- see: oss-cli ext list"));
+                    .orElseThrow(() ->
+                            new IllegalArgumentException("no extension named \"" + name + "\" -- see: oss ext list"));
             if (found.kind() != kind) {
                 throw new IllegalArgumentException("\"" + found.getName() + "\" is a "
                         + found.kind().lower() + " extension, not a " + kind.lower());
@@ -88,7 +104,7 @@ public class ExtensionRegistry {
         List<Extension> candidates = ofKind(kind);
         if (candidates.isEmpty()) {
             throw new IllegalArgumentException(
-                    "no " + kind.lower() + " extension is registered -- add one with: oss-cli ext add <path-to-repo>");
+                    "no " + kind.lower() + " extension is registered -- add one with: oss ext add <path-to-repo>");
         }
         if (candidates.size() > 1) {
             String names = String.join(

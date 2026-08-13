@@ -1,3 +1,19 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.osscli.cli;
 
 import com.osscli.safety.UpstreamGuard;
@@ -21,7 +37,7 @@ public class SetupCommand implements Callable<Integer> {
         Scanner scanner = new Scanner(System.in);
 
         LOGGER.info("==================================================");
-        LOGGER.info("          oss-cli Interactive Setup Wizard        ");
+        LOGGER.info("            oss Interactive Setup Wizard          ");
         LOGGER.info("==================================================");
 
         // 1. Configure GitHub Username
@@ -230,7 +246,7 @@ public class SetupCommand implements Callable<Integer> {
         LOGGER.info("\n--- Upstream writes ---");
         LOGGER.info("  Refused by default, everywhere, and there is no setting to change that.");
         LOGGER.info("  To permit ONE write, name the repository on the command line:");
-        LOGGER.info("    oss-cli bench hub {} apache/logging-log4j2", UpstreamGuard.APPROVE_FLAG);
+        LOGGER.info("    oss run hub {} apache/logging-log4j2", UpstreamGuard.APPROVE_FLAG);
         LOGGER.info("  You are still asked to confirm, every time, at the terminal.");
 
         // 13. What is on, and what is simply not configured.
@@ -248,7 +264,7 @@ public class SetupCommand implements Callable<Integer> {
             LOGGER.info("  {}<{}>  {}", e.kind().lower(), e.getName(), e.getRoot());
         }
         if (com.osscli.ext.ExtensionRegistry.all().isEmpty()) {
-            LOGGER.info("  bench/kb  none registered (oss-cli ext add <repo>)");
+            LOGGER.info("  bench/kb  none registered (oss ext add <repo>)");
         }
         LOGGER.info(
                 "  upstream  refused unless {} names the repo, and confirmed each time", UpstreamGuard.APPROVE_FLAG);
@@ -291,7 +307,7 @@ public class SetupCommand implements Callable<Integer> {
                     String.join(", ", ext.getVerbs().keySet()));
         } catch (RuntimeException e) {
             LOGGER.warn("  ⚠ not registered: {}", e.getMessage());
-            LOGGER.warn("    The rest of your setup is unaffected; add it later with: oss-cli ext add {}", path);
+            LOGGER.warn("    The rest of your setup is unaffected; add it later with: oss ext add {}", path);
         }
     }
 

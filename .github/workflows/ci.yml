@@ -18,10 +18,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: "17"
           distribution: temurin
@@ -66,7 +66,7 @@ jobs:
 
       - name: Keep the jar for inspection
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: oss-cli-jar
           path: target/oss-cli-*.jar
@@ -77,7 +77,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The page is deployed as-is with no build step, so a malformed tag ships
       # straight to production. Checking the markup here is the only gate.
@@ -153,7 +153,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Published only after the markup check passes, and only from main. A
       # pull request must never reach the live domain, and a fork cannot hold

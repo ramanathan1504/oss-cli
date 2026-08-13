@@ -1,3 +1,19 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.osscli.cli;
 
 import com.osscli.AppPaths;
@@ -39,12 +55,16 @@ public class RestoreCommand implements Callable<Integer> {
             return 1;
         }
 
-        Path dataDir = AppPaths.DATA_DIR;
-        if (!Files.exists(dataDir)) {
-            Files.createDirectories(dataDir);
+        // Restore relative to BASE_DIR, not to data/. A backup now carries reviews/ and memory/
+        // as well, and unpacking those into data/ would put every review write-up somewhere
+        // nothing looks for it -- a restore that appears to succeed and silently loses the one
+        // thing that cannot be re-derived.
+        Path base = AppPaths.BASE_DIR;
+        if (!Files.exists(base)) {
+            Files.createDirectories(base);
         }
 
-        LOGGER.info("Starting restoration of your AI Memory into '{}'...", dataDir.toAbsolutePath());
+        LOGGER.info("Restoring into '{}'...", base.toAbsolutePath());
 
         // 1. Buffer local configurations BEFORE overwriting the database
         Map<String, String> localConfigs = new HashMap<>();
@@ -57,18 +77,33 @@ public class RestoreCommand implements Callable<Integer> {
             // DB might not exist yet if it's a fresh install on a new Mac
         }
 
+        int skippedExternal = 0;
+
         // 2. Perform the Unzip Restoration
         try (ZipInputStream zis = new ZipInputStream(new FileInputStream(zipPath.toFile()))) {
             ZipEntry zipEntry = zis.getNextEntry();
             while (zipEntry != null) {
-                File newFile = new File(dataDir.toFile(), zipEntry.getName());
-
-                // Prevent Zip Slip vulnerability
-                if (!newFile.getCanonicalPath().startsWith(dataDir.toFile().getCanonicalPath())) {
-                    throw new IOException("Security Error: Bad zip entry targeting outside data directory.");
+                String name = zipEntry.getName();
+                if (name.startsWith("external/")) {
+                    // Directories another tool owns. Restored beside the rest rather than back to
+                    // wherever they came from: that path may not exist on this machine, may belong
+                    // to a different account, and writing to it unasked is not this command's call.
+                    skippedExternal++;
+                    zipEntry = zis.getNextEntry();
+                    continue;
                 }
 
-                LOGGER.info("  ↳ Restoring: {}", zipEntry.getName());
+                File newFile = new File(base.toFile(), name);
+
+                // Prevent Zip Slip vulnerability
+                if (!newFile.getCanonicalPath().startsWith(base.toFile().getCanonicalPath())) {
+                    throw new IOException("Security Error: Bad zip entry targeting outside the data directory.");
+                }
+                if (newFile.getParentFile() != null) {
+                    newFile.getParentFile().mkdirs();
+                }
+
+                LOGGER.info("  restoring {}", name);
                 try (FileOutputStream fos = new FileOutputStream(newFile)) {
                     byte[] buffer = new byte[1024];
                     int len;
@@ -79,6 +114,12 @@ public class RestoreCommand implements Callable<Integer> {
                 zipEntry = zis.getNextEntry();
             }
             zis.closeEntry();
+            if (skippedExternal > 0) {
+                LOGGER.warn(
+                        "  {} file(s) from an external archive were NOT restored. Unzip them yourself:",
+                        skippedExternal);
+                LOGGER.warn("    unzip -j '{}' 'external/*' -d <where that archive lives>", zipPath);
+            }
 
             // 3. Re-apply the buffered configurations into the restored database
             if (!localConfigs.isEmpty()) {

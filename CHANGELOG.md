@@ -1,5 +1,48 @@
 # Changelog
 
+## 1.8.2
+
+_2026-08-13_
+
+- alias: refuse shell keywords and builtins, which no shim can ever be (#44)
+
+
+## 1.7.1
+
+_2026-08-12_
+
+- Resolve relative symlinks against the link, not the working directory (#33)
+- Point at the runner from the place the question arises (#32)
+
+
+## 1.7.0
+
+_2026-08-12_
+
+- Stop one unavailable runner blocking the whole release (#31)
+- jlink: --compress=2, not zip-6 (#30)
+- Apply the formatter, and stop merging red (#29)
+- Ship a self-contained oss for every platform (#28)
+- Embeddings that run inside the process, with no server (#27)
+- Keep the service running on Linux and Windows too, not only macOS (#26)
+- Search your own data with no model at all (#25)
+- search needs Ollama; the table said it did not (#24)
+- Move pr and issue into the core too (#23)
+- Move followup into the core, where it never needed a bench (#22)
+- Stop bumping the tap from the release workflow (#21)
+
+
+## 1.6.1
+
+_2026-08-11_
+
+- Call it oss (#20)
+- Let people name this command themselves (#19)
+- Drop the local docs pane; documentation belongs on the site (#18)
+- deps: bump com.diffplug.spotless:spotless-maven-plugin from 2.43.0 to 3.9.0 (#17)
+- Apache 2.0 headers on every source file, contributing rules, dependency alerts (#12)
+
+
 ## 1.6.0
 
 _2026-08-11_

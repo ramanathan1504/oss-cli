@@ -1,0 +1,194 @@
+# Build a self-contained oss for each platform: no Java required to run it.
+#
+# Until now the answer to "how do I install this" was "first install Java 17".
+# That is a fine answer for a Java developer and a bad one for everybody else,
+# and it is a strange thing to require from a tool whose whole claim is that it
+# needs almost nothing.
+#
+# jlink builds a runtime containing only the modules this actually uses, so each
+# archive carries its own Java. Built ON the target platform rather than
+# cross-compiled, because a jlink image contains native launchers and libraries
+# for the machine that made it -- cross-building produces something that looks
+# right and does not run.
+name: Distributions
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14         # Apple Silicon
+            label: macos-arm64
+          # macos-13 (Intel) is being retired by GitHub and jobs now sit waiting for a
+          # runner that may never arrive. Intel Macs are not stranded: brew still
+          # installs there against a system JDK. Removed rather than left to hang,
+          # because a job queued forever blocks everything that depends on it.
+          - os: ubuntu-latest
+            label: linux-x64
+          - os: windows-latest
+            label: windows-x64
+    runs-on: ${{ matrix.os }}
+    # A build that cannot get a runner should fail in twenty minutes, not sit
+    # amber indefinitely. Waiting forever is indistinguishable from being stuck.
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 21, not 17, and the bytecode target is unaffected -- the pom still
+      # compiles to release 17. This is about the runtime that gets SHIPPED.
+      #
+      # The Temurin 17.0.19 image built here crashed on macOS 26.5 before it
+      # reached a single Java frame: SIGSEGV at pc=0, 4ms in, on every command.
+      # A jlink 21 image of the same jar runs fine on that machine, and so does
+      # a locally-jlinked 17 -- so it is that JDK build, not jlink and not the
+      # jar. Shipping 21 avoids it and costs nothing.
+      #
+      # Note what the smoke test below CANNOT catch: it runs on the machine that
+      # built the image, so an image that only fails on a newer OS than the
+      # runner passes here and breaks on arrival. That is exactly how this
+      # shipped in 1.7.0 and 1.7.1.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build the jar
+        shell: bash
+        run: mvn -q package -DskipTests
+
+      - name: Work out which modules are actually needed
+        id: mods
+        shell: bash
+        # Asked of the jar rather than listed by hand. A hand-written module list
+        # is right until someone adds a dependency, and then fails at runtime with
+        # a NoClassDefFoundError that points at the wrong thing.
+        run: |
+          jar=$(ls target/oss-cli-*.jar | grep -v original | head -1)
+          mods=$(jdeps --multi-release 17 --print-module-deps --ignore-missing-deps "$jar" 2>/dev/null || true)
+          [ -z "$mods" ] && mods="java.base,java.net.http,java.sql,java.desktop,java.management,jdk.crypto.ec"
+          # jdk.crypto.ec is easy to lose and only fails when TLS negotiates a
+          # curve that needs it -- which is to say, on some machines and not others.
+          case "$mods" in *jdk.crypto.ec*) ;; *) mods="$mods,jdk.crypto.ec" ;; esac
+          echo "list=$mods" >> "$GITHUB_OUTPUT"
+          echo "modules: $mods"
+
+      - name: Build a runtime that carries its own Java
+        shell: bash
+        run: |
+          set -euo pipefail
+          # zip-6 now that this builds on 21. The bare `--compress=2` spelling is
+          # deprecated there and warns on every build; it was required back when
+          # this ran on 17, where zip-N failed outright with "Invalid compression
+          # level". Change the two together or one of them breaks.
+          jlink --add-modules "${{ steps.mods.outputs.list }}" \
+                --strip-debug --no-header-files --no-man-pages --compress=zip-6 \
+                --output runtime
+
+      - name: Assemble
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=oss-${{ matrix.label }}
+          mkdir -p "$out/lib"
+          cp "$(ls target/oss-cli-*.jar | grep -v original | head -1)" "$out/lib/oss.jar"
+          cp -R runtime "$out/runtime"
+          # The matrix engine ships beside the jar. It is POSIX shell, so it is of
+          # no use on Windows -- but it is small, and an archive that carries it
+          # everywhere is simpler to reason about than one whose contents depend on
+          # the platform. `oss run` says plainly that it needs WSL there.
+          cp -R runner "$out/runner"
+          cp -R tools "$out/tools"
+          cp LICENSE README.md "$out/" 2>/dev/null || true
+
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cat > "$out/oss.cmd" <<'EOF'
+          @echo off
+          "%~dp0runtime\bin\java.exe" -jar "%~dp0lib\oss.jar" %*
+          EOF
+          else
+            cat > "$out/oss" <<'EOF'
+          #!/bin/sh
+          # Resolve symlinks so this works when linked onto PATH.
+          #
+          # A relative link must be resolved against the DIRECTORY OF THE LINK, not
+          # the current directory. Homebrew installs exactly such a link
+          # (bin/oss -> ../Cellar/oss/<v>/bin/oss), so resolving it naively produced
+          # "cd: ../Cellar/...: No such file or directory" from anywhere except one
+          # folder -- and the command was unusable after a perfectly successful
+          # install.
+          self=$0
+          while [ -L "$self" ]; do
+            link=$(readlink "$self")
+            case "$link" in
+              /*) self=$link ;;
+              *)  self=$(dirname "$self")/$link ;;
+            esac
+          done
+          here=$(cd "$(dirname "$self")" && pwd)
+          exec "$here/runtime/bin/java" -jar "$here/lib/oss.jar" "$@"
+          EOF
+            chmod +x "$out/oss"
+          fi
+
+      - name: Check it runs WITHOUT any Java on the path
+        shell: bash
+        # The whole point of this workflow. Running it with the runner's Java
+        # still present would prove nothing at all.
+        run: |
+          set -euo pipefail
+          out=oss-${{ matrix.label }}
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cmd //c "$out\\oss.cmd --version"
+          else
+            env -i HOME="$HOME" PATH=/usr/bin:/bin "./$out/oss" --version
+          fi
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=oss-${{ matrix.label }}
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a -tzip "$out.zip" "$out" >/dev/null
+          else
+            tar -czf "$out.tar.gz" "$out"
+          fi
+          ls -lh oss-${{ matrix.label }}.* | awk '{print "  " $5, $9}'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oss-${{ matrix.label }}
+          path: |
+            oss-*.tar.gz
+            oss-*.zip
+
+  attach:
+    needs: build
+    # always(), so one unavailable platform cannot withhold the archives that DID
+    # build. A release missing one architecture beats a release missing all four.
+    if: ${{ always() && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+        continue-on-error: true
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # --clobber so re-running a release replaces its archives rather than
+          # failing on an asset that already exists.
+          gh release upload "${GITHUB_REF_NAME}" oss-*.tar.gz oss-*.zip \
+            --repo "${GITHUB_REPOSITORY}" --clobber

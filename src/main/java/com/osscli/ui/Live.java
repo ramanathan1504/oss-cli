@@ -1,3 +1,19 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.osscli.ui;
 
 import java.io.PrintStream;
@@ -16,7 +32,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <ul>
  *   <li><b>It writes to stderr, never stdout.</b> Output is piped, redirected and parsed;
- *       {@code oss-cli ext list > file} must not collect spinner frames. Progress is commentary, not
+ *       {@code oss ext list > file} must not collect spinner frames. Progress is commentary, not
  *       result, and the two go to different places.
  *   <li><b>It degrades to plain lines when there is no terminal.</b> Carriage-return animation in a
  *       log file produces one unreadable mega-line. Not a TTY means one line per step, no cursor

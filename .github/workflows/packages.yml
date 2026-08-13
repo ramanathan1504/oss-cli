@@ -1,0 +1,206 @@
+# Build a .deb and a Chocolatey package from the self-contained archives.
+#
+# Both wrap the same tree the tarballs contain, so neither needs Java on the
+# target machine and neither rebuilds anything. They exist so that installing
+# does not mean "download a tarball and work out where to put it".
+#
+# Publishing is separate from building, deliberately. Building needs nothing;
+# publishing needs credentials only the owner can create, so the packages are
+# always produced and attached to the release, and the publish steps skip
+# themselves with an explanation when their secret is absent. A pipeline that
+# fails because a secret is missing teaches people to ignore a red build.
+name: Packages
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to package (e.g. v1.7.1)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  deb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Work out which release to package
+        id: rel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          [ -n "$tag" ] || { echo "::error::no tag"; exit 1; }
+          echo "tag=$tag"        >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch the Linux archive
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release download "${{ steps.rel.outputs.tag }}" \
+            --repo "$GITHUB_REPOSITORY" --pattern 'oss-linux-x64.tar.gz'
+          tar -xzf oss-linux-x64.tar.gz
+
+      - name: Build the .deb
+        run: |
+          set -euo pipefail
+          v="${{ steps.rel.outputs.version }}"
+          root="pkg"
+          # /opt, not /usr/lib: this is a self-contained tree with its own runtime,
+          # which is exactly what /opt is for. Debian policy would want the runtime
+          # unbundled under /usr, and unbundling it is the thing being avoided.
+          mkdir -p "$root/opt/oss" "$root/usr/bin" "$root/DEBIAN"
+          cp -R oss-linux-x64/* "$root/opt/oss/"
+          ln -sf /opt/oss/oss "$root/usr/bin/oss"
+
+          installed_kb=$(du -sk "$root/opt" | cut -f1)
+          cat > "$root/DEBIAN/control" <<EOF
+          Package: oss
+          Version: $v
+          Section: devel
+          Priority: optional
+          Architecture: amd64
+          Maintainer: ramanathan1504 <noreply@users.noreply.github.com>
+          Installed-Size: $installed_kb
+          Homepage: https://ubuos.com
+          Description: Maintainer workbench for open-source work
+           Reads any repository through the GitHub API, runs what needs running
+           through attached runners, and remembers what you worked out.
+           .
+           Self-contained: no Java, no model server and no account are required.
+          EOF
+
+          # No Depends line at all. The archive carries its own runtime, and
+          # declaring a JDK dependency would install a second one that never runs.
+          dpkg-deb --build --root-owner-group "$root" "oss_${v}_amd64.deb"
+          ls -lh oss_*.deb | awk '{print "  " $5, $9}'
+
+      - name: Check it installs and runs
+        run: |
+          set -euo pipefail
+          sudo dpkg -i oss_*.deb
+          # PATH deliberately excludes any JDK: the point is that none is needed.
+          env -i HOME="$HOME" PATH=/usr/bin:/bin oss --version
+          sudo dpkg -r oss
+          echo "  installed, ran, and removed cleanly"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: oss_*.deb
+
+      - name: Attach to the release
+        if: ${{ github.event_name == 'release' || inputs.tag != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ steps.rel.outputs.tag }}" oss_*.deb \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+  choco:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Work out which release to package
+        id: rel
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          [ -n "$tag" ] || { echo "::error::no tag"; exit 1; }
+          echo "tag=$tag"         >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build the Chocolatey package
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          v="${{ steps.rel.outputs.version }}"
+          tag="${{ steps.rel.outputs.tag }}"
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}/oss-windows-x64.zip"
+
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern 'oss-windows-x64.zip'
+          sha=$(sha256sum oss-windows-x64.zip | cut -d' ' -f1)
+
+          mkdir -p choco/tools
+          cat > choco/oss.nuspec <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+            <metadata>
+              <id>oss</id>
+              <version>$v</version>
+              <title>oss</title>
+              <authors>ramanathan1504</authors>
+              <projectUrl>https://ubuos.com</projectUrl>
+              <licenseUrl>https://www.apache.org/licenses/LICENSE-2.0</licenseUrl>
+              <requireLicenseAcceptance>false</requireLicenseAcceptance>
+              <description>Maintainer workbench: reads any repository, runs what needs running, remembers what you worked out. Self-contained -- no Java required.</description>
+              <tags>oss maintainer github cli</tags>
+            </metadata>
+            <files><file src="tools\\**" target="tools" /></files>
+          </package>
+          EOF
+
+          # Downloaded at install time rather than embedded: Chocolatey's own
+          # guidance for packages over a few MB, and this one is ~150 MB. The
+          # checksum is baked in, so a substituted archive fails the install.
+          cat > choco/tools/chocolateyinstall.ps1 <<EOF
+          \$ErrorActionPreference = 'Stop'
+          Install-ChocolateyZipPackage \`
+            -PackageName 'oss' \`
+            -Url64bit    '$url' \`
+            -Checksum64  '$sha' \`
+            -ChecksumType64 'sha256' \`
+            -UnzipLocation "\$(Split-Path -Parent \$MyInvocation.MyCommand.Definition)"
+          EOF
+
+          cat > choco/tools/chocolateyuninstall.ps1 <<'EOF'
+          $ErrorActionPreference = 'Stop'
+          # The zip package removes its own files; nothing else was installed.
+          EOF
+
+          cd choco && choco pack --limit-output
+          ls *.nupkg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: choco
+          path: choco/*.nupkg
+
+      - name: Attach to the release
+        shell: bash
+        if: ${{ github.event_name == 'release' || inputs.tag != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ steps.rel.outputs.tag }}" choco/*.nupkg \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Publish to Chocolatey
+        shell: bash
+        if: ${{ env.CHOCO_API_KEY != '' }}
+        env:
+          CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
+        run: |
+          cd choco
+          choco apikey --key "$CHOCO_API_KEY" --source https://push.chocolatey.org/
+          choco push *.nupkg --source https://push.chocolatey.org/
+
+      - name: Say what is needed to publish
+        shell: bash
+        if: ${{ env.CHOCO_API_KEY == '' }}
+        env:
+          CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
+        run: |
+          echo "Built the package but did not publish: CHOCO_API_KEY is not set."
+          echo "It is attached to the release and installable from the .nupkg."
+          echo "To publish to chocolatey.org, add CHOCO_API_KEY as a repository secret."

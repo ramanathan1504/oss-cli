@@ -1,3 +1,19 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.osscli.github;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -88,9 +104,10 @@ public class GitHubClient {
                 .orElse("");
 
         return switch (status) {
-            case 401 -> "GitHub rejected the token (401 Bad credentials)" + detail
-                    + ". The stored token is expired or revoked -- create a new one at "
-                    + "https://github.com/settings/tokens and register it with 'oss-cli setup'.";
+            case 401 ->
+                "GitHub rejected the token (401 Bad credentials)" + detail
+                        + ". The stored token is expired or revoked -- create a new one at "
+                        + "https://github.com/settings/tokens and register it with 'oss setup'.";
             case 403, 429 -> {
                 boolean exhausted = response.headers()
                         .firstValue("x-ratelimit-remaining")
@@ -104,8 +121,9 @@ public class GitHubClient {
                         : "GitHub denied the request (" + status + ")" + detail
                                 + ". The token is likely missing the required scopes.";
             }
-            case 404 -> "Repository or endpoint not found (404)" + detail
-                    + ". It may be private, renamed, or the token lacks access.";
+            case 404 ->
+                "Repository or endpoint not found (404)" + detail
+                        + ". It may be private, renamed, or the token lacks access.";
             default -> {
                 String body = com.osscli.util.Redactor.redact(response.body()).text();
                 yield "GitHub API call failed with status " + status + detail + ": "

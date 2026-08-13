@@ -1,3 +1,19 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.osscli.cli;
 
 import com.osscli.AppPaths;
@@ -78,7 +94,7 @@ public class DoctorCommand implements Callable<Integer> {
         checkData();
 
         LOGGER.info("");
-        LOGGER.info("  oss-cli doctor");
+        LOGGER.info("  oss doctor");
         LOGGER.info("  ─────────────────────────────────────────────────────────────");
         for (Check c : checks) {
             LOGGER.info("  [{}] {} — {}", c.level().tag, c.what(), c.detail());
@@ -133,7 +149,7 @@ public class DoctorCommand implements Callable<Integer> {
                         "found only at the pre-rename location " + legacy,
                         "Run any command once — it relocates automatically.");
             } else {
-                warn("database", "not created yet", "Run 'oss-cli setup' to create it.");
+                warn("database", "not created yet", "Run 'oss setup' to create it.");
             }
             return;
         }
@@ -173,7 +189,7 @@ public class DoctorCommand implements Callable<Integer> {
         if (guidance != null) {
             checkOneModel("guidance model", guidance, false);
         } else {
-            warn("guidance model", "not configured", "Run 'oss-cli setup', or set ollama.model.guidance.");
+            warn("guidance model", "not configured", "Run 'oss setup', or set ollama.model.guidance.");
         }
         if (triage != null) {
             checkOneModel("triage model", triage, false);
@@ -224,7 +240,7 @@ public class DoctorCommand implements Callable<Integer> {
                     fail(
                             "vectors in " + table,
                             "produced by " + models.size() + " different models: " + models,
-                            "Re-sync to rebuild them with one model: oss-cli sync --me");
+                            "Re-sync to rebuild them with one model: oss sync --me");
                 } else {
                     String only = models.iterator().next();
                     int n = byModel.get(only);
@@ -232,7 +248,7 @@ public class DoctorCommand implements Callable<Integer> {
                         warn(
                                 table,
                                 n + " vectors with no recorded model",
-                                "Re-sync once so provenance is recorded: oss-cli sync --me");
+                                "Re-sync once so provenance is recorded: oss sync --me");
                     } else if (configuredModel != null && !only.equals(configuredModel)) {
                         warn(
                                 table,
@@ -252,7 +268,7 @@ public class DoctorCommand implements Callable<Integer> {
     private void checkGitHub() {
         String user = cfg("github.username", null);
         if (user == null || user.isBlank()) {
-            warn("github username", "not configured", "Run 'oss-cli setup'.");
+            warn("github username", "not configured", "Run 'oss setup'.");
         } else {
             ok("github username", user);
         }
@@ -332,18 +348,18 @@ public class DoctorCommand implements Callable<Integer> {
         int issues = count("issues");
 
         if (issues == 0) {
-            warn("backlog", "no issues synced", "oss-cli sync --all");
+            warn("backlog", "no issues synced", "oss sync --all");
         } else {
             ok("backlog", issues + " issues");
         }
 
         if (notes == 0) {
-            warn("your notes", "none indexed", "oss-cli sync --me");
+            warn("your notes", "none indexed", "oss sync --me");
         } else if (passages == 0) {
             warn(
                     "your notes",
                     notes + " notes but no passages — long notes are unsearchable",
-                    "oss-cli sync --me   (builds passage-level embeddings)");
+                    "oss sync --me   (builds passage-level embeddings)");
         } else {
             ok("your notes", notes + " notes, " + passages + " passages");
         }

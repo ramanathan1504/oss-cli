@@ -1,3 +1,19 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.osscli.cli;
 
 import com.osscli.llm.OllamaClient;
@@ -89,8 +105,11 @@ public class SearchCommand implements Callable<Integer> {
         }
 
         if (embeddings.isEmpty()) {
-            LOGGER.error("No vector embeddings found in the database. Please run 'duplicates' first to generate them.");
-            return 1;
+            // No embeddings means no model has run -- but the ISSUES are right here, and refusing
+            // to search data you already have is the wrong answer to "you have not installed
+            // Ollama". Falling back keeps finding working; a model, when present, still wins on
+            // meaning and this becomes the floor rather than the ceiling.
+            return searchWithoutAModel(issueMap);
         }
 
         LOGGER.info("Generating semantic vector for query: \"{}\" (Model: {})...", query, modelName);
@@ -99,9 +118,14 @@ public class SearchCommand implements Callable<Integer> {
 
         try {
             queryVector = client.generateEmbedding(query);
-        } catch (IOException | InterruptedException e) {
-            LOGGER.error("  ↳ [Error] Failed to generate embedding: {}", e.getMessage());
-            return 1;
+        } catch (IOException | InterruptedException | RuntimeException e) {
+            // Stored vectors are useless without one for the QUERY, so a stopped model server made
+            // search fail outright even though every issue was sitting in SQLite. That is the
+            // common case -- embeddings from a previous run, no model running now -- and failing
+            // there taught people that search needs a server. It does not; it only searches better
+            // with one.
+            LOGGER.info("Model server unreachable ({}). Falling back to text search.", e.getMessage());
+            return searchWithoutAModel(issueMap);
         }
 
         LOGGER.info("Scanning vectors and calculating cosine similarity...");
@@ -160,4 +184,42 @@ public class SearchCommand implements Callable<Integer> {
     }
 
     private static record SearchResult(String repoName, Issue issue, double similarity) {}
+
+    /**
+     * Rank by term overlap, using what is already in SQLite.
+     *
+     * <p>TF-IDF, in memory, no server and no network. It answers a different question from a vector
+     * search -- which words two texts share, weighted by how rare those words are -- and that is
+     * enough to surface related work rather than only exact matches: "database manager" reaches
+     * AbstractDatabaseManager because identifiers are indexed split as well as whole.
+     */
+    private Integer searchWithoutAModel(Map<String, Issue> issueMap) {
+        if (issueMap.isEmpty()) {
+            LOGGER.error("Nothing indexed yet. Run 'sync' first.");
+            return 1;
+        }
+        LOGGER.info("No embeddings found — searching {} item(s) by text instead.", issueMap.size());
+        LOGGER.info("(A local model would add search by meaning; this finds by shared terms.)");
+
+        com.osscli.retrieval.TextIndex index = new com.osscli.retrieval.TextIndex();
+        issueMap.forEach((key, issue) -> index.add(key, issue.title(), issue.body()));
+        index.build();
+
+        List<com.osscli.retrieval.TextIndex.Hit> hits = index.search(query, limit);
+        if (hits.isEmpty()) {
+            LOGGER.info("Nothing shares a meaningful term with that query.");
+            return 0;
+        }
+        int rank = 1;
+        for (com.osscli.retrieval.TextIndex.Hit hit : hits) {
+            Issue issue = issueMap.get(hit.id());
+            LOGGER.info(
+                    "{}. [{}] {}  (score {})",
+                    rank++,
+                    hit.id(),
+                    issue == null ? hit.title() : issue.title(),
+                    String.format("%.2f", hit.score()));
+        }
+        return 0;
+    }
 }
