@@ -40,7 +40,7 @@ if [ -z "$GITHUB_TOKEN" ]; then
 fi
 
 # Navigate to the project directory
-cd "$HOME/apache/issue-analyzer"
+cd "$HOME/oss-cli"   # wherever you cloned it
 
 echo "=================================================="
 echo "Phase 1: Compiling Clean Developer Build (Maven)"
@@ -51,13 +51,13 @@ echo ""
 echo "=================================================="
 echo "Phase 2: Updating Knowledge Base"
 echo "=================================================="
-oss-cli sync --all
-oss-cli sync --me
-oss-cli analyze -r apache/logging-log4j2
-oss-cli duplicates -t 0.85 -r apache/logging-log4j2
-oss-cli report -r apache/logging-log4j2
-oss-cli report --me -r apache/logging-log4j2
-oss-cli trend --save -r apache/logging-log4j2
+oss sync --all
+oss sync --me
+oss analyze -r owner/name
+oss duplicates -t 0.85 -r owner/name
+oss report -r owner/name
+oss report --me -r owner/name
+oss trend --save -r owner/name
 
 echo ""
 echo "=================================================="
@@ -112,24 +112,24 @@ function check_and_notify() {
 # QUERY 1: Hidden Criticals (Security Risks)
 CURRENT_HIDDEN=$(sqlite3 data/issue_intelligence.db "
 SELECT i.number FROM issues i JOIN ai_analysis a ON i.number = a.issue_number AND i.repository = a.repository
-WHERE i.repository = 'apache/logging-log4j2' AND a.severity = 'Critical' 
+WHERE i.repository = 'owner/name' AND a.severity = 'Critical' 
 AND i.number NOT IN (SELECT issue_number FROM labels WHERE label_name LIKE '%security%') ORDER BY i.number ASC;")
 
-check_and_notify "data/state_hidden.txt" "$CURRENT_HIDDEN" "🚨" "Log4j Security Alert" "New Hidden Criticals Found!"
+check_and_notify "data/state_hidden.txt" "$CURRENT_HIDDEN" "🚨" "Security Alert" "New Hidden Criticals Found!"
 
 # QUERY 2: Brand New Critical Issues (Reported in the last 24 Hours)
 NEW_CRITICALS=$(sqlite3 data/issue_intelligence.db "
 SELECT i.number FROM issues i JOIN ai_analysis a ON i.number = a.issue_number AND i.repository = a.repository
-WHERE i.repository = 'apache/logging-log4j2' AND a.severity = 'Critical' 
+WHERE i.repository = 'owner/name' AND a.severity = 'Critical' 
 AND julianday('now') - julianday(i.created_at) <= 1 ORDER BY i.number ASC;")
 
-check_and_notify "data/state_new_criticals.txt" "$NEW_CRITICALS" "🛡️" "Log4j Triage Alert" "New Critical Bugs Reported Today!"
+check_and_notify "data/state_new_criticals.txt" "$NEW_CRITICALS" "🛡️" "Triage Alert" "New Critical Bugs Reported Today!"
 
 # QUERY 3: My Personal Stale PRs (Inactivity > 30 Days)
 MY_USERNAME=$(sqlite3 data/issue_intelligence.db "SELECT value FROM system_config WHERE key = 'github.username';")
 MY_STALE_PRS=$(sqlite3 data/issue_intelligence.db "
 SELECT number FROM issues 
-WHERE repository = 'apache/logging-log4j2' AND is_pull_request = 1 
+WHERE repository = 'owner/name' AND is_pull_request = 1 
 AND author = '$MY_USERNAME' AND julianday('now') - julianday(updated_at) > 30 ORDER BY number ASC;")
 
 check_and_notify "data/state_my_stale.txt" "$MY_STALE_PRS" "👤" "Personal Developer Alert" "Your PRs are going stale!"
@@ -161,7 +161,7 @@ Create a `.plist` file at `~/Library/LaunchAgents/org.apache.osscli.plist`:
     <key>ProgramArguments</key>
     <array>
         <!-- Ensure this path points to your absolute script location! -->
-        <string>/Users/YOUR_USERNAME/apache/issue-analyzer/osscli-master.sh</string>
+        <string>/Users/YOUR_USERNAME/oss-cli/osscli-master.sh</string>
     </array>
 
     <!-- Run every 1 hour (3600 seconds) -->
@@ -174,9 +174,9 @@ Create a `.plist` file at `~/Library/LaunchAgents/org.apache.osscli.plist`:
 
     <!-- Output Logs for debugging -->
     <key>StandardOutPath</key>
-    <string>/Users/YOUR_USERNAME/apache/issue-analyzer/osscli_run.log</string>
+    <string>/Users/YOUR_USERNAME/oss-cli/osscli_run.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/YOUR_USERNAME/apache/issue-analyzer/osscli_run.log</string>
+    <string>/Users/YOUR_USERNAME/oss-cli/osscli_run.log</string>
 </dict>
 </plist>
 ```
@@ -202,7 +202,7 @@ Use these native macOS terminal commands to control your automation daemon:
     ```
 *   **Monitor the Live Execution Logs:**
     ```bash
-    tail -f ~/apache/issue-analyzer/osscli_run.log
+    tail -f ~/.oss-cli/logs/oss-cli.log
     ```
 
 ---
@@ -212,12 +212,12 @@ Use these native macOS terminal commands to control your automation daemon:
 Because the notification engine uses pure SQLite commands, you can easily tweak `osscli-master.sh` to track whatever matters to your specific workflow.
 
 **Example 1: Track a different repository**
-Change `WHERE repository = 'apache/logging-log4j2'` to `WHERE repository = 'apache/kafka'`.
+Change `WHERE repository = 'owner/name'` to whichever repository you want watched.
 
 **Example 2: Alert me when a new PR mentions a specific keyword**
 ```bash
 KAFKA_DEADLOCKS=$(sqlite3 data/issue_intelligence.db "
-SELECT number FROM issues WHERE repository = 'apache/kafka' 
+SELECT number FROM issues WHERE repository = 'owner/name' 
 AND is_pull_request = 1 AND body LIKE '%deadlock%';")
 
 check_and_notify "data/state_deadlocks.txt" "$KAFKA_DEADLOCKS" "⚙️" "Kafka Copilot" "New PR mentions a deadlock!"
