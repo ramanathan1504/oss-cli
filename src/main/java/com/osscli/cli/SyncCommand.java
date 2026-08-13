@@ -513,10 +513,25 @@ public class SyncCommand implements Callable<Integer> {
                     for (java.nio.file.Path file : files) {
                         String fileName = file.getFileName().toString();
                         String absolutePath = file.toAbsolutePath().toString();
-                        long lastModified =
-                                java.nio.file.Files.getLastModifiedTime(file).toMillis();
+                        long lastModified;
+                        byte[] fileBytes;
 
-                        byte[] fileBytes = java.nio.file.Files.readAllBytes(file);
+                        // Reading is its own failure, separate from embedding, and it must not end
+                        // the folder. These files commonly live in a cloud-synced directory where
+                        // the bytes are fetched on demand, so one file whose download stalls throws
+                        // where every other file would have been fine. That exception used to
+                        // escape to the per-directory catch below, abandoning every remaining file
+                        // in the folder -- a partial index reported as a single timeout line, which
+                        // is indistinguishable from a folder that was simply small.
+                        try {
+                            lastModified = java.nio.file.Files.getLastModifiedTime(file)
+                                    .toMillis();
+                            fileBytes = java.nio.file.Files.readAllBytes(file);
+                        } catch (java.io.IOException e) {
+                            LOGGER.warn("    ↳ [Warning] Could not read '{}': {}", fileName, e.getMessage());
+                            LOGGER.warn("      Skipped; the rest of this folder continues. Re-run to pick it up.");
+                            continue;
+                        }
                         String rawContent = new String(fileBytes, java.nio.charset.StandardCharsets.UTF_8);
 
                         // Scrub BEFORE anything else touches it. Everything downstream -- the

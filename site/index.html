@@ -311,7 +311,7 @@ td .need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)}
       </p>
 
       <div class="install-line">
-        <code id="install-cmd"><span class="sigil">$ </span>brew install ramanathan1504/oss-cli/oss-cli</code>
+        <code id="install-cmd"><span class="sigil">$ </span>brew install ramanathan1504/oss-cli/oss</code>
         <button class="copy-btn" type="button" data-copy="#install-cmd">Copy</button>
       </div>
       <p class="install-alt">
@@ -320,14 +320,14 @@ td .need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)}
       </p>
     </div>
 
-    <div class="term" role="img" aria-label="Terminal showing oss-cli review output for pull request 4234">
+    <div class="term" role="img" aria-label="Terminal showing oss review output for pull request 4234">
       <div class="term-bar">
         <span class="dot" style="background:#E0685C"></span>
         <span class="dot" style="background:#E0B44C"></span>
         <span class="dot" style="background:#5BB98C"></span>
-        <span class="term-title">oss-cli review 4234</span>
+        <span class="term-title">oss review 4234</span>
       </div>
-<pre class="term-body"><span class="c">$</span> oss-cli review 4234
+<pre class="term-body"><span class="c">$</span> oss review 4234
 
   <span class="h">Add ZstdCompressAction to support configurable compression levels</span>
   by katstack <span class="c">·</span> open <span class="c">·</span> into 2.x <span class="c">·</span> head 29cccdf
@@ -388,7 +388,7 @@ td .need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)}
       <div class="rung opt">
         <span class="mark" aria-hidden="true">○</span>
         <span class="what">Search by meaning<span class="needs">optional: the built-in model</span></span>
-        <span class="gives">One command, oss-cli model --fetch, puts a 22 MB model on your disk and runs it inside the process. No server and no daemon, and it is never downloaded unless you ask. Without it, search and duplicates rank by shared terms instead.</span>
+        <span class="gives">One command, oss model --fetch, puts a 22 MB model on your disk and runs it inside the process. No server and no daemon, and it is never downloaded unless you ask. Without it, search and duplicates rank by shared terms instead.</span>
       </div>
       <div class="rung opt">
         <span class="mark" aria-hidden="true">○</span>
@@ -461,7 +461,7 @@ td .need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)}
       <div class="tabpanel" role="tabpanel" id="panel-mac" aria-labelledby="tab-mac">
         <div class="step">
           <span class="step-h">1 · Install</span>
-<pre class="block">brew install ramanathan1504/oss-cli/oss-cli</pre>
+<pre class="block">brew install ramanathan1504/oss-cli/oss</pre>
           <p class="note">Homebrew pulls in OpenJDK 17 for you and puts <code>oss-cli</code> on your PATH.</p>
         </div>
         <div class="step">
@@ -472,7 +472,7 @@ security add-generic-password -a "$USER" -s github_token \
         </div>
         <div class="step">
           <span class="step-h">3 · Check everything</span>
-<pre class="block">oss-cli doctor</pre>
+<pre class="block">oss doctor</pre>
         </div>
       </div>
 
@@ -507,7 +507,7 @@ chmod +x ~/.local/bin/oss-cli</pre>
 <pre class="block"><span class="c"># add to ~/.bashrc or ~/.zshrc to persist it</span>
 export GITHUB_TOKEN="ghp_your_token_here"
 
-oss-cli doctor</pre>
+oss doctor</pre>
         </div>
       </div>
 
@@ -542,7 +542,7 @@ $env:Path += ";$dir"</pre>
 <pre class="block">setx GITHUB_TOKEN "ghp_your_token_here"
 
 <span class="c"># open a new terminal, then</span>
-oss-cli doctor</pre>
+oss doctor</pre>
         </div>
       </div>
     </div>
@@ -553,18 +553,18 @@ oss-cli doctor</pre>
     <div class="step">
       <span class="step-h">Register a repository and sync it</span>
 <pre class="block"><span class="c"># any repository you want to follow</span>
-oss-cli sync --add apache/kafka
+oss sync --add apache/kafka
 
 <span class="c"># pulls issues and PRs, then builds the search index</span>
-oss-cli sync --all
+oss sync --all
 
 <span class="c"># review a pull request with everything you have connected</span>
-oss-cli review 4234 -r apache/kafka</pre>
+oss review 4234 -r apache/kafka</pre>
     </div>
     <p class="note">
-      <strong>Optional, any time:</strong> run <code>oss-cli model --fetch</code> for search by
+      <strong>Optional, any time:</strong> run <code>oss model --fetch</code> for search by
       meaning, install <a href="https://ollama.com">Ollama</a> for local answers and verdicts, then
-      run <code>oss-cli setup</code> to point OSS-CLI at your own note folders. Skip all three and
+      run <code>oss setup</code> to point OSS-CLI at your own note folders. Skip all three and
       every command above still works.
     </p>
   </div>
@@ -576,7 +576,7 @@ oss-cli review 4234 -r apache/kafka</pre>
     <p class="eyebrow">Reference</p>
     <h2>The commands you will actually use</h2>
     <p class="sub">
-      Run <code>oss-cli --help</code> for the full list, or <code>oss-cli doctor</code> when
+      Run <code>oss --help</code> for the full list, or <code>oss doctor</code> when
       something is not behaving — it checks every prerequisite and names what to fix.
     </p>
 
