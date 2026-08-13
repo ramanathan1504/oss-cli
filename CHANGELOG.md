@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.10.1
+
+_2026-08-13_
+
+- A backup written into an indexed folder feeds itself (#67)
+- Put the new page where it is actually served from (#66)
+- The test isolation did nothing, and the test deleted a real database (#65)
+- There are unit tests now, and CI already runs them (#64)
+
+
 ## 1.10.0
 
 _2026-08-13_
