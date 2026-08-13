@@ -8,37 +8,55 @@
 <meta property="og:title" content="OSS-CLI">
 <meta property="og:description" content="A local-first investigation workbench for open-source maintainers.">
 <meta property="og:type" content="website">
+<meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230B1B24'/><path d='M8 12h5M8 17h9M8 22h6' stroke='%23C9A227' stroke-width='2.4' stroke-linecap='round'/><circle cx='23' cy='12' r='2.4' fill='%234E9A8F'/></svg>">
+
+<script>
+/* Applied before first paint so the chosen theme never flashes. */
+(function(){try{var s=localStorage.getItem('ubuos-theme');if(s==='dark'||s==='light'){document.documentElement.setAttribute('data-theme',s);}}catch(e){}})();
+</script>
 
 <style>
 /* ============================================================
-   Tokens. Neutrals carry a petrol bias so they read as chosen
-   rather than inherited; brass is the single loud voice.
+   TOKENS
+   Dark is the default: this is a terminal tool, and the pages
+   should feel like the thing they describe. Light is a
+   deliberate opt-out, not the baseline.
+
+   Neutrals carry a petrol bias so they read as chosen rather
+   than inherited; brass is the single loud voice, patina is
+   the quiet confirmation.
    ============================================================ */
 :root{
-  --petrol-900:#08161D;
-  --petrol-800:#0B1B24;
-  --petrol-700:#122A35;
-  --petrol-600:#1D3B47;
-  --brass:#C9A227;
-  --brass-dim:#9A7C1C;
-  --patina:#3E8C82;
-  --rust:#B4553A;
+  /* fixed brand colours — identical in both themes, because the
+     terminal chrome is dark whichever way the page is set */
+  --petrol-900:#040E13;
+  --petrol-800:#08161D;
+  --petrol-700:#102530;
+  --petrol-600:#1B3B48;
+  --brass:#D8B23A;
+  --patina:#5FBFB0;
+  --rust:#E08066;
 
-  --bg:#EDF2F3;
-  --bg-raised:#F7FAFA;
-  --bg-sunken:#E3EBEC;
-  --ink:#0B1B24;
-  --ink-soft:#3E5560;
-  --ink-faint:#6E858F;
-  --rule:#CFDCDE;
-  --accent:#8A6A0F;
-  --accent-bright:#C9A227;
-  --link:#256A62;
+  /* themed surface + text */
+  --bg:#07141A;
+  --bg-raised:#0D202A;
+  --bg-sunken:#040E13;
+  --ink:#E6EFF0;
+  --ink-soft:#A9BEC5;
+  --ink-faint:#7B949C;
+  --rule:#1A3540;
+  --rule-soft:#122831;
+  --accent:#D8B23A;
+  --accent-bright:#E8C558;
+  --accent-ink:#07141A;
+  --link:#68C0B4;
+  --glow:rgba(216,178,58,.10);
 
-  --term-bg:#0B1B24;
+  --term-bg:#040E13;
   --term-ink:#D6E4E6;
   --term-dim:#7A939C;
+  --term-frame:#3F6B7A;
 
   --mono:ui-monospace,"SF Mono",SFMono-Regular,"JetBrains Mono","Cascadia Mono",Menlo,Consolas,monospace;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
@@ -46,50 +64,64 @@
   --measure:66ch;
   --gutter:clamp(1.25rem,4vw,2.5rem);
   --shell:min(1180px,100% - var(--gutter) * 2);
+  --radius:12px;
 }
-@media (prefers-color-scheme:dark){
-  :root{
-    --bg:#08161D;
-    --bg-raised:#0E222C;
-    --bg-sunken:#050F14;
-    --ink:#E4EDEE;
-    --ink-soft:#A7BCC3;
-    --ink-faint:#718A93;
-    --rule:#1B3641;
-    --accent:#D8B23A;
-    --accent-bright:#E8C558;
-    --link:#5FB5AA;
-    --term-bg:#050F14;
-    --term-ink:#D6E4E6;
-    --term-dim:#6E888F;
+/* A viewer who has not chosen gets their system preference. */
+@media (prefers-color-scheme:light){
+  :root:not([data-theme="dark"]){
+    --bg:#EDF2F3;
+    --bg-raised:#F8FBFB;
+    --bg-sunken:#E2EBEC;
+    --ink:#08161D;
+    --ink-soft:#3A525D;
+    --ink-faint:#536A74;
+    --rule:#CBDADD;
+    --rule-soft:#DDE7E8;
+    --accent:#8A6A0F;
+    --accent-bright:#7A5D0C;
+    --accent-ink:#FFFFFF;
+    --link:#1B6259;
+    --glow:rgba(138,106,15,.07);
   }
 }
-:root[data-theme="dark"]{
-  --bg:#08161D; --bg-raised:#0E222C; --bg-sunken:#050F14;
-  --ink:#E4EDEE; --ink-soft:#A7BCC3; --ink-faint:#718A93; --rule:#1B3641;
-  --accent:#D8B23A; --accent-bright:#E8C558; --link:#5FB5AA;
-  --term-bg:#050F14; --term-ink:#D6E4E6; --term-dim:#6E888F;
-}
+/* An explicit choice beats the system preference, both ways. */
 :root[data-theme="light"]{
-  --bg:#EDF2F3; --bg-raised:#F7FAFA; --bg-sunken:#E3EBEC;
-  --ink:#0B1B24; --ink-soft:#3E5560; --ink-faint:#6E858F; --rule:#CFDCDE;
-  --accent:#8A6A0F; --accent-bright:#C9A227; --link:#256A62;
-  --term-bg:#0B1B24; --term-ink:#D6E4E6; --term-dim:#7A939C;
+  --bg:#EDF2F3; --bg-raised:#F8FBFB; --bg-sunken:#E2EBEC;
+  --ink:#08161D; --ink-soft:#3A525D; --ink-faint:#536A74;
+  --rule:#CBDADD; --rule-soft:#DDE7E8;
+  --accent:#8A6A0F; --accent-bright:#7A5D0C; --accent-ink:#FFFFFF;
+  --link:#1B6259; --glow:rgba(138,106,15,.07);
+}
+:root[data-theme="dark"]{
+  --bg:#07141A; --bg-raised:#0D202A; --bg-sunken:#040E13;
+  --ink:#E6EFF0; --ink-soft:#A9BEC5; --ink-faint:#7B949C;
+  --rule:#1A3540; --rule-soft:#122831;
+  --accent:#D8B23A; --accent-bright:#E8C558; --accent-ink:#07141A;
+  --link:#68C0B4; --glow:rgba(216,178,58,.10);
 }
 
 *,*::before,*::after{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:5rem}
 body{
   margin:0;background:var(--bg);color:var(--ink);
   font-family:var(--sans);font-size:17px;line-height:1.6;
   -webkit-font-smoothing:antialiased;
 }
-h1,h2,h3{margin:0;text-wrap:balance;font-weight:600;letter-spacing:-0.02em}
+h1,h2,h3{margin:0;text-wrap:balance;font-weight:600;letter-spacing:-.02em}
 p{margin:0}
 a{color:var(--link);text-decoration-thickness:1px;text-underline-offset:3px}
-a:focus-visible,button:focus-visible{outline:2px solid var(--accent-bright);outline-offset:3px;border-radius:3px}
+a:focus-visible,button:focus-visible,input:focus-visible,[tabindex]:focus-visible{
+  outline:2px solid var(--accent);outline-offset:3px;border-radius:4px;
+}
 code,kbd,pre{font-family:var(--mono)}
-
+kbd{
+  font-size:.78em;border:1px solid var(--rule);border-bottom-width:2px;border-radius:5px;
+  padding:.08em .38em;color:var(--ink-soft);background:var(--bg-raised);white-space:nowrap;
+}
+.sr-only{
+  position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0;
+}
 .shell{width:var(--shell);margin-inline:auto}
 .rule{border:0;border-top:1px solid var(--rule);margin:0}
 
@@ -97,11 +129,15 @@ code,kbd,pre{font-family:var(--mono)}
 .eyebrow{
   font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;
   text-transform:uppercase;color:var(--ink-faint);margin-bottom:1rem;
+  display:flex;align-items:center;gap:.6rem;
+}
+.eyebrow::before{
+  content:"";width:1.6rem;height:1px;background:var(--accent);opacity:.7;flex:none;
 }
 
 /* ---------- masthead ---------- */
 .masthead{
-  position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 86%,transparent);
   backdrop-filter:blur(10px);border-bottom:1px solid var(--rule);
 }
 .masthead-in{display:flex;align-items:center;gap:1.5rem;padding:.85rem 0}
@@ -111,7 +147,7 @@ code,kbd,pre{font-family:var(--mono)}
 }
 .wordmark .glyph{
   width:26px;height:26px;border-radius:7px;background:var(--petrol-800);
-  display:grid;place-items:center;flex:none;
+  display:grid;place-items:center;flex:none;border:1px solid var(--petrol-600);
 }
 .wordmark .glyph svg{display:block}
 .nav{display:flex;gap:1.4rem;margin-left:auto;align-items:center}
@@ -122,12 +158,18 @@ code,kbd,pre{font-family:var(--mono)}
   border-radius:7px;padding:.35rem .55rem;cursor:pointer;font:inherit;font-size:.85rem;line-height:1;
 }
 .theme-btn:hover{border-color:var(--ink-faint);color:var(--ink)}
-@media (max-width:760px){.nav a:not(.nav-keep){display:none}}
+@media (max-width:820px){.nav a:not(.nav-keep){display:none}.nav{gap:1rem}}
 
 /* ---------- hero ---------- */
 .hero{padding:clamp(3rem,8vw,5.5rem) 0 clamp(2rem,5vw,3rem);position:relative;overflow:hidden}
-.hero-grid{display:grid;gap:clamp(2rem,5vw,3.5rem);grid-template-columns:1fr;align-items:start}
-@media (min-width:1000px){.hero-grid{grid-template-columns:minmax(0,46%) minmax(0,1fr)}}
+/* one soft pool of light behind the headline; no gradients elsewhere */
+.hero::before{
+  content:"";position:absolute;inset:-30% -10% auto -10%;height:70%;
+  background:radial-gradient(60% 60% at 30% 60%,var(--glow),transparent 70%);
+  pointer-events:none;
+}
+.hero-grid{display:grid;gap:clamp(2rem,5vw,3.5rem);grid-template-columns:1fr;align-items:center;position:relative}
+@media (min-width:1000px){.hero-grid{grid-template-columns:minmax(0,52%) minmax(0,1fr)}}
 
 .hero h1{
   font-family:var(--mono);font-size:clamp(2.1rem,5.2vw,3.15rem);line-height:1.08;
@@ -154,18 +196,57 @@ code,kbd,pre{font-family:var(--mono)}
 .copy-btn{
   flex:none;border:0;border-left:1px solid var(--rule);background:var(--bg-sunken);
   color:var(--ink-soft);padding:0 1rem;cursor:pointer;font:inherit;font-size:.82rem;
-  font-family:var(--mono);letter-spacing:.04em;
+  font-family:var(--mono);letter-spacing:.04em;transition:background .15s ease,color .15s ease;
 }
-.copy-btn:hover{background:var(--accent-bright);color:var(--petrol-900)}
-.copy-btn[data-done="1"]{background:var(--patina);color:#fff}
+.copy-btn:hover{background:var(--accent);color:var(--accent-ink)}
+.copy-btn[data-done="1"]{background:var(--patina);color:var(--petrol-900)}
 .install-alt{margin-top:.7rem;font-size:.85rem;color:var(--ink-faint)}
 .install-alt a{color:var(--link)}
 
-/* ---------- terminal card ---------- */
+/* ---------- hero loop diagram ---------- */
+.loop{width:100%;max-width:460px;margin-inline:auto;display:block;overflow:visible}
+.loop-wrap{position:relative}
+.loop .track{fill:none;stroke:var(--rule);stroke-width:1.5}
+.loop .flow{
+  fill:none;stroke:var(--patina);stroke-width:1.8;stroke-linecap:round;
+  stroke-dasharray:44 736;stroke-dashoffset:0;
+  animation:loop-flow 9s linear infinite;
+}
+.loop .node{fill:var(--bg-raised);stroke:var(--rule);stroke-width:1.5}
+.loop .node-core{fill:var(--accent)}
+.loop .halo{
+  fill:none;stroke:var(--accent);stroke-width:1.4;opacity:0;
+  transform-box:fill-box;transform-origin:center;
+  animation:loop-halo 9s ease-out infinite;
+}
+.loop .n2 .halo{animation-delay:1.9s}
+.loop .n3 .halo{animation-delay:3.8s}
+.loop text{font-family:var(--mono);fill:var(--ink-soft);font-size:12px;letter-spacing:.02em}
+.loop .lbl-sub{fill:var(--ink-faint);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase}
+.loop .lbl-return{fill:var(--ink-faint);font-size:10px;letter-spacing:.06em}
+@keyframes loop-flow{to{stroke-dashoffset:-780}}
+@keyframes loop-halo{
+  0%{opacity:0;transform:scale(1)}
+  6%{opacity:.85;transform:scale(1)}
+  26%{opacity:0;transform:scale(2.1)}
+  100%{opacity:0;transform:scale(2.1)}
+}
+.loop-caption{
+  margin-top:.9rem;text-align:center;font-size:.85rem;color:var(--ink-faint);
+  max-width:38ch;margin-inline:auto;
+}
+
+/* ---------- generic section ---------- */
+.band{padding:clamp(3rem,7vw,4.75rem) 0}
+.band-sunken{background:var(--bg-sunken);border-block:1px solid var(--rule)}
+.band h2{font-size:clamp(1.5rem,3vw,1.95rem);letter-spacing:-.03em}
+.band .sub{margin-top:.85rem;max-width:var(--measure);color:var(--ink-soft)}
+
+/* ---------- terminal chrome (shared by demo + example) ---------- */
 .term{
-  border-radius:12px;overflow:hidden;background:var(--term-bg);
+  border-radius:var(--radius);overflow:hidden;background:var(--term-bg);
   border:1px solid var(--petrol-600);
-  box-shadow:0 18px 44px -22px rgba(5,15,20,.6);
+  box-shadow:0 18px 44px -22px rgba(2,8,11,.75);
 }
 .term-bar{
   display:flex;align-items:center;gap:.45rem;padding:.6rem .8rem;
@@ -187,11 +268,75 @@ code,kbd,pre{font-family:var(--mono)}
 .term-body .r{color:var(--rust)}
 .term-body .h{color:#fff;font-weight:600}
 
-/* ---------- generic section ---------- */
-.band{padding:clamp(3rem,7vw,4.75rem) 0}
-.band-sunken{background:var(--bg-sunken);border-block:1px solid var(--rule)}
-.band h2{font-size:clamp(1.5rem,3vw,1.95rem);letter-spacing:-.03em}
-.band .sub{margin-top:.85rem;max-width:var(--measure);color:var(--ink-soft)}
+/* ---------- interactive demo ---------- */
+.demo-grid{display:grid;gap:1.5rem;grid-template-columns:1fr;margin-top:2.25rem}
+@media (min-width:1020px){.demo-grid{grid-template-columns:minmax(0,1fr) 16rem;gap:2rem}}
+
+.demo{position:relative}
+.demo:focus-within{box-shadow:0 0 0 2px var(--accent),0 18px 44px -22px rgba(2,8,11,.75)}
+.demo-screen{
+  margin:0;padding:1rem 1.1rem .4rem;overflow-y:auto;overflow-x:auto;
+  height:clamp(20rem,46vh,27rem);
+  font-family:var(--mono);font-size:.79rem;line-height:1.62;color:var(--term-ink);
+  font-variant-numeric:tabular-nums;
+}
+.demo-screen .ln{white-space:pre-wrap;word-break:break-word;min-height:1.28em}
+.demo-screen .c{color:var(--term-dim)}
+.demo-screen .ok{color:var(--patina)}
+.demo-screen .b{color:var(--brass)}
+.demo-screen .r{color:var(--rust)}
+.demo-screen .h{color:#fff;font-weight:600}
+.demo-screen .cmd{color:#fff}
+.demo-screen .sp{color:var(--patina)}
+.demo-screen .frame{color:var(--term-frame)}
+
+/* the live input line */
+.demo-line{
+  display:flex;align-items:baseline;gap:.5ch;padding:.35rem 1.1rem 1rem;
+  font-family:var(--mono);font-size:.79rem;line-height:1.62;
+}
+.demo-prompt{color:var(--patina);flex:none;user-select:none}
+.demo-prompt .path{color:var(--term-dim)}
+.demo-field{position:relative;flex:1;min-width:0}
+.demo-mirror{
+  color:var(--term-ink);white-space:pre;overflow:hidden;display:block;
+  text-overflow:clip;
+}
+.demo-caret{
+  display:inline-block;width:.6em;height:1.05em;vertical-align:text-bottom;
+  background:var(--term-ink);opacity:.9;margin-bottom:-.14em;
+  animation:blink 1.06s steps(1,end) infinite;
+}
+.demo:not(:focus-within) .demo-caret{opacity:.28;animation:none}
+.demo[data-busy="1"] .demo-caret{display:none}
+@keyframes blink{0%,50%{opacity:.9}50.01%,100%{opacity:0}}
+.demo-input{
+  position:absolute;inset:0;width:100%;height:100%;
+  background:transparent;border:0;padding:0;margin:0;
+  font:inherit;color:transparent;caret-color:transparent;
+}
+.demo-input:focus{outline:none}
+.demo-input::selection{background:rgba(95,191,176,.35);color:transparent}
+.demo[data-busy="1"] .demo-prompt{opacity:.4}
+
+.demo-hint{
+  margin-top:.8rem;font-size:.82rem;color:var(--ink-faint);
+  display:flex;flex-wrap:wrap;gap:.35rem .9rem;align-items:center;
+}
+.demo-side h3{font-size:.95rem;letter-spacing:-.01em}
+.demo-side p{margin-top:.5rem;color:var(--ink-soft);font-size:.9rem}
+.chips{margin-top:1rem;display:flex;flex-wrap:wrap;gap:.45rem}
+.chip{
+  font:inherit;font-family:var(--mono);font-size:.78rem;cursor:pointer;
+  background:var(--bg-raised);border:1px solid var(--rule);border-radius:7px;
+  padding:.34rem .6rem;color:var(--ink-soft);text-align:left;
+  transition:border-color .15s ease,color .15s ease;
+}
+.chip:hover{border-color:var(--accent);color:var(--ink)}
+.demo-note{
+  margin-top:1.25rem;font-size:.84rem;color:var(--ink-faint);
+  border-left:2px solid var(--rule);padding-left:.85rem;
+}
 
 /* ---------- the ladder ---------- */
 .ladder{margin-top:2.5rem;display:grid;gap:0;border-top:1px solid var(--rule)}
@@ -236,9 +381,21 @@ pre.block{
 }
 pre.block .c{color:var(--term-dim)}
 .note{
-  font-size:.9rem;color:var(--ink-soft);border-left:2px solid var(--accent-bright);
+  font-size:.9rem;color:var(--ink-soft);border-left:2px solid var(--accent);
   padding-left:.9rem;max-width:var(--measure);
 }
+/* copy button injected into every code block */
+.pre-wrap{position:relative}
+.pre-copy{
+  position:absolute;top:.5rem;right:.5rem;z-index:2;
+  font:inherit;font-family:var(--mono);font-size:.7rem;letter-spacing:.06em;
+  background:var(--petrol-700);color:var(--term-dim);border:1px solid var(--petrol-600);
+  border-radius:6px;padding:.25rem .5rem;cursor:pointer;opacity:0;
+  transition:opacity .15s ease,color .15s ease;
+}
+.pre-wrap:hover .pre-copy,.pre-copy:focus-visible{opacity:1}
+.pre-copy:hover{color:var(--term-ink)}
+.pre-copy[data-done="1"]{opacity:1;color:var(--patina);border-color:var(--patina)}
 
 /* ---------- command table ---------- */
 .table-wrap{margin-top:2rem;overflow-x:auto;border:1px solid var(--rule);border-radius:10px;background:var(--bg-raised)}
@@ -250,9 +407,9 @@ thead th{
 }
 tbody tr:last-child td{border-bottom:0}
 td code{font-size:.86rem;color:var(--accent);white-space:nowrap}
-td .need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)}
+td .need,td.need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)}
 
-/* ---------- two-up cards ---------- */
+/* ---------- cards ---------- */
 .cards{margin-top:2.25rem;display:grid;gap:1rem;grid-template-columns:1fr}
 @media (min-width:760px){.cards{grid-template-columns:repeat(3,1fr)}}
 .card{
@@ -263,6 +420,12 @@ td .need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)}
 .card p{color:var(--ink-soft);font-size:.93rem}
 .card .k{font-family:var(--mono);font-size:.74rem;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
 
+/* ---------- example review ---------- */
+.example-grid{display:grid;gap:1.75rem;grid-template-columns:1fr;margin-top:2.25rem;align-items:start}
+@media (min-width:1020px){.example-grid{grid-template-columns:minmax(0,1fr) 17rem;gap:2.25rem}}
+.example-side p{color:var(--ink-soft);font-size:.92rem;margin-top:.75rem}
+.example-side p:first-child{margin-top:0}
+
 /* ---------- footer ---------- */
 .foot{padding:2.75rem 0 3.5rem;color:var(--ink-faint);font-size:.88rem}
 .foot-in{display:flex;flex-wrap:wrap;gap:1rem 2rem;align-items:center}
@@ -270,7 +433,14 @@ td .need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)}
 .foot .spacer{margin-left:auto}
 
 @media (prefers-reduced-motion:reduce){
-  *{animation-duration:.01ms !important;transition-duration:.01ms !important}
+  html{scroll-behavior:auto}
+  *,*::before,*::after{
+    animation-duration:.01ms !important;animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;scroll-behavior:auto !important;
+  }
+  .loop .flow{stroke-dasharray:none;opacity:.55}
+  .loop .halo{opacity:.35;animation:none}
+  .demo-caret{opacity:.9;animation:none}
 }
 </style>
 </head>
@@ -278,7 +448,7 @@ td .need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)}
 
 <header class="masthead">
   <div class="shell masthead-in">
-    <a class="wordmark" href="#top">
+    <a class="wordmark" href="/">
       <span class="glyph" aria-hidden="true">
         <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
           <path d="M8 12h5M8 17h9M8 22h6" stroke="#C9A227" stroke-width="2.6" stroke-linecap="round"/>
@@ -288,9 +458,10 @@ td .need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)}
       oss-cli
     </a>
     <nav class="nav">
+      <a href="#demo" class="nav-keep">Try it</a>
       <a href="#how">How it works</a>
-      <a href="#install" class="nav-keep">Install</a>
-      <a href="#commands">Commands</a>
+      <a href="#install">Install</a>
+      <a href="/osscli/docs" class="nav-keep">Docs</a>
       <a href="https://github.com/ramanathan1504/oss-cli" class="nav-keep">GitHub</a>
       <button class="theme-btn" id="theme-btn" type="button" aria-label="Switch colour theme">◐</button>
     </nav>
@@ -320,51 +491,121 @@ td .need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)}
       </p>
     </div>
 
-    <div class="term" role="img" aria-label="Terminal showing oss review output for pull request 4234">
-      <div class="term-bar">
-        <span class="dot" style="background:#E0685C"></span>
-        <span class="dot" style="background:#E0B44C"></span>
-        <span class="dot" style="background:#5BB98C"></span>
-        <span class="term-title">oss review 4234</span>
+    <div class="loop-wrap">
+      <svg class="loop" viewBox="0 0 420 210" role="img"
+           aria-label="A loop: retrieve from your local corpus, answer locally where it can, escalate a prompt when it cannot, and feed what you learn back into the corpus.">
+        <!-- the circuit -->
+        <path class="track" d="M70 74 H350 C392 74 392 158 350 158 H70 C28 158 28 74 70 74 Z"/>
+        <path class="flow"  d="M70 74 H350 C392 74 392 158 350 158 H70 C28 158 28 74 70 74 Z"/>
+
+        <!-- direction arrows on the top edge -->
+        <path d="M138 70 l7 4 -7 4" fill="none" stroke="currentColor" stroke-width="1.4"
+              stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-faint)"/>
+        <path d="M278 70 l7 4 -7 4" fill="none" stroke="currentColor" stroke-width="1.4"
+              stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-faint)"/>
+        <!-- and one on the return edge, pointing back -->
+        <path d="M216 154 l-7 4 7 4" fill="none" stroke="currentColor" stroke-width="1.4"
+              stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-faint)"/>
+
+        <g class="n1">
+          <circle class="halo" cx="70" cy="74" r="9"/>
+          <circle class="node" cx="70" cy="74" r="9"/>
+          <circle class="node-core" cx="70" cy="74" r="3.4"/>
+          <text x="70" y="46" text-anchor="middle">retrieve</text>
+          <text x="70" y="33" text-anchor="middle" class="lbl-sub">local corpus</text>
+        </g>
+        <g class="n2">
+          <circle class="halo" cx="210" cy="74" r="9"/>
+          <circle class="node" cx="210" cy="74" r="9"/>
+          <circle class="node-core" cx="210" cy="74" r="3.4"/>
+          <text x="210" y="46" text-anchor="middle">answer</text>
+          <text x="210" y="33" text-anchor="middle" class="lbl-sub">on your machine</text>
+        </g>
+        <g class="n3">
+          <circle class="halo" cx="350" cy="74" r="9"/>
+          <circle class="node" cx="350" cy="74" r="9"/>
+          <circle class="node-core" cx="350" cy="74" r="3.4"/>
+          <text x="350" y="46" text-anchor="middle">escalate</text>
+          <text x="350" y="33" text-anchor="middle" class="lbl-sub">a prompt you paste</text>
+        </g>
+
+        <text x="210" y="182" text-anchor="middle" class="lbl-return">what you learn feeds back in</text>
+      </svg>
+      <p class="loop-caption">
+        Retrieve, answer, and keep the result. Every pass leaves the next one better informed.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ interactive demo ══════════════ -->
+<section class="band band-sunken" id="demo">
+  <div class="shell">
+    <p class="eyebrow">Try it</p>
+    <h2>A shell you can type into, right here.</h2>
+    <p class="sub">
+      This is a simulation running entirely in your browser — no network, nothing installed.
+      The output is the real thing's voice, on a made-up repository called <code>owner/name</code>.
+      Start with <code>oss doctor</code>, then try fetching the model and searching again.
+    </p>
+
+    <div class="demo-grid">
+      <div>
+        <div class="term demo" id="demo-term" data-busy="0">
+          <div class="term-bar">
+            <span class="dot" style="background:#E0685C"></span>
+            <span class="dot" style="background:#E0B44C"></span>
+            <span class="dot" style="background:#5BB98C"></span>
+            <span class="term-title">oss — simulated shell (offline)</span>
+          </div>
+          <div class="demo-screen" id="demo-screen" role="log" tabindex="0"
+               aria-live="polite" aria-atomic="false"
+               aria-label="Simulated terminal output, scrollable"></div>
+          <div class="demo-line">
+            <span class="demo-prompt" aria-hidden="true"><span class="path">owner/name</span> $</span>
+            <span class="demo-field">
+              <span class="demo-mirror" aria-hidden="true"><span id="demo-pre"></span><i class="demo-caret"></i><span id="demo-post"></span></span>
+              <label class="sr-only" for="demo-input">Type an oss command, then press Enter</label>
+              <input class="demo-input" id="demo-input" type="text" autocomplete="off"
+                     autocapitalize="off" autocorrect="off" spellcheck="false"
+                     aria-describedby="demo-hint">
+            </span>
+          </div>
+        </div>
+        <p class="demo-hint" id="demo-hint">
+          <span><kbd>Enter</kbd> run</span>
+          <span><kbd>↑</kbd> <kbd>↓</kbd> history</span>
+          <span><kbd>Tab</kbd> complete</span>
+          <span><kbd>Esc</kbd> leave the terminal</span>
+          <span><code>help</code> lists everything</span>
+        </p>
       </div>
-<pre class="term-body"><span class="c">$</span> oss review 4234
 
-  <span class="h">Add ZstdCompressAction to support configurable compression levels</span>
-  by katstack <span class="c">·</span> open <span class="c">·</span> into 2.x <span class="c">·</span> head 29cccdf
-  5 file(s), <span class="ok">+349</span> <span class="r">−4</span>
-
-<span class="c">── Project conventions ──</span>
-  • 1 new source file added, and this project gates its
-    public API (<span class="b">bnd-baseline-maven-plugin</span>). New public
-    types may require baseline or export updates.
-  • Target toolchain is <span class="b">java 17</span> (minimum [17,18)).
-  • Build rules inherited from <span class="b">org.apache:apache:34</span>.
-
-<span class="c">── Your prior work on this area (5) ──</span>
-  rolling-appender.md (passage 15)   <span class="c">73% match</span>
-  paste-may-30-2026---520pm.md       <span class="c">71% match</span>
-
-<span class="c">── Verdict (qwen2.5-coder:7b, confidence 90%) ──</span>
-  Adds ZStandard (.zst) support to the Rolling File
-  Appender with a configurable compression level.
-
-  Concerns:
-    • The mapping of <span class="b">compressionLevel=-1</span> as the Zstd
-      default is provisional and may change if future
-      releases support negative levels.
-
-<span class="c">── What this review used ──</span>
-  <span class="ok">✔</span> Facts from GitHub
-  <span class="ok">✔</span> Convention checks against this project's rules
-  <span class="ok">✔</span> Your own prior work
-  <span class="ok">✔</span> Local verdict from Ollama
-  <span class="c">○</span> Escalation for large diffs — no cloud key configured</pre>
+      <div class="demo-side">
+        <h3>Things worth typing</h3>
+        <p>Each of these changes what the next one can do — exactly like the real tool.</p>
+        <div class="chips">
+          <button class="chip" type="button" data-cmd="oss doctor">oss doctor</button>
+          <button class="chip" type="button" data-cmd="oss search rollover compression">oss search rollover compression</button>
+          <button class="chip" type="button" data-cmd="oss model">oss model</button>
+          <button class="chip" type="button" data-cmd="oss model --fetch">oss model --fetch</button>
+          <button class="chip" type="button" data-cmd="oss sync --all">oss sync --all</button>
+          <button class="chip" type="button" data-cmd="oss prompt 812">oss prompt 812</button>
+          <button class="chip" type="button" data-cmd="help">help</button>
+          <button class="chip" type="button" data-cmd="clear">clear</button>
+        </div>
+        <p class="demo-note">
+          Nothing here talks to a server. The whole demo is a few hundred lines of
+          JavaScript on this page, which is roughly the point: the real tool works
+          the same way — offline, on what you already have.
+        </p>
+      </div>
     </div>
   </div>
 </section>
 
 <!-- ══════════════ the ladder ══════════════ -->
-<section class="band band-sunken" id="how">
+<section class="band" id="how">
   <div class="shell">
     <p class="eyebrow">How it works</p>
     <h2>Nothing is mandatory. Every layer is yours to add.</h2>
@@ -404,6 +645,80 @@ td .need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)}
         <span class="mark" aria-hidden="true">○</span>
         <span class="what">Escalation<span class="needs">optional: a cloud API key</span></span>
         <span class="gives">When local context or confidence runs out, OSS-CLI assembles a complete expert prompt. Send it automatically, or copy it into whichever model you prefer.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ an actual review ══════════════ -->
+<section class="band band-sunken" id="example">
+  <div class="shell">
+    <p class="eyebrow">An actual review</p>
+    <h2>Every answer names its sources.</h2>
+    <p class="sub">
+      The last block of any review is the part that matters most: what was used, and what
+      was not available. A thin review is never mistaken for a clean one.
+    </p>
+
+    <div class="example-grid">
+      <div class="term" role="img" aria-label="Terminal showing oss review output for pull request 4234">
+        <div class="term-bar">
+          <span class="dot" style="background:#E0685C"></span>
+          <span class="dot" style="background:#E0B44C"></span>
+          <span class="dot" style="background:#5BB98C"></span>
+          <span class="term-title">oss review 4234</span>
+        </div>
+<pre class="term-body"><span class="c">$</span> oss review 4234
+
+  <span class="h">Add ZstdCompressAction to support configurable compression levels</span>
+  by katstack <span class="c">·</span> open <span class="c">·</span> into 2.x <span class="c">·</span> head 29cccdf
+  5 file(s), <span class="ok">+349</span> <span class="r">−4</span>
+
+<span class="c">── Project conventions ──</span>
+  • 1 new source file added, and this project gates its
+    public API (<span class="b">bnd-baseline-maven-plugin</span>). New public
+    types may require baseline or export updates.
+  • Target toolchain is <span class="b">java 17</span> (minimum [17,18)).
+  • Build rules inherited from <span class="b">org.apache:apache:34</span>.
+
+<span class="c">── Your prior work on this area (5) ──</span>
+  rolling-appender.md (passage 15)   <span class="c">73% match</span>
+  paste-may-30-2026---520pm.md       <span class="c">71% match</span>
+
+<span class="c">── Verdict (qwen2.5-coder:7b, confidence 90%) ──</span>
+  Adds ZStandard (.zst) support to the Rolling File
+  Appender with a configurable compression level.
+
+  Concerns:
+    • The mapping of <span class="b">compressionLevel=-1</span> as the Zstd
+      default is provisional and may change if future
+      releases support negative levels.
+
+<span class="c">── What this review used ──</span>
+  <span class="ok">✔</span> Facts from GitHub
+  <span class="ok">✔</span> Convention checks against this project's rules
+  <span class="ok">✔</span> Your own prior work
+  <span class="ok">✔</span> Local verdict from Ollama
+  <span class="c">○</span> Escalation for large diffs — no cloud key configured</pre>
+      </div>
+
+      <div class="example-side">
+        <p>
+          <strong>Facts first.</strong> Author, base branch, head commit and the shape of the
+          diff come from GitHub and are cached against that head commit.
+        </p>
+        <p>
+          <strong>Conventions are deterministic.</strong> The gate checks involve no model at
+          all — they are the project's own rules, including the ones it inherits.
+        </p>
+        <p>
+          <strong>Your prior work is evidence.</strong> Notes you already keep are ranked
+          against the changed paths and surfaced while you review.
+        </p>
+        <p>
+          <strong>The footer is the honest part.</strong> A layer you have not connected is
+          listed as unused, not silently skipped.
+        </p>
       </div>
     </div>
   </div>
@@ -462,7 +777,7 @@ td .need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)}
         <div class="step">
           <span class="step-h">1 · Install</span>
 <pre class="block">brew install ramanathan1504/oss-cli/oss</pre>
-          <p class="note">Homebrew pulls in OpenJDK 17 for you and puts <code>oss-cli</code> on your PATH.</p>
+          <p class="note">Homebrew pulls in OpenJDK 17 for you and puts <code>oss</code> on your PATH.</p>
         </div>
         <div class="step">
           <span class="step-h">2 · Give it a GitHub token</span>
@@ -499,8 +814,8 @@ curl -fL -o ~/.local/share/oss-cli.jar "$JAR_URL"</pre>
         <div class="step">
           <span class="step-h">3 · Put it on your PATH</span>
 <pre class="block">printf '#!/bin/sh\nexec java -jar %s "$@"\n' \
-  "$HOME/.local/share/oss-cli.jar" > ~/.local/bin/oss-cli
-chmod +x ~/.local/bin/oss-cli</pre>
+  "$HOME/.local/share/oss-cli.jar" > ~/.local/bin/oss
+chmod +x ~/.local/bin/oss</pre>
         </div>
         <div class="step">
           <span class="step-h">4 · Give it a GitHub token</span>
@@ -531,9 +846,9 @@ Invoke-WebRequest -Uri $url -OutFile "$dir\oss-cli.jar"</pre>
         </div>
         <div class="step">
           <span class="step-h">3 · Add a command</span>
-<pre class="block"><span class="c"># create oss-cli.cmd somewhere on your PATH</span>
+<pre class="block"><span class="c"># create oss.cmd somewhere on your PATH</span>
 "@echo off`r`njava -jar `"$dir\oss-cli.jar`" %*" |
-  Out-File -Encoding ascii "$dir\oss-cli.cmd"
+  Out-File -Encoding ascii "$dir\oss.cmd"
 
 $env:Path += ";$dir"</pre>
         </div>
@@ -621,10 +936,7 @@ oss review 4234 -r owner/name</pre>
 (function () {
   var root = document.documentElement;
   var btn = document.getElementById('theme-btn');
-  var saved = null;
-  try { saved = localStorage.getItem('osscli-theme'); } catch (e) {}
-  if (saved) root.setAttribute('data-theme', saved);
-
+  if (!btn) return;
   btn.addEventListener('click', function () {
     var current = root.getAttribute('data-theme');
     if (!current) {
@@ -632,29 +944,47 @@ oss review 4234 -r owner/name</pre>
     }
     var next = current === 'dark' ? 'light' : 'dark';
     root.setAttribute('data-theme', next);
-    try { localStorage.setItem('osscli-theme', next); } catch (e) {}
+    try { localStorage.setItem('ubuos-theme', next); } catch (e) {}
   });
 })();
 
-// ---- copy buttons
-document.querySelectorAll('[data-copy]').forEach(function (btn) {
-  btn.addEventListener('click', function () {
-    var el = document.querySelector(btn.getAttribute('data-copy'));
-    if (!el) return;
-    var text = el.textContent.replace(/^\s*\$\s*/, '');
+// ---- copy buttons (the install line, plus one on every code block)
+(function () {
+  function flash(btn, label) {
+    var old = btn.textContent;
+    btn.textContent = label;
+    btn.setAttribute('data-done', '1');
+    setTimeout(function () { btn.textContent = old; btn.removeAttribute('data-done'); }, 1600);
+  }
+  function copy(text, btn, label) {
+    if (!navigator.clipboard) { btn.textContent = 'Press ⌘C'; return; }
     navigator.clipboard.writeText(text).then(function () {
-      var old = btn.textContent;
-      btn.textContent = 'Copied';
-      btn.setAttribute('data-done', '1');
-      setTimeout(function () {
-        btn.textContent = old;
-        btn.removeAttribute('data-done');
-      }, 1600);
-    }).catch(function () {
-      btn.textContent = 'Press ⌘C';
+      flash(btn, label);
+    }).catch(function () { btn.textContent = 'Press ⌘C'; });
+  }
+
+  document.querySelectorAll('[data-copy]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var el = document.querySelector(btn.getAttribute('data-copy'));
+      if (!el) return;
+      copy(el.textContent.replace(/^\s*\$\s*/, ''), btn, 'Copied');
     });
   });
-});
+
+  document.querySelectorAll('pre.block').forEach(function (pre) {
+    var wrap = document.createElement('div');
+    wrap.className = 'pre-wrap';
+    pre.parentNode.insertBefore(wrap, pre);
+    wrap.appendChild(pre);
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pre-copy';
+    btn.textContent = 'copy';
+    btn.setAttribute('aria-label', 'Copy this code block');
+    btn.addEventListener('click', function () { copy(pre.textContent, btn, 'copied'); });
+    wrap.appendChild(btn);
+  });
+})();
 
 // ---- install tabs
 (function () {
@@ -683,6 +1013,579 @@ document.querySelectorAll('[data-copy]').forEach(function (btn) {
   var ua = navigator.userAgent || '';
   if (/Win/i.test(p) || /Windows/i.test(ua)) select(document.getElementById('tab-win'));
   else if (/Linux|X11/i.test(p) && !/Android/i.test(ua)) select(document.getElementById('tab-linux'));
+})();
+
+/* ============================================================
+   THE SIMULATED SHELL
+   Every byte of this is local. There is no fetch, no worker and
+   no hidden endpoint: the demo is a switch statement over canned
+   output, written in the same voice the real binary uses.
+   ============================================================ */
+(function () {
+  var root   = document.getElementById('demo-term');
+  var scr    = document.getElementById('demo-screen');
+  var input  = document.getElementById('demo-input');
+  var pre    = document.getElementById('demo-pre');
+  var post   = document.getElementById('demo-post');
+  if (!root || !scr || !input) return;
+
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---- session state. The demo has a memory, so the ladder is felt
+  // rather than described: fetch the model, and search changes shape.
+  var state = { model: false, issues: 1284, busy: false };
+
+  var hist   = [];
+  var histAt = 0;    // index into hist; === length means "the live line"
+  var draft   = '';  // what was typed before arrowing into history
+
+  // ---- rendering -------------------------------------------------
+  function esc(s) {
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function line(html) {
+    var el = document.createElement('div');
+    el.className = 'ln';
+    el.innerHTML = html === undefined || html === '' ? '&nbsp;' : html;
+    scr.appendChild(el);
+    return el;
+  }
+  function lines(arr) { arr.forEach(function (h) { line(h); }); }
+  function toBottom() { scr.scrollTop = scr.scrollHeight; }
+
+  function echo(cmd) {
+    line('<span class="sp">owner/name $</span> <span class="cmd">' + esc(cmd) + '</span>');
+  }
+
+  // ---- the live status line ---------------------------------------
+  // Mirrors ui/Live: braille frames, the current step, and elapsed time,
+  // settling to a single ✓ line that stays behind.
+  var FRAMES = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
+
+  function elapsed(ms) {
+    return ms < 1000 ? Math.round(ms) + 'ms' : (ms / 1000).toFixed(1) + 's';
+  }
+
+  /* steps: [{label, ms}] — run them in order under one title, then settle. */
+  function work(title, steps, summary, then) {
+    var total = steps.reduce(function (a, s) { return a + s.ms; }, 0);
+
+    function settle() {
+      line('<span class="ok">✓</span> ' + esc(title) +
+           (summary ? ' <span class="c">— ' + esc(summary) + '</span>' : '') +
+           ' <span class="c">' + elapsed(total) + '</span>');
+      toBottom();
+      if (then) then();
+      done();
+    }
+
+    if (reduced) { settle(); return; }
+
+    var el = line('');
+    el.setAttribute('aria-hidden', 'true');  // a live region must not read 11 frames a second
+    var started = Date.now();
+    var frame = 0;
+    var timer = setInterval(function () {
+      var ms = Date.now() - started;
+      if (ms >= total) {
+        clearInterval(timer);
+        el.remove();
+        settle();
+        return;
+      }
+      // which step are we on?
+      var acc = 0, label = steps[0].label;
+      for (var i = 0; i < steps.length; i++) {
+        acc += steps[i].ms;
+        if (ms < acc) { label = steps[i].label; break; }
+      }
+      el.innerHTML = '<span class="sp">' + FRAMES[frame++ % FRAMES.length] + '</span> ' +
+                     esc(title) + ' <span class="c">— ' + esc(label) + '</span> ' +
+                     '<span class="c">' + elapsed(ms) + '</span>';
+      toBottom();
+    }, 90);
+  }
+
+  function busy(on) {
+    state.busy = on;
+    root.setAttribute('data-busy', on ? '1' : '0');
+  }
+  function done() { busy(false); toBottom(); }
+
+  // ---- canned output ---------------------------------------------
+  var RULE = '  <span class="frame">─────────────────────────────────────────────────────────────</span>';
+
+  function doctor() {
+    busy(true);
+    work('doctor', [
+      { label: 'reading ~/.oss-cli', ms: 220 },
+      { label: 'checking models',    ms: 300 },
+      { label: 'checking github',    ms: 380 }
+    ], '8 checks', function () {
+      var model = state.model
+        ? '  [<span class="ok">  ok  </span>] embedding model <span class="c">— all-MiniLM-L6-v2 (built in, in-process)</span>'
+        : '  [<span class="b"> warn </span>] embedding model <span class="c">— not on disk; search falls back to shared terms</span>';
+      lines([
+        '',
+        '  oss doctor',
+        RULE,
+        '  [<span class="ok">  ok  </span>] data directory <span class="c">— ~/.oss-cli</span>',
+        '  [<span class="ok">  ok  </span>] database <span class="c">— ~/.oss-cli/oss.db (14 MB)</span>',
+        model,
+        '  [<span class="ok">  ok  </span>] ollama <span class="c">— not connected — local verdicts off, prompts still build</span>',
+        '  [<span class="ok">  ok  </span>] github token <span class="c">— found in the environment</span>',
+        '  [<span class="ok">  ok  </span>] github username <span class="c">— owner</span>',
+        '  [<span class="r"> FAIL </span>] drive.paths <span class="c">— 2 folder(s) found, 1 missing: [~/notes/archive]</span>',
+        '  [<span class="ok">  ok  </span>] ollama.context_limit <span class="c">— 6000</span>',
+        '  [<span class="ok">  ok  </span>] backlog <span class="c">— ' + state.issues + ' issues</span>',
+        RULE,
+        '  To fix:',
+        '    <span class="r">!</span>  Fix or remove the missing paths — they are silently skipped during sync.',
+        state.model ? null : '    <span class="c">·</span>  oss model --fetch',
+        ''
+      ].filter(Boolean));
+    });
+  }
+
+  function search(query) {
+    if (!query) {
+      lines([
+        'Missing required parameter: <span class="b">&lt;query&gt;</span>',
+        '  <span class="c">oss search rollover compression</span>',
+        ''
+      ]);
+      return;
+    }
+    busy(true);
+    var q = esc(query);
+
+    if (!state.model) {
+      // The honest fallback: it still answers, and it says how.
+      work('search', [
+        { label: 'loading issues from SQLite', ms: 260 },
+        { label: 'ranking by shared terms',    ms: 340 }
+      ], state.issues + ' item(s) scanned', function () {
+        lines([
+          'No embeddings found — searching ' + state.issues + ' item(s) by text instead.',
+          '<span class="c">(A local model would add search by meaning; this finds by shared terms.)</span>',
+          '',
+          '1. [owner/name_812] Rolling file appender leaves a .tmp file after rotation  <span class="c">(score 0.61)</span>',
+          '2. [owner/name_744] Make the compression level configurable  <span class="c">(score 0.48)</span>',
+          '3. [owner/name_690] Rotation is slow on network volumes  <span class="c">(score 0.22)</span>',
+          '',
+          '<span class="c">  next:</span>',
+          '    <span class="sp">oss pick</span>                          <span class="c">let it choose one worth your time</span>',
+          '    <span class="sp">oss model --fetch</span>                 <span class="c">then this ranks by meaning instead</span>',
+          ''
+        ]);
+      });
+      return;
+    }
+
+    work('search', [
+      { label: 'embedding the query', ms: 300 },
+      { label: 'cosine similarity over ' + state.issues + ' vectors', ms: 420 }
+    ], 'top 3', function () {
+      lines([
+        'Generating semantic vector for query: "' + q + '" (Model: all-MiniLM-L6-v2)...',
+        'Scanning vectors and calculating cosine similarity...',
+        'Top 3 Global Semantic Search Results:',
+        '<span class="frame">==========================================================================</span>',
+        '1. [Issue] owner/name#812  Similarity: <span class="ok">0.88</span>',
+        '   Title: Rolling file appender leaves a .tmp file after rotation',
+        '2. [PR] owner/name#744  Similarity: <span class="ok">0.81</span>',
+        '   Title: Make the compression level configurable',
+        '3. [Issue] owner/name#517  Similarity: <span class="ok">0.74</span>',
+        '   Title: Archive naming drops the index when the date pattern is absent',
+        '',
+        '<span class="c">  next:</span>',
+        '    <span class="sp">oss pick</span>                          <span class="c">let it choose one worth your time</span>',
+        '    <span class="sp">oss inspect 812</span>                   <span class="c">see the context behind one result</span>',
+        ''
+      ]);
+    });
+  }
+
+  function model(fetching) {
+    if (!fetching) {
+      if (state.model) {
+        lines([
+          '  model  <span class="ok">present</span> — search and pick answer by meaning',
+          '  <span class="c">all-MiniLM-L6-v2 · 22 MB · ~/.oss-cli/models</span>',
+          ''
+        ]);
+      } else {
+        lines([
+          '  model  <span class="b">not present</span> — search and pick answer by shared terms',
+          '',
+          '  That works, and needs nothing installed. The model adds matching by',
+          '  meaning: "rollover compression" and "log rotation with zstd" are the',
+          '  same subject and share no words.',
+          '',
+          '  <span class="sp">oss model --fetch</span>      <span class="c">about 22 MB, once, stored under ~/.oss-cli/models</span>',
+          ''
+        ]);
+      }
+      return;
+    }
+
+    if (state.model) {
+      lines(['  model  already present — nothing to fetch', '']);
+      return;
+    }
+
+    busy(true);
+    work('model --fetch', [
+      { label: 'resolving all-MiniLM-L6-v2', ms: 420 },
+      { label: 'downloading 22 MB',          ms: 1100 },
+      { label: 'verifying checksum',         ms: 380 },
+      { label: 'loading in-process',         ms: 300 }
+    ], '22 MB, once', function () {
+      state.model = true;
+      lines([
+        '  model  <span class="ok">ready</span>',
+        '  <span class="c">runs inside this process — no server, no daemon</span>',
+        '  <span class="c">issues already on disk get vectors on the next: oss sync --all</span>',
+        ''
+      ]);
+    });
+  }
+
+  function sync() {
+    busy(true);
+    var steps = [
+      { label: 'owner/name — issues',        ms: 700 },
+      { label: 'owner/name — pull requests', ms: 600 },
+      { label: 'writing to SQLite',          ms: 380 }
+    ];
+    if (state.model) {
+      steps.push({ label: 'embedding 46 new item(s)', ms: 900 });
+    }
+    work('sync --all', steps, '1 repository', function () {
+      state.issues = 1330;
+      lines([
+        '<span class="frame">==================================================</span>',
+        'Syncing: owner/name',
+        '<span class="frame">==================================================</span>',
+        '  <span class="c">↳ Performing delta sync (fetching changes since 2026-08-06)...</span>',
+        'Repository: owner/name',
+        'Open Issues Saved: 1330',
+        'Open PRs Saved: 87',
+        state.model
+          ? '  <span class="ok">✔</span> Vector index updated: 46 issue(s) embedded.'
+          : '  <span class="c">↳ No local model — index built from shared terms. oss model --fetch adds meaning.</span>',
+        'Batch synchronization completed successfully.',
+        '',
+        '<span class="c">  next:</span>',
+        '    <span class="sp">oss report</span>                        <span class="c">what changed, and what is waiting on you</span>',
+        '    <span class="sp">oss critical</span>                      <span class="c">rank what arrived by severity</span>',
+        '    <span class="sp">oss search &lt;words&gt;</span>                <span class="c">find something specific</span>',
+        ''
+      ]);
+    });
+  }
+
+  function prompt(n) {
+    if (!n) {
+      lines([
+        'Missing required parameter: <span class="b">&lt;issue&gt;</span>',
+        '  <span class="c">oss prompt 812</span>',
+        ''
+      ]);
+      return;
+    }
+    busy(true);
+    work('prompt #' + n, [
+      { label: 'retrieving local context',  ms: 420 },
+      { label: 'ranking your prior work',   ms: 380 },
+      { label: 'assembling',                ms: 420 }
+    ], '~4180 tokens', function () {
+      lines([
+        'Retrieving local context for issue #' + esc(n) + " in 'owner/name'...",
+        '  <span class="c">↳ Retrieved 11 context chunks (~4180 tokens)</span>',
+        '  <span class="c">↳ Escalation reason: no local model configured for answers. Building expert prompt...</span>',
+        '',
+        '<span class="frame">╔══════════════════════════════════════════════════════════╗</span>',
+        '<span class="frame">║</span>  <span class="h">EXPERT PROMPT</span>  |  Issue #' + esc(n) + '  |  ~4180 tokens          <span class="frame">║</span>',
+        '<span class="frame">╚══════════════════════════════════════════════════════════╝</span>',
+        '',
+        '  You are reviewing issue #' + esc(n) + ' in owner/name.',
+        '',
+        '  <span class="b">PROJECT CONVENTIONS</span>',
+        '    Target toolchain java 17. Public API is gated at build time,',
+        '    so new exported types need a baseline update.',
+        '',
+        '  <span class="b">RELATED WORK ALREADY IN THE TRACKER</span>',
+        '    #744  Make the compression level configurable  (merged)',
+        '    #517  Archive naming drops the index when the date pattern is absent',
+        '',
+        '  <span class="b">YOUR PRIOR NOTES</span>',
+        '    rolling-appender.md (passage 15) — 73% match',
+        '',
+        '  <span class="b">THE QUESTION</span>',
+        '    Is the leftover .tmp file a rotation-ordering bug or a cleanup',
+        '    that never runs on failure? Answer with the change you would make.',
+        '',
+        '<span class="frame">══════════════════════════════════════════════════════════</span>',
+        '  Copy to ChatGPT, Gemini, or Claude for expert resolution.',
+        '<span class="frame">══════════════════════════════════════════════════════════</span>',
+        '',
+        '  <span class="c">(--out writes it to a file; --copy puts it on the clipboard)</span>',
+        ''
+      ]);
+    });
+  }
+
+  function review(n) {
+    if (!n) {
+      lines([
+        'Missing required parameter: <span class="b">&lt;pr&gt;</span>',
+        '  <span class="c">oss review 744</span>',
+        ''
+      ]);
+      return;
+    }
+    busy(true);
+    work('review #' + n, [
+      { label: 'fetching the pull request', ms: 520 },
+      { label: 'checking conventions',      ms: 460 },
+      { label: 'searching your prior work', ms: 420 }
+    ], '4 file(s)', function () {
+      lines([
+        '',
+        '  <span class="h">Make the compression level configurable</span>',
+        '  by a-contributor <span class="c">·</span> open <span class="c">·</span> into main <span class="c">·</span> head 4b91e0c',
+        '  4 file(s), <span class="ok">+188</span> <span class="r">−12</span>',
+        '',
+        '<span class="c">── Project conventions ──</span>',
+        '  • Target toolchain is <span class="b">java 17</span>.',
+        '  • 1 new public type — this project gates its public API,',
+        '    so a baseline update is likely required.',
+        '',
+        '<span class="c">── What this review used ──</span>',
+        '  <span class="ok">✔</span> Facts from GitHub',
+        '  <span class="ok">✔</span> Convention checks against this project\'s rules',
+        '  <span class="c">○</span> Your own prior work — no note folders indexed',
+        '  <span class="c">○</span> Local verdict — Ollama not connected',
+        '  <span class="c">○</span> Escalation for large diffs — no cloud key configured',
+        '',
+        '  <span class="c">Two layers were unavailable. This is a facts-and-conventions review,</span>',
+        '  <span class="c">and it says so rather than reading like a clean bill of health.</span>',
+        ''
+      ]);
+    });
+  }
+
+  function help() {
+    lines([
+      '  <span class="h">oss</span> <span class="c">— a simulated shell. Everything below runs in your browser.</span>',
+      '',
+      '  <span class="sp">oss doctor</span>                     <span class="c">check every prerequisite, name what to fix</span>',
+      '  <span class="sp">oss search &lt;query&gt;</span>             <span class="c">search the corpus — by meaning, or by shared terms</span>',
+      '  <span class="sp">oss model</span>                      <span class="c">is the built-in embedding model on disk?</span>',
+      '  <span class="sp">oss model --fetch</span>              <span class="c">put it there — about 22 MB, once</span>',
+      '  <span class="sp">oss sync --all</span>                 <span class="c">pull issues and PRs, then update the index</span>',
+      '  <span class="sp">oss prompt &lt;n&gt;</span>                 <span class="c">answer locally, or build an expert prompt</span>',
+      '  <span class="sp">oss review &lt;n&gt;</span>                 <span class="c">review a pull request with what you have</span>',
+      '  <span class="sp">help</span>  <span class="sp">clear</span>                   <span class="c">this, and a fresh screen</span>',
+      '',
+      '  <span class="c">↑ ↓ walk your history · Tab completes a command · Esc leaves the terminal</span>',
+      '  <span class="c">The real thing has more: profile, onboard, triage, duplicates, pick, serve.</span>',
+      ''
+    ]);
+  }
+
+  function banner() {
+    lines([
+      '<span class="c">oss 1.9 — simulated shell. No network, no install, nothing sent anywhere.</span>',
+      '<span class="c">A demo corpus is already synced: owner/name, ' + state.issues + ' issues.</span>',
+      '',
+      'Type <span class="sp">help</span>, or start with <span class="sp">oss doctor</span>.',
+      ''
+    ]);
+  }
+
+  // ---- the parser -------------------------------------------------
+  var COMPLETIONS = [
+    'help', 'clear',
+    'oss doctor', 'oss search ', 'oss model', 'oss model --fetch',
+    'oss sync --all', 'oss prompt ', 'oss review ', 'oss --help'
+  ];
+
+  function run(raw) {
+    var cmd = raw.trim();
+    echo(cmd);
+    if (!cmd) { toBottom(); return; }
+
+    hist.push(cmd);
+    histAt = hist.length;
+
+    var parts = cmd.split(/\s+/);
+    var head  = parts[0].toLowerCase();
+
+    if (head === 'clear') { scr.innerHTML = ''; return; }
+    if (head === 'help' || head === '?') { help(); toBottom(); return; }
+
+    if (head === 'oss-cli') {
+      lines(['<span class="c">The binary is <span class="sp">oss</span>. Try: oss doctor</span>', '']);
+      toBottom();
+      return;
+    }
+
+    if (head !== 'oss') {
+      // Never a stack trace, and never a dead end.
+      lines([
+        "This is a simulated <span class=\"sp\">oss</span> shell — '" + esc(parts[0]) + "' is not part of it.",
+        '<span class="c">Type </span><span class="sp">help</span><span class="c"> to see what does work here.</span>',
+        ''
+      ]);
+      toBottom();
+      return;
+    }
+
+    var sub  = (parts[1] || '').toLowerCase();
+    var rest = parts.slice(2).join(' ');
+
+    switch (sub) {
+      case '':
+      case '--help':
+      case '-h':
+        help(); break;
+      case 'doctor':
+        doctor(); break;
+      case 'search':
+        search(rest); break;
+      case 'model':
+        model(/--fetch/.test(cmd)); break;
+      case 'sync':
+        if (/--all/.test(cmd)) { sync(); }
+        else if (/--add/.test(cmd)) {
+          lines([
+            "Successfully registered 'owner/name' in SQLite. You can now sync it anytime!",
+            '  <span class="c">↳ Building repository profile...</span>',
+            "  <span class=\"ok\">✔</span> Profile built. Run 'profile -r owner/name' to see it.",
+            ''
+          ]);
+        } else {
+          lines([
+            'sync needs to know what to sync.',
+            '  <span class="c">oss sync --add owner/name   register a repository</span>',
+            '  <span class="c">oss sync --all              pull everything registered</span>',
+            '  <span class="c">oss sync --me               your own PR history and notes</span>',
+            ''
+          ]);
+        }
+        break;
+      case 'prompt':
+        prompt(parts[2]); break;
+      case 'review':
+        review(parts[2]); break;
+      default:
+        lines([
+          "oss: unknown command '" + esc(parts[1]) + "'.",
+          '<span class="c">This demo knows: doctor, search, model, sync, prompt, review.</span>',
+          '<span class="c">Type </span><span class="sp">help</span><span class="c"> for the list, or run </span>' +
+            '<span class="sp">oss --help</span><span class="c"> against the real thing.</span>',
+          ''
+        ]);
+    }
+    toBottom();
+  }
+
+  // ---- the input line ---------------------------------------------
+  var mirror = pre.parentNode;   // the visible copy of what is being typed
+  function paint() {
+    var v = input.value;
+    var at = input.selectionStart === null ? v.length : input.selectionStart;
+    pre.textContent  = v.slice(0, at);
+    post.textContent = v.slice(at);
+    // The real input scrolls; the mirror has to follow it or the caret
+    // walks off the end of a long line.
+    mirror.style.transform = input.scrollLeft ? 'translateX(' + (-input.scrollLeft) + 'px)' : '';
+  }
+  ['input', 'keyup', 'click', 'select', 'focus', 'blur'].forEach(function (ev) {
+    input.addEventListener(ev, paint);
+  });
+
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (state.busy) return;              // one command at a time
+      var v = input.value;
+      input.value = '';
+      paint();
+      run(v);
+      return;
+    }
+
+    if (e.key === 'Escape') {
+      // A deliberate way out. The keyboard is never trapped here.
+      input.blur();
+      return;
+    }
+
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      if (!hist.length) return;
+      e.preventDefault();
+      if (histAt === hist.length) draft = input.value;
+      histAt += (e.key === 'ArrowUp' ? -1 : 1);
+      if (histAt < 0) histAt = 0;
+      if (histAt > hist.length) histAt = hist.length;
+      input.value = histAt === hist.length ? draft : hist[histAt];
+      // caret to the end, so editing a recalled line is immediate
+      setTimeout(function () {
+        input.setSelectionRange(input.value.length, input.value.length);
+        paint();
+      }, 0);
+      return;
+    }
+
+    if (e.key === 'Tab') {
+      // Empty line? Let Tab do its normal job and move focus onward.
+      var v = input.value;
+      if (!v) return;
+      var hits = COMPLETIONS.filter(function (c) { return c.indexOf(v) === 0 && c !== v; });
+      if (!hits.length) return;
+      e.preventDefault();
+      if (hits.length === 1) {
+        input.value = hits[0];
+      } else {
+        // complete as far as they agree, then show the choices
+        var common = hits[0];
+        hits.forEach(function (h) {
+          var i = 0;
+          while (i < common.length && i < h.length && common[i] === h[i]) i++;
+          common = common.slice(0, i);
+        });
+        if (common.length > v.length) input.value = common;
+        line('<span class="c">' + hits.map(function (h) { return esc(h.trim()); }).join('   ') + '</span>');
+        toBottom();
+      }
+      paint();
+    }
+  });
+
+  // Clicking anywhere on the screen puts the caret back where it belongs,
+  // unless the visitor is selecting text to copy.
+  root.addEventListener('mousedown', function (e) {
+    if (e.target === input) return;
+    if (window.getSelection && String(window.getSelection())) return;
+    setTimeout(function () { input.focus(); }, 0);
+  });
+
+  document.querySelectorAll('.chip').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      if (state.busy) return;
+      input.value = '';
+      paint();
+      input.focus();
+      run(chip.getAttribute('data-cmd'));
+    });
+  });
+
+  banner();
+  paint();
 })();
 </script>
 </body>
