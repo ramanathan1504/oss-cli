@@ -87,9 +87,12 @@ An extension is any directory containing an `oss-ext.json`. Attaching records a
 repository.
 
 ```bash
-git clone https://github.com/ramanathan1504/log4j2-workout ~/apache/log4j2-workout
-oss ext add ~/apache/log4j2-workout
+# A runner: any directory declaring kind "runner" in its oss-ext.json. A git
+# repository is the usual case, but nothing requires one — a plain local folder
+# works, because attaching records a path.
+oss ext add ~/path/to/your-runner
 
+# A memory: an archive that files and indexes what you have worked on.
 git clone https://github.com/ramanathan1504/knowledge-creator ~/knowledge-creator
 oss ext add ~/knowledge-creator
 
@@ -97,9 +100,9 @@ oss ext list
 ```
 
 ```
-NAME           KIND   STATE     VERBS
-log4j          bench  ok        list, run, matrix, coverage, repro, review, issue, pr, followup, hub
-devon          kb     ok        file, index, harvest, map, digest, doctor
+NAME           KIND    STATE     VERBS
+your-runner    runner  ok        list, run, matrix, coverage, repro, review, issue, pr, followup, hub
+devon          memory  ok        file, index, harvest, map, digest, doctor
 ```
 
 Then use them through the core:
@@ -194,29 +197,45 @@ oss-cli/
 └── pom.xml
 ```
 
-### log4j2-workout — a **bench** extension
+### A **runner** extension — the shape of one
 
 ```
-log4j2-workout/
+your-runner/
 ├── bench                 the only entry point (symlink into ~/.local/bin)
-├── oss-ext.json          declares this repo as the `log4j` bench
+├── oss-ext.json          declares this repo as a runner, and names it
 ├── packs/
-│   ├── log4j/pack.sh     WHAT is tested: versions, apps, app→module map
+│   ├── <project>/pack.sh WHAT is tested: versions, apps, app→module map
 │   └── example/pack.sh   a worked example — copy it for your own project
-├── apps/                 19 real applications (Spring Boot, JPA, JMS, web, bridges…)
-├── configs/              73 configurations across XML/JSON/YAML/properties + 1.x
+├── apps/                 real applications, the ones worth exercising
+├── configs/              configurations across whatever formats the project reads
 ├── scripts/              hub.py, repro.sh, gh-*.sh
 ├── docs/
 │   ├── pr-reviews/       reviews written, + ledger.tsv (head SHA at review time)
-│   ├── site/             the AsciiDoc command reference
+│   ├── site/             the command reference
 │   └── *.md              PR-REVIEW, BY-HAND, HANDOVER, FEATURE-MATRIX, …
 ├── repros/<kind>-<n>/    standalone reproductions: zip, matrix, per-version logs
-├── logs/<config>/        what the appenders produced — where findings are confirmed
+├── logs/<config>/        what the run produced — where findings are confirmed
 └── .bench/               caches, sweep logs, hub reports, review evidence (disposable)
 ```
 
 The engine is `bench`; the content is `packs/`. `BENCH_PACK=example ./bench list`
-runs the same matrix machinery against different content.
+runs the same matrix machinery against different content — which is the whole
+point of the split: the engine here knows how to run a matrix, and the pack says
+what the matrix is.
+
+**A pack is a directory, not a repository.** It is one holding a `pack.sh`, and
+it is reached either by name from a runner's `packs/` directory or by path:
+
+```bash
+BENCH_PACK=example ./bench list        # by name, from packs/
+oss run --pack ~/some/local/folder list --apps   # by path, from anywhere
+```
+
+Neither form clones or copies anything, which is the same rule `ext add`
+follows: what is recorded is a path, and the directory stays wherever you keep
+it. `runner/packs/example/pack.sh` in this repo is a working pack of about
+thirty lines — copy the directory, change the five declarations, and the engine
+runs against your project instead.
 
 ### knowledge-creator — a **kb** extension
 
@@ -273,7 +292,7 @@ comes through the guard, and the guard still asks you.
 | Port | Serves | Started by |
 |---|---|---|
 | **1504** | `oss serve` — the palette | you, by hand |
-| **8787** | `bench hub` — the log4j working page | launchd at login, or by hand |
+| **8787** | `bench hub` — the runner's working page | launchd at login, or by hand |
 
 ---
 
