@@ -48,8 +48,37 @@ public final class Live implements AutoCloseable {
 
     private static final long TICK_MS = 90;
 
+    /**
+     * Something to read while a long job runs.
+     *
+     * <p>Only after {@link #QUIP_AFTER_MS}, because a joke attached to work that finishes in 200ms
+     * is noise, and only ever in the dim tail of the line, where it cannot be mistaken for status.
+     * They are about the trade this tool is used for, so they read as company rather than filler.
+     */
+    private static final String[] QUIPS = {
+        "a vector is just an opinion with 384 decimal places",
+        "somewhere, a cache is being invalidated. it is not going well",
+        "the embedding does not know what your code does either. it is guessing politely",
+        "cosine similarity: the art of being confidently approximately right",
+        "this is still faster than reading the whole issue tracker yourself",
+        "every index is a bet that you will ask about this later",
+        "the model has read your notes. it has opinions about your naming",
+        "somebody once fixed this exact bug. probably you. eighteen months ago",
+        "retrieval is just grep that went to university",
+        "no daemon was harmed in the making of these vectors",
+        "the hard part was never the maths, it was remembering where you put it",
+        "a 22 MB model, doing arithmetic, on your laptop, offline. we live in the future",
+    };
+
+    /** Long enough that quick work stays silent and clean. */
+    private static final long QUIP_AFTER_MS = 8_000;
+
+    /** Slow enough to read one before it changes. */
+    private static final long QUIP_EVERY_MS = 13_000;
+
     private final PrintStream out = System.err;
     private final boolean animated;
+    private final boolean quips;
     private final long startedAt = System.nanoTime();
     private final AtomicReference<String> status = new AtomicReference<>("");
     private final AtomicBoolean running = new AtomicBoolean(true);
@@ -62,6 +91,7 @@ public final class Live implements AutoCloseable {
         // No console means piped, redirected, cron or CI. NO_COLOR is the de-facto opt-out and is
         // honoured because someone who sets it has already said what they want.
         this.animated = System.console() != null && System.getenv("NO_COLOR") == null;
+        this.quips = this.animated && System.getenv("OSS_NO_QUIPS") == null;
     }
 
     /** Begin a live line. Use in try-with-resources so it is always cleared. */
@@ -104,7 +134,8 @@ public final class Live implements AutoCloseable {
         String s = status.get();
         String line = "\r\u001b[36m" + frame + "\u001b[0m " + title
                 + (s.isEmpty() ? "" : " \u001b[2m— " + s + "\u001b[0m")
-                + " \u001b[2m" + elapsed() + "\u001b[0m";
+                + " \u001b[2m" + elapsed() + "\u001b[0m"
+                + quip();
         // Pad to the previous width so a shorter status cannot leave the tail of a longer one
         // stranded on screen.
         int visible = visibleLength(line);
@@ -127,6 +158,25 @@ public final class Live implements AutoCloseable {
         return ms < 1000 ? ms + "ms" : String.format("%.1fs", ms / 1000.0);
     }
 
+    /**
+     * The dim tail of the line, once the wait is long enough to be worth furnishing.
+     *
+     * <p>Empty until {@link #QUIP_AFTER_MS}, and empty entirely when {@code OSS_NO_QUIPS} is set --
+     * somebody watching a build log at three in the morning is entitled to a plain line, and asking
+     * is cheaper than guessing.
+     */
+    private String quip() {
+        if (!quips) {
+            return "";
+        }
+        long ms = (System.nanoTime() - startedAt) / 1_000_000;
+        if (ms < QUIP_AFTER_MS) {
+            return "";
+        }
+        int i = (int) ((ms - QUIP_AFTER_MS) / QUIP_EVERY_MS) % QUIPS.length;
+        return "  [2;3m" + QUIPS[i] + "[0m";
+    }
+
     private synchronized void clear() {
         if (animated && lastWidth > 0) {
             out.print("\r");
@@ -139,15 +189,29 @@ public final class Live implements AutoCloseable {
 
     /** Finish and leave a single settled line behind. */
     public void done(String summary) {
-        stop();
-        out.println("\u001b[32m✓\u001b[0m " + title + (summary == null || summary.isEmpty() ? "" : " — " + summary)
-                + " \u001b[2m" + elapsed() + "\u001b[0m");
+        settle("\u001b[32m", "✓", summary);
     }
 
     public void fail(String why) {
+        settle("\u001b[31m", "✗", why);
+    }
+
+    /**
+     * The one line left behind, coloured only when something is there to render it.
+     *
+     * <p>These used to emit their escapes unconditionally, so the verdict line carried raw ANSI into
+     * exactly the places this class is careful everywhere else not to: a redirected log, a cron
+     * mail, a CI transcript. The class promised "no colour" without a terminal and then wrote colour
+     * anyway -- a promise kept in three places and broken in the fourth.
+     */
+    private void settle(String colour, String mark, String tail) {
         stop();
-        out.println("\u001b[31m✗\u001b[0m " + title + (why == null || why.isEmpty() ? "" : " — " + why) + " \u001b[2m"
-                + elapsed() + "\u001b[0m");
+        String suffix = tail == null || tail.isEmpty() ? "" : " — " + tail;
+        if (animated) {
+            out.println(colour + mark + "\u001b[0m " + title + suffix + " \u001b[2m" + elapsed() + "\u001b[0m");
+        } else {
+            out.println(mark + " " + title + suffix + " (" + elapsed() + ")");
+        }
     }
 
     private void stop() {

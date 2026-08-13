@@ -45,9 +45,11 @@ public class ModelCommand implements Callable<Integer> {
             report();
             return 0;
         }
-        try {
-            Embeddings.fetch(m -> System.out.println("  " + m));
-            System.out.println("  model  ready");
+        // A 22 MB download over an unknown connection is the longest silence this tool has, and the
+        // one place a user is most likely to assume it has hung and kill it.
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("fetching the embedding model")) {
+            Embeddings.fetch(live::step);
+            live.done("ready — this will not happen again");
             report();
             return 0;
         } catch (Exception e) {

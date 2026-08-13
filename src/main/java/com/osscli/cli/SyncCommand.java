@@ -262,22 +262,29 @@ public class SyncCommand implements Callable<Integer> {
             int done = 0;
             int failed = 0;
 
-            for (Issue issue : pending) {
-                String content = "Title: " + issue.title() + "\nBody: " + (issue.body() == null ? "" : issue.body());
-                try {
-                    batch.add(new com.osscli.model.IssueEmbedding(repository, issue.number(), embedder.embed(content)));
-                } catch (Exception e) {
-                    // One malformed or oversized issue must not abandon the rest of the repository.
-                    failed++;
-                    LOGGER.debug("    embedding failed for #{}: {}", issue.number(), e.getMessage());
-                }
+            // Thousands of model calls on a first index. Without a live line this is the longest
+            // stretch of silence in a sync, and silence is indistinguishable from a hang.
+            try (com.osscli.ui.Live live = com.osscli.ui.Live.start("indexing " + repository)) {
+                for (Issue issue : pending) {
+                    String content =
+                            "Title: " + issue.title() + "\nBody: " + (issue.body() == null ? "" : issue.body());
+                    try {
+                        batch.add(new com.osscli.model.IssueEmbedding(
+                                repository, issue.number(), embedder.embed(content)));
+                    } catch (Exception e) {
+                        // One malformed or oversized issue must not abandon the rest of the repository.
+                        failed++;
+                        LOGGER.debug("    embedding failed for #{}: {}", issue.number(), e.getMessage());
+                    }
 
-                done++;
-                if (batch.size() >= EMBED_BATCH_SIZE) {
-                    SqliteStorage.saveEmbeddings(repository, batch, embedModel);
-                    batch.clear();
-                    LOGGER.info("    … {}/{} embedded", done, pending.size());
+                    done++;
+                    if (batch.size() >= EMBED_BATCH_SIZE) {
+                        SqliteStorage.saveEmbeddings(repository, batch, embedModel);
+                        batch.clear();
+                        live.step(done + "/" + pending.size() + " embedded");
+                    }
                 }
+                live.done(done + " of " + pending.size() + " embedded");
             }
             SqliteStorage.saveEmbeddings(repository, batch, embedModel);
 
