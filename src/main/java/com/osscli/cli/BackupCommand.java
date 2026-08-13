@@ -79,6 +79,30 @@ public class BackupCommand implements Callable<Integer> {
             description = "Also back up this directory. Repeatable. Use it for an archive an extension owns")
     List<Path> include = new ArrayList<>();
 
+    /**
+     * The note folders {@code sync --me} walks, or empty when none are configured.
+     *
+     * <p>Read here rather than passed in: the check has to hold for {@code --to} as well, and a
+     * caller that has to remember to pass the guard is a guard that eventually is not passed.
+     */
+    private static List<String> indexedNoteDirs() {
+        try {
+            String paths = SqliteStorage.loadConfig("drive.paths");
+            if (paths == null || paths.isBlank()) {
+                return List.of();
+            }
+            return java.util.Arrays.stream(paths.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .toList();
+        } catch (Exception e) {
+            // Unreadable configuration must not block a backup. The worst case is the old
+            // behaviour, and a backup refused for an unrelated reason helps nobody.
+            LOGGER.debug("Could not read drive.paths for the backup location check: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
     @Override
     public Integer call() throws Exception {
         Path base = AppPaths.BASE_DIR;
@@ -134,6 +158,29 @@ public class BackupCommand implements Callable<Integer> {
         }
         if (!Files.exists(targetBackupDir)) {
             Files.createDirectories(targetBackupDir);
+        }
+
+        // A backup written inside an indexed note folder feeds itself.
+        //
+        // drive.paths is walked by `sync --me`, which reads every file it finds and embeds it. Put
+        // the backups there and the next sync ingests a few hundred megabytes of zip as if it were
+        // a note; the sync after that backs up what it ingested, and the archive grows without
+        // bound until the disk decides the matter. Nothing about the symptom points at the cause --
+        // it looks like a corpus that mysteriously exploded.
+        //
+        // Refused rather than warned. A warning scrolls past inside a command that then reports
+        // success, and this one is unrecoverable by the time it is obvious.
+        for (String noteDir : indexedNoteDirs()) {
+            Path indexed = Paths.get(noteDir.trim()).toAbsolutePath().normalize();
+            if (targetBackupDir.toAbsolutePath().normalize().startsWith(indexed)) {
+                LOGGER.error("Refusing to write backups inside an indexed note folder:");
+                LOGGER.error("  backups → {}", targetBackupDir);
+                LOGGER.error("  indexed → {}", indexed);
+                LOGGER.error("'sync --me' reads everything under that folder, so it would ingest the");
+                LOGGER.error("archives as notes and back up what it ingested, over and over.");
+                LOGGER.error("Choose a directory outside your note folders — any disk, any cloud.");
+                return 1;
+            }
         }
 
         // 2. Perform the backup archiving
