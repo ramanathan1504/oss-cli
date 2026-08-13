@@ -11,9 +11,17 @@
 # fails because a secret is missing teaches people to ignore a red build.
 name: Packages
 
+# Triggered by Distributions finishing, not by the release being published.
+# The release event raced: it fires the moment the Release workflow publishes,
+# while Distributions is still building the archives these jobs download — so
+# every release-triggered run died in seconds on "no assets to download"
+# (1.7.2, 1.8.0 and 1.8.1 all did). And when the release is published with the
+# workflow's own GITHUB_TOKEN it does not fire at all (1.8.2). Distributions
+# completing for a tag is the event that actually means "the archives exist".
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: [Distributions]
+    types: [completed]
   workflow_dispatch:
     inputs:
       tag:
@@ -23,10 +31,13 @@ on:
 permissions:
   contents: write
 
+# For workflow_run on a tag build, head_branch carries the tag name. Only a
+# successful Distributions run for a v* tag is worth packaging.
 jobs:
   deb:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v')) }}
     steps:
       - name: Work out which release to package
         id: rel
@@ -34,7 +45,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          tag="${{ inputs.tag || github.event.workflow_run.head_branch }}"
           [ -n "$tag" ] || { echo "::error::no tag"; exit 1; }
           echo "tag=$tag"        >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
@@ -85,11 +96,17 @@ jobs:
       - name: Check it installs and runs
         run: |
           set -euo pipefail
-          sudo dpkg -i oss_*.deb
+          sudo dpkg -i "oss_${{ steps.rel.outputs.version }}_amd64.deb"
           # PATH deliberately excludes any JDK: the point is that none is needed.
           env -i HOME="$HOME" PATH=/usr/bin:/bin oss --version
           sudo dpkg -r oss
           echo "  installed, ran, and removed cleanly"
+
+      - name: Add the unversioned copy the website links to
+        # releases/latest/download/oss_amd64.deb only resolves if an asset
+        # carries exactly that name; a versioned filename turns that URL into a
+        # 404 on the day it ships. The versioned file stays for anyone pinning.
+        run: cp "oss_${{ steps.rel.outputs.version }}_amd64.deb" oss_amd64.deb
 
       - uses: actions/upload-artifact@v4
         with:
@@ -97,7 +114,6 @@ jobs:
           path: oss_*.deb
 
       - name: Attach to the release
-        if: ${{ github.event_name == 'release' || inputs.tag != '' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -107,13 +123,14 @@ jobs:
   choco:
     runs-on: windows-latest
     timeout-minutes: 20
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v')) }}
     steps:
       - name: Work out which release to package
         id: rel
         shell: bash
         run: |
           set -euo pipefail
-          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          tag="${{ inputs.tag || github.event.workflow_run.head_branch }}"
           [ -n "$tag" ] || { echo "::error::no tag"; exit 1; }
           echo "tag=$tag"         >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
@@ -178,7 +195,6 @@ jobs:
 
       - name: Attach to the release
         shell: bash
-        if: ${{ github.event_name == 'release' || inputs.tag != '' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
