@@ -5,6 +5,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -41,6 +43,95 @@ public class AliasCommand implements Callable<Integer> {
     /** Marks shims we wrote, so --list and --remove cannot touch somebody else's script. */
     private static final String MARKER = "# created by `oss alias` — safe to delete";
 
+    /**
+     * Names the shell resolves before PATH is ever consulted. Reserved words are parsed as syntax
+     * and builtins are dispatched internally, so a shim carrying one of these names can never run —
+     * {@code oss alias if} would report success and then {@code if --help} hangs the prompt waiting
+     * for a {@code then}. The PATH-collision check below cannot catch these, because most of them
+     * have no file on PATH to collide with. Not overridable with {@code --force}: force can shadow
+     * a file, it cannot change how a shell parses.
+     */
+    private static final Set<String> SHELL_WORDS = Set.of(
+            // reserved words (bash and zsh)
+            "if",
+            "then",
+            "else",
+            "elif",
+            "fi",
+            "case",
+            "esac",
+            "for",
+            "select",
+            "while",
+            "until",
+            "do",
+            "done",
+            "in",
+            "function",
+            "time",
+            "coproc",
+            "repeat",
+            "foreach",
+            "end",
+            // builtins that live only inside the shell
+            "cd",
+            "alias",
+            "unalias",
+            "source",
+            "eval",
+            "exec",
+            "exit",
+            "export",
+            "set",
+            "unset",
+            "shift",
+            "trap",
+            "return",
+            "break",
+            "continue",
+            "local",
+            "declare",
+            "typeset",
+            "readonly",
+            "let",
+            "pushd",
+            "popd",
+            "dirs",
+            "disown",
+            "suspend",
+            "logout",
+            "builtin",
+            "command",
+            "enable",
+            "shopt",
+            "complete",
+            "compgen",
+            "bind",
+            "history",
+            "fc",
+            "jobs",
+            "bg",
+            "fg",
+            "wait",
+            "read",
+            "getopts",
+            "hash",
+            "type",
+            "ulimit",
+            "umask",
+            "times",
+            "help",
+            "whence",
+            "where",
+            "rehash",
+            "setopt",
+            "unsetopt",
+            "autoload",
+            "bindkey",
+            "zle",
+            "zmodload",
+            "print");
+
     @Parameters(index = "0", arity = "0..1", description = "The name you want to type")
     String name;
 
@@ -76,6 +167,15 @@ public class AliasCommand implements Callable<Integer> {
     private Integer create(String alias) throws IOException {
         if (!alias.matches("[A-Za-z][A-Za-z0-9._-]*")) {
             System.err.println("error  \"" + alias + "\" is not a plain command name (letters, digits, . _ -)");
+            return 1;
+        }
+
+        // Lower-cased so "If" is refused too: the keyword check in a shell is case-sensitive, but
+        // the default macOS filesystem is not, and the pair is exactly the confusion this avoids.
+        if (SHELL_WORDS.contains(alias.toLowerCase(Locale.ROOT))) {
+            System.err.println("error  \"" + alias + "\" is a shell keyword or builtin — the shell resolves it"
+                    + " before PATH is consulted, so this name could never reach oss");
+            System.err.println("       Pick another name. --force cannot help here.");
             return 1;
         }
 
