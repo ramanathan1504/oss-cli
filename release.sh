@@ -140,6 +140,17 @@ gh pr create --title "Release v$VERSION" \
 PR_NUMBER=$(gh pr view "$RELEASE_BRANCH" --json number -q .number)
 
 echo "→ Waiting for CI on PR #$PR_NUMBER (this gates the merge)..."
+# Checks are scheduled a few seconds after the PR is created. Asking before
+# they exist prints "no checks reported" and exits nonzero, which set -e
+# turns into an aborted release with the PR left open -- v1.8.3 hit exactly
+# this. Wait for them to appear, then watch.
+for _ in $(seq 1 30); do
+    if gh pr checks "$PR_NUMBER" 2>&1 | grep -q "no checks reported"; then
+        sleep 10
+    else
+        break
+    fi
+done
 gh pr checks "$PR_NUMBER" --watch --fail-fast
 
 echo "→ Merging..."
