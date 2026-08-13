@@ -23,6 +23,15 @@ You install the core once. Everything else is optional and attaches later.
 
 Nothing below the first two rows is required. OSS-CLI works with none of it.
 
+> The two operations that take real time — `oss model --fetch`, and the vector
+> index `sync` builds for a repository — print a live status line with elapsed
+> time, so a long wait cannot be mistaken for a hang. It goes to **stderr**,
+> never stdout, so piping and redirecting a command's output is unaffected, and
+> it animates only when attached to a terminal: under a pipe, cron or CI it is
+> one plain line per step with no colour. `NO_COLOR` gives you that plain output
+> anywhere, and `OSS_NO_QUIPS=1` drops only the one-line quip that appears after
+> 8 seconds of waiting.
+
 ---
 
 ## 2. Install the core
@@ -253,6 +262,14 @@ knowledge-creator/
   ├── Tooling/  Reference/  Blog/
 ~/Documents/Knowledge.dtBase2                 the DEVONthink database
 ```
+
+The harvester also takes `--repo owner/name`, repeatable, which collects **every**
+issue and pull request discussion in that repository — comments, reviews and
+inline review threads — rather than only the threads you appear in. The daily
+script reads that list from `KB_HARVEST_REPOS`, unset by default. It only reads;
+it never writes to any repository. What it writes locally lands in a folder named
+in `drive.paths`, and `oss sync --me` embeds it — marked as reference rather than
+your own work, which [`SETUP.md`](SETUP.md#3-connecting-your-knowledge) explains.
 
 ---
 

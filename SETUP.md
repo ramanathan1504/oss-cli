@@ -41,6 +41,22 @@ it runs is one people stop trusting. Until it is there, `search`, `duplicates`
 and note indexing answer by shared terms instead of by meaning, which works and
 needs nothing installed.
 
+The fetch, and the vector index `sync` builds, are the two longest waits here, so
+both print a live status line with elapsed time — silence for forty seconds is
+indistinguishable from a hang. It is written to **stderr**, never stdout, so
+piping or redirecting a command's real output is unaffected. It animates only on
+a terminal: a pipe, cron or CI gets one plain line per step and no colour.
+
+| Variable            | Effect                                                          |
+|---------------------|-----------------------------------------------------------------|
+| `NO_COLOR`          | plain output, as if there were no terminal                      |
+| `OSS_NO_QUIPS=1`    | drops only the quip in the dim tail; the status line stays       |
+
+The quip is one rotating line that appears after 8 seconds of waiting, on the
+theory that a joke attached to work finishing in 200 ms is noise. Somebody
+reading a build log at three in the morning is entitled to a plain line, which is
+what the second variable is for.
+
 Retrieval quality still sets the ceiling. No corpus of any size fits in a
 context window, so every question is answered from retrieved passages, and a
 larger chat model cannot recover text the embedder never saw.
@@ -133,6 +149,46 @@ thing in the corpus, and a single passage of it can outweigh a whole note.
   duplicate detection will not catch it, because the surrounding prose differs.
   On one real setup this folder alone was 93% of the derived layer.
 - **Link indexes and graph files.** A list of links has no prose to match on.
+
+### Harvesting whole repositories, and what that changes
+
+A harvester usually collects the threads you were involved in. The companion
+`knowledge-creator` (the `devon` memory extension) also takes `--repo owner/name`,
+repeatable, which harvests **every** issue and pull request discussion in that
+repository — comments, reviews and inline review threads — not only the ones you
+appear in. Its daily script reads the list from `KB_HARVEST_REPOS`, unset by
+default. It only reads; it never writes to any repository. The Markdown it
+produces lands in one of the folders in `drive.paths`, and `oss sync --me`
+embeds it like anything else. It is a companion tool, not part of this CLI.
+
+That puts thousands of other people's conversations in the same corpus as your
+own conclusions. Both belong there and they are not the same thing, so each note
+is recorded as one of two tiers:
+
+| Tier          | What it is                                                    |
+|---------------|----------------------------------------------------------------|
+| **knowledge** | yours: written by you, decided by you, or a thread you took part in |
+| **reference** | collected: a discussion pulled down for context, which you had no part in |
+
+The tier is read from the note's own frontmatter. It is **reference** only when
+`my_role: none` and `source: repo-scan` both appear. Anything else is knowledge —
+including a thread found by scanning that you turn out to have authored or
+reviewed, because how a note was found is not the same as what you did in it. A
+note with no frontmatter is knowledge too: those are your own writing and the
+resolutions this tool recorded.
+
+Retrieval then prefers knowledge without discarding reference. Reference passages
+still compete for the context budget, at a 0.75 discount, and appear in the
+assembled prompt labelled `reference` rather than `chat_memory`, so an answer
+never implies that a discussion you never read was your own reasoning. Ranked
+identically they would fill the budget on weight of numbers alone, because there
+is far more of them. Nothing is hidden; search still finds reference material.
+
+**Promotion happens by itself.** The tier is re-read every time a note is
+embedded. Comment on an issue you had only collected, and the next harvest
+records your name in the note; the next `oss sync --me` re-reads that and the
+note becomes knowledge. There is no step to remember, because a step you have to
+remember is one that does not happen.
 
 ### If a folder is regenerated on every run
 
@@ -345,6 +401,8 @@ healthy-looking but empty install is otherwise indistinguishable from data loss.
 | Search matches only shared words    | The embedding model is not fetched — `oss model --fetch`.                                             |
 | Fewer similar results than expected | Vectors from the old Ollama embedder are ignored. Re-sync to rebuild them in-process.                     |
 | Long notes never retrieved          | Passages not built yet — run `sync --me` once after upgrading.                                            |
+| Answers lean on threads you never read | Those notes are ranked as reference already; if one you took part in is still treated that way, re-harvest it and run `sync --me` so the tier is re-read. |
+| Spinner frames in a log or CI output | Something is presenting a terminal where you expected none — set `NO_COLOR`.                              |
 
 ---
 
