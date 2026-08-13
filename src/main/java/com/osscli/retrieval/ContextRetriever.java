@@ -19,6 +19,7 @@ package com.osscli.retrieval;
 import com.osscli.model.ChatMemory;
 import com.osscli.model.Issue;
 import com.osscli.model.IssueEmbedding;
+import com.osscli.model.IssueReference;
 import com.osscli.model.JiraBridgeLink;
 import com.osscli.model.Label;
 import com.osscli.model.PrMemory;
@@ -33,8 +34,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class ContextRetriever {
+
+    private static final Logger LOGGER = LogManager.getLogger(ContextRetriever.class);
 
     private static final int TOKEN_BUDGET = 6000;
 
@@ -132,6 +137,64 @@ public class ContextRetriever {
                         relatedAdded++;
                     }
                 }
+            }
+
+            // ── 3b. Issues this one references, and issues that reference it ─
+            //
+            // Stated, not inferred, so it does not go through the similarity threshold. A pull
+            // request whose entire body is "fixes #4100" shares almost no wording with the issue it
+            // closes; ranked by resemblance the two look unrelated at the exact moment they are
+            // most related. The incoming direction matters more than the outgoing one and is the
+            // one nobody records: an issue does not know which pull request closed it, because the
+            // claim lives in the pull request.
+            try {
+                Map<Long, Issue> byNumber = new HashMap<>();
+                for (Issue candidate : issues) {
+                    byNumber.put(candidate.number(), candidate);
+                }
+
+                List<IssueReference> edges = new ArrayList<>(SqliteStorage.loadReferences(repository, issueNumber));
+                edges.addAll(SqliteStorage.loadReferencedBy(repository, issueNumber));
+
+                Set<Long> already = new HashSet<>();
+                int refsAdded = 0;
+                for (IssueReference edge : edges) {
+                    // A commit is an edge worth keeping in the index and not worth spending prompt
+                    // budget on: without a clone there is nothing here to say about it.
+                    if (edge.toSha() != null || refsAdded >= 8) {
+                        continue;
+                    }
+                    // A reference to a repository that was never synced has no text to offer.
+                    if (!repository.equals(edge.toRepository())) {
+                        continue;
+                    }
+                    Issue linked = byNumber.get(edge.toNumber());
+                    if (linked == null || linked.number() == issueNumber || !already.add(edge.toNumber())) {
+                        continue;
+                    }
+
+                    boolean closes = edge.kind() == IssueReference.Kind.CLOSES;
+                    String refContent = String.format(
+                            "#%d [%s] %s%s",
+                            linked.number(),
+                            linked.state(),
+                            linked.title(),
+                            closes ? "  (stated as fixing/fixed by this)" : "");
+                    candidates.add(new PromptContextChunk(
+                            "referenced_issue",
+                            "#" + linked.number(),
+                            refContent,
+                            // Above label overlap, because somebody wrote this down rather than the
+                            // two happening to share a word.
+                            closes ? 0.95 : 0.85,
+                            estimateTokens(refContent),
+                            false));
+                    refsAdded++;
+                }
+            } catch (Exception e) {
+                // The reference index is an addition to retrieval, not a precondition for it. A
+                // database predating it, or a failure reading it, costs these edges and nothing else.
+                LOGGER.debug("Reference edges unavailable for #{}: {}", issueNumber, e.getMessage());
             }
         }
 

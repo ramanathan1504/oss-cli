@@ -20,9 +20,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.osscli.model.AiAnalysisResult;
 import com.osscli.model.Issue;
 import com.osscli.model.IssueEmbedding;
+import com.osscli.model.IssueReference;
 import com.osscli.model.Label;
 import com.osscli.model.PrEvidence;
 import com.osscli.model.PullRequestMarker;
+import com.osscli.model.References;
 import com.osscli.model.RepoIssue;
 import com.osscli.model.TrendSnapshot;
 import com.osscli.model.User;
@@ -45,9 +47,9 @@ public class SqliteStorage {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    // Regex patterns for Ecosystem Dependency Analysis
-    private static final Pattern CROSS_REPO_PATTERN = Pattern.compile("([a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+)#(\\d+)");
-    private static final Pattern INTERNAL_REF_PATTERN = Pattern.compile("\\b#(\\d+)\\b");
+    // Issue and cross-repository references are read by com.osscli.model.References, which is the
+    // one place that decides what a reference is. JIRA keys are a different notation with different
+    // rules, and stay here.
     private static final Pattern JIRA_KEY_PATTERN = Pattern.compile("\\b([A-Z]+-\\d+)\\b");
 
     // ==========================================
@@ -79,6 +81,11 @@ public class SqliteStorage {
         String insertJiraSql =
                 "INSERT OR REPLACE INTO jira_mentions (repository, issue_number, jira_key) VALUES (?, ?, ?);";
 
+        String deleteRefsSql = "DELETE FROM issue_references WHERE repository = ? AND from_number = ?;";
+        String insertRefSql = "INSERT OR REPLACE INTO issue_references "
+                + "(repository, from_number, kind, to_ref, to_repository, to_number, to_sha) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?);";
+
         try (Connection conn = DatabaseManager.getConnection()) {
             conn.setAutoCommit(false);
 
@@ -88,7 +95,9 @@ public class SqliteStorage {
                     PreparedStatement psDelLinks = conn.prepareStatement(deleteLinksSql);
                     PreparedStatement psLink = conn.prepareStatement(insertLinkSql);
                     PreparedStatement psDelJira = conn.prepareStatement(deleteJiraSql);
-                    PreparedStatement psJira = conn.prepareStatement(insertJiraSql)) {
+                    PreparedStatement psJira = conn.prepareStatement(insertJiraSql);
+                    PreparedStatement psDelRefs = conn.prepareStatement(deleteRefsSql);
+                    PreparedStatement psRef = conn.prepareStatement(insertRefSql)) {
 
                 for (Issue issue : issues) {
                     // A. Save Issue
@@ -121,36 +130,48 @@ public class SqliteStorage {
                         }
                     }
 
-                    // C. Auto-Extract Dependency Links
+                    // C. Auto-Extract Dependency Links and reference edges
+                    //
+                    // One parser, two consumers. This used to hold its own pair of regexes over the
+                    // raw title and body, which meant a second, laxer idea of what a reference is
+                    // than the one retrieval uses -- and it read straight through fenced code, so a
+                    // stack frame or a log line mentioning "#1" became an edge to a real issue.
+                    // cross_repo_links keeps feeding the ecosystem report; issue_references is what
+                    // retrieval follows, and it additionally records whether the author claimed to
+                    // fix the thing, plus commits.
                     psDelLinks.setString(1, repository);
                     psDelLinks.setLong(2, issue.number());
                     psDelLinks.addBatch();
+                    psDelRefs.setString(1, repository);
+                    psDelRefs.setLong(2, issue.number());
+                    psDelRefs.addBatch();
 
                     String textToScan = issue.title() + " " + (issue.body() == null ? "" : issue.body());
 
-                    // Match external links (e.g. apache/kafka#1234)
-                    Matcher crossMatcher = CROSS_REPO_PATTERN.matcher(textToScan);
-                    while (crossMatcher.find()) {
-                        String targetRepo = crossMatcher.group(1);
-                        long targetNum = Long.parseLong(crossMatcher.group(2));
+                    for (IssueReference ref : References.parse(textToScan, repository)) {
+                        boolean selfRef = ref.toSha() == null
+                                && ref.toNumber() == issue.number()
+                                && repository.equals(ref.toRepository());
+                        if (selfRef) {
+                            continue;
+                        }
 
-                        psLink.setString(1, repository);
-                        psLink.setLong(2, issue.number());
-                        psLink.setString(3, targetRepo);
-                        psLink.setLong(4, targetNum);
-                        psLink.setString(5, "EXPLICIT_REFERENCE");
-                        psLink.addBatch();
-                    }
+                        psRef.setString(1, repository);
+                        psRef.setLong(2, issue.number());
+                        psRef.setString(3, ref.kind().name());
+                        psRef.setString(4, ref.key());
+                        psRef.setString(5, ref.toRepository());
+                        psRef.setLong(6, ref.toNumber());
+                        psRef.setString(7, ref.toSha());
+                        psRef.addBatch();
 
-                    // Match internal links (e.g. #4567 -> referring same repo)
-                    Matcher internalMatcher = INTERNAL_REF_PATTERN.matcher(textToScan);
-                    while (internalMatcher.find()) {
-                        long targetNum = Long.parseLong(internalMatcher.group(1));
-                        if (targetNum != issue.number()) {
+                        // The dependency report is about issues pointing at issues; a commit is not
+                        // one of those, and it has no number to record.
+                        if (ref.toSha() == null) {
                             psLink.setString(1, repository);
                             psLink.setLong(2, issue.number());
-                            psLink.setString(3, repository);
-                            psLink.setLong(4, targetNum);
+                            psLink.setString(3, ref.toRepository());
+                            psLink.setLong(4, ref.toNumber());
                             psLink.setString(5, "EXPLICIT_REFERENCE");
                             psLink.addBatch();
                         }
@@ -178,6 +199,10 @@ public class SqliteStorage {
                 psLink.executeBatch();
                 psDelJira.executeBatch();
                 psJira.executeBatch();
+                // Deletes before inserts, as above: the edges are rebuilt from the body every time,
+                // so an edited body that drops a reference drops the edge with it.
+                psDelRefs.executeBatch();
+                psRef.executeBatch();
 
                 conn.commit();
             } catch (SQLException e) {
@@ -504,6 +529,86 @@ public class SqliteStorage {
             }
         }
         return results;
+    }
+
+    // ==========================================
+    // 3b. Reference edges between issues, PRs and commits
+    // ==========================================
+
+    /**
+     * Replace the references written by one issue.
+     *
+     * <p>Delete-then-insert rather than merge, because an edited body can remove a reference and a
+     * merge would keep it forever. The edges are derived data; the body is the truth.
+     */
+    public static void saveReferences(String repository, long fromNumber, List<IssueReference> refs)
+            throws SQLException {
+        try (Connection conn = DatabaseManager.getConnection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement del =
+                    conn.prepareStatement("DELETE FROM issue_references WHERE repository = ? AND from_number = ?;")) {
+                del.setString(1, repository);
+                del.setLong(2, fromNumber);
+                del.executeUpdate();
+            }
+            if (!refs.isEmpty()) {
+                String sql = "INSERT OR REPLACE INTO issue_references "
+                        + "(repository, from_number, kind, to_ref, to_repository, to_number, to_sha) "
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?);";
+                try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                    for (IssueReference r : refs) {
+                        ps.setString(1, repository);
+                        ps.setLong(2, fromNumber);
+                        ps.setString(3, r.kind().name());
+                        ps.setString(4, r.key());
+                        ps.setString(5, r.toRepository());
+                        ps.setLong(6, r.toNumber());
+                        ps.setString(7, r.toSha());
+                        ps.addBatch();
+                    }
+                    ps.executeBatch();
+                }
+            }
+            conn.commit();
+        }
+    }
+
+    /** What this issue points at. */
+    public static List<IssueReference> loadReferences(String repository, long fromNumber) throws SQLException {
+        String sql = "SELECT kind, to_repository, to_number, to_sha FROM issue_references "
+                + "WHERE repository = ? AND from_number = ?;";
+        return readRefs(sql, repository, fromNumber);
+    }
+
+    /**
+     * What points at this issue.
+     *
+     * <p>The direction that matters most in practice and is never written down: an issue does not
+     * know which pull request closed it, because the claim lives in the pull request.
+     */
+    public static List<IssueReference> loadReferencedBy(String repository, long number) throws SQLException {
+        String sql = "SELECT kind, repository AS to_repository, from_number AS to_number, "
+                + "NULL AS to_sha FROM issue_references WHERE to_repository = ? AND to_number = ?;";
+        return readRefs(sql, repository, number);
+    }
+
+    private static List<IssueReference> readRefs(String sql, String repository, long number) throws SQLException {
+        List<IssueReference> out = new ArrayList<>();
+        try (Connection conn = DatabaseManager.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, repository);
+            ps.setLong(2, number);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    out.add(new IssueReference(
+                            IssueReference.Kind.of(rs.getString("kind")),
+                            rs.getString("to_repository"),
+                            rs.getLong("to_number"),
+                            rs.getString("to_sha")));
+                }
+            }
+        }
+        return out;
     }
 
     // ==========================================
