@@ -33,7 +33,7 @@ for it, nothing seeds it, and an old database that still carries it is ignored.
 It is fetched once, by a command you type:
 
 ```bash
-oss-cli model --fetch     # about 22 MB, Apache-2.0, stored under ~/.oss-cli/models
+oss model --fetch     # about 22 MB, Apache-2.0, stored under ~/.oss-cli/models
 ```
 
 Nothing fetches it for you — a command that quietly pulls 22 MB the first time
@@ -92,8 +92,8 @@ OSS-CLI ingests a directory tree of notes. Set `drive.paths` to a
 comma-separated list of folders and run:
 
 ```bash
-oss-cli sync --all    # public repository backlogs
-oss-cli sync --me     # your PR history + the folders in drive.paths
+oss sync --all    # public repository backlogs
+oss sync --me     # your PR history + the folders in drive.paths
 ```
 
 `sync --me` is the one command that requires the embedder, because everything it
@@ -215,7 +215,7 @@ Ollama is used for generation and nothing else. It is never asked to embed, so
 
 ```bash
 ollama serve
-ollama pull llama3.2:3b       # then name it during 'oss-cli setup'
+ollama pull llama3.2:3b       # then name it during 'oss setup'
 ```
 
 It does not have to be on this machine. `setup` asks where it is, so a laptop
@@ -257,8 +257,8 @@ outside the database.
 Nothing is ever sent because a key exists. Escalation is a flag you type:
 
 ```bash
-oss-cli prompt <n> --send-claude     # or --send-openai, --send-gemini
-oss-cli review <n> --escalate        # uses whichever key is configured
+oss prompt <n> --send-claude     # or --send-openai, --send-gemini
+oss review <n> --escalate        # uses whichever key is configured
 ```
 
 ---
@@ -266,15 +266,15 @@ oss-cli review <n> --escalate        # uses whichever key is configured
 ## 6. Daily use
 
 ```bash
-oss-cli critical                # offline ranking by community signal
-oss-cli search "<query>"        # semantic search over the backlog
-oss-cli prompt <number>         # local answer, or an expert prompt
-oss-cli inspect <number>        # what was retrieved, and will it escalate
-oss-cli prompt <n> --copy       # prompt to clipboard
-oss-cli prompt <n> --out f.md   # prompt to a file
-oss-cli prompt <n> --force-prompt   # skip the local model entirely
-oss-cli backup                  # timestamped archive (keeps last 5)
-oss-cli restore <archive.zip>   # restore, preserving local API keys
+oss critical                # offline ranking by community signal
+oss search "<query>"        # semantic search over the backlog
+oss prompt <number>         # local answer, or an expert prompt
+oss inspect <number>        # what was retrieved, and will it escalate
+oss prompt <n> --copy       # prompt to clipboard
+oss prompt <n> --out f.md   # prompt to a file
+oss prompt <n> --force-prompt   # skip the local model entirely
+oss backup                  # timestamped archive (keeps last 5)
+oss restore <archive.zip>   # restore, preserving local API keys
 ```
 
 ### How `prompt` decides
@@ -300,7 +300,7 @@ Everything sits under `~/.oss-cli` — database, reports, backups, logs. Set
 `OSS_CLI_HOME` and all of it moves as a set:
 
 ```bash
-OSS_CLI_HOME=~/.oss-cli-dev oss-cli doctor
+OSS_CLI_HOME=~/.oss-cli-dev oss doctor
 ```
 
 **This matters if you build from source.** A jar you build and the one Homebrew
@@ -320,10 +320,10 @@ having one.
 To see which build you are running and which store it will write to:
 
 ```console
-$ oss-cli --version
-oss-cli 1.3.0
-build     2026-08-01T19:08:47Z
-running   /opt/homebrew/Cellar/oss-cli/1.3.0/libexec/oss-cli.jar
+$ oss --version
+oss 1.9.0
+build     2026-08-13T12:38:36Z
+running   /opt/homebrew/Cellar/oss/1.9.0/libexec/lib/oss.jar
 data      /Users/you/.oss-cli
 ```
 
@@ -338,11 +338,11 @@ healthy-looking but empty install is otherwise indistinguishable from data loss.
 
 | Symptom                             | Likely cause                                                                                              |
 |-------------------------------------|-----------------------------------------------------------------------------------------------------------|
-| Everything missing / database empty | `OSS_CLI_HOME` is exported in that shell. `oss-cli doctor` names the store it is using on its first line. |
+| Everything missing / database empty | `OSS_CLI_HOME` is exported in that shell. `oss doctor` names the store it is using on its first line. |
 | Database looks empty after upgrade  | Both old and new data directories exist.                                                                  |
 | Everything escalates                | Guidance model not installed, or `context_limit` too low.                                                 |
 | Local answers empty                 | Reasoning model returning output in a separate field.                                                     |
-| Search matches only shared words    | The embedding model is not fetched — `oss-cli model --fetch`.                                             |
+| Search matches only shared words    | The embedding model is not fetched — `oss model --fetch`.                                             |
 | Fewer similar results than expected | Vectors from the old Ollama embedder are ignored. Re-sync to rebuild them in-process.                     |
 | Long notes never retrieved          | Passages not built yet — run `sync --me` once after upgrading.                                            |
 

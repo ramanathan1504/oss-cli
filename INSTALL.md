@@ -16,7 +16,7 @@ You install the core once. Everything else is optional and attaches later.
 | **Java 17+** | the CLI is a Java jar | `java -version` |
 | **Homebrew** | how the core installs | `brew --version` |
 | GitHub token | reading repositories | `gh auth status`, or macOS Keychain |
-| Embedding model | *optional* — search by meaning. About 22 MB, runs in-process, fetched once by `oss-cli model --fetch` | `oss-cli model` |
+| Embedding model | *optional* — search by meaning. About 22 MB, runs in-process, fetched once by `oss model --fetch` | `oss model` |
 | Ollama | *optional* — local verdicts and guidance. Nothing indexes or searches through it | `ollama list` |
 | Cloud API key | *optional* — escalation past the local budget | — |
 | Maven 3.9+ | *only* to build from source | `mvn -v` |
@@ -28,20 +28,20 @@ Nothing below the first two rows is required. OSS-CLI works with none of it.
 ## 2. Install the core
 
 ```bash
-brew install ramanathan1504/oss-cli/oss-cli
-oss-cli --version
+brew install ramanathan1504/oss-cli/oss
+oss --version
 ```
 
 Upgrades later:
 
 ```bash
-brew update && brew upgrade oss-cli
+brew update && brew upgrade oss
 ```
 
 Then configure — every prompt may be skipped with Enter:
 
 ```bash
-oss-cli setup
+oss setup
 ```
 
 `setup` covers the GitHub username and default repo, Ollama and cloud model
@@ -51,7 +51,7 @@ and a kb. It configures **nothing** about upstream writes, deliberately — see 
 Check everything at once:
 
 ```bash
-oss-cli doctor
+oss doctor
 ```
 
 > `doctor` **reports layers, not only failures.** An unfetched embedding model,
@@ -66,9 +66,9 @@ oss-cli doctor
 ## 3. Run it as a local service
 
 ```bash
-oss-cli serve                 # http://localhost:1504
-oss-cli serve --port 9000     # if 1504 is taken
-oss-cli serve --no-open       # do not launch a browser
+oss serve                 # http://localhost:1504
+oss serve --port 9000     # if 1504 is taken
+oss serve --no-open       # do not launch a browser
 ```
 
 The page lists what is attached and lets you attach more by pasting a path. It
@@ -88,12 +88,12 @@ repository.
 
 ```bash
 git clone https://github.com/ramanathan1504/log4j2-workout ~/apache/log4j2-workout
-oss-cli ext add ~/apache/log4j2-workout
+oss ext add ~/apache/log4j2-workout
 
 git clone https://github.com/ramanathan1504/knowledge-creator ~/knowledge-creator
-oss-cli ext add ~/knowledge-creator
+oss ext add ~/knowledge-creator
 
-oss-cli ext list
+oss ext list
 ```
 
 ```
@@ -105,9 +105,9 @@ devon          kb     ok        file, index, harvest, map, digest, doctor
 Then use them through the core:
 
 ```bash
-oss-cli bench list --apps
-oss-cli bench followup --since 4234
-oss-cli kb doctor
+oss bench list --apps
+oss bench followup --since 4234
+oss kb doctor
 ```
 
 | Command | Does |
@@ -148,7 +148,7 @@ If a verb of yours posts somewhere public, declare it:
 approval flag, so a sentence there can never match and would silently make the
 verb unusable.
 
-> **Edited a manifest?** Run `oss-cli ext refresh <name>`. The registry stores a
+> **Edited a manifest?** Run `oss ext refresh <name>`. The registry stores a
 > snapshot plus its SHA-256, so an edited file shows as `STALE` and **dispatch is
 > refused** until refreshed — rather than acting on a stale copy.
 
@@ -159,9 +159,11 @@ verb unusable.
 ### The core, once installed
 
 ```
-/opt/homebrew/bin/oss-cli                  → launcher on your PATH
-/opt/homebrew/Cellar/oss-cli/<version>/
-  └── libexec/oss-cli.jar                  the whole program
+/opt/homebrew/bin/oss                      → launcher on your PATH (a symlink)
+/opt/homebrew/Cellar/oss/<version>/libexec/
+  ├── oss                                  the launcher it points at
+  ├── lib/oss.jar                          the whole program
+  └── runtime/                             a bundled Java, so none is required
 
 ~/.oss-cli/                                YOUR DATA — never inside a clone
   ├── extensions.json                      what is attached (paths + manifest snapshots)
@@ -171,7 +173,7 @@ verb unusable.
 ```
 
 > `~/.oss-cli` survives uninstalling and re-cloning. It is the one directory
-> worth backing up (`oss-cli backup`). `OSS_CLI_HOME` relocates all of it, which
+> worth backing up (`oss backup`). `OSS_CLI_HOME` relocates all of it, which
 > is how a development build avoids touching a release's data.
 
 ### oss-cli — source (only needed to build)
@@ -252,7 +254,7 @@ Two things must both be true, and neither can be made permanent:
 2. **You confirm that write, now, by retyping the repository name.** Every time.
 
 ```bash
-oss-cli bench --approve-upstream apache/logging-log4j2 hub --pr 4234
+oss bench --approve-upstream apache/logging-log4j2 hub --pr 4234
 ./bench hub --approve-upstream apache/logging-log4j2
 ```
 
@@ -270,7 +272,7 @@ comes through the guard, and the guard still asks you.
 
 | Port | Serves | Started by |
 |---|---|---|
-| **1504** | `oss-cli serve` — the palette | you, by hand |
+| **1504** | `oss serve` — the palette | you, by hand |
 | **8787** | `bench hub` — the log4j working page | launchd at login, or by hand |
 
 ---
@@ -295,8 +297,8 @@ schema migrations are one-way.
 
 | Symptom | Cause and fix |
 |---|---|
-| `no bench extension is registered` | nothing attached — `oss-cli ext add <repo>` |
-| `STALE` in `ext list` | the manifest changed on disk — `oss-cli ext refresh <name>` |
+| `no bench extension is registered` | nothing attached — `oss ext add <repo>` |
+| `STALE` in `ext list` | the manifest changed on disk — `oss ext refresh <name>` |
 | `MISSING` in `ext list` | the checkout moved — re-add it at the new path |
 | `refused — no --approve-upstream` | working as designed; see §6 |
 | `doctor` exits 1 | something is genuinely wrong — a missing `drive.paths` folder, or vectors from more than one model. A missing *optional* piece (the embedding model, Ollama, `GITHUB_TOKEN` in env) only warns |
@@ -309,11 +311,11 @@ schema migrations are one-way.
 ## 10. Uninstalling
 
 ```bash
-brew uninstall oss-cli          # removes the program only
+brew uninstall oss              # removes the program only
 rm -rf ~/.oss-cli               # ONLY if you also want the database and palette gone
 ```
 
 Deleting an extension's clone is safe — but `bench` **is** its repository (the
 apps and configs are the product, not a build artefact), and `.bench/` and
 `logs/` hold results git does not track. Detaching first is tidier:
-`oss-cli ext remove <name>`.
+`oss ext remove <name>`.

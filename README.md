@@ -73,7 +73,7 @@ A brand-new user with none of the optional pieces still gets working commands. M
 * **Java 17**
 * **Apache Maven**
 * **A GitHub token** — the only hard requirement
-* **The embedding model** *(optional)* — all-MiniLM-L6-v2, quantised to about 22 MB, Apache-2.0. It runs inside this process; there is no server to install. `oss-cli model --fetch` puts it under `~/.oss-cli/models`, once. Nothing fetches it on your behalf, and until it is there everything that would search by meaning searches by shared terms instead.
+* **The embedding model** *(optional)* — all-MiniLM-L6-v2, quantised to about 22 MB, Apache-2.0. It runs inside this process; there is no server to install. `oss model --fetch` puts it under `~/.oss-cli/models`, once. Nothing fetches it on your behalf, and until it is there everything that would search by meaning searches by shared terms instead.
 * **Ollama** *(optional)* — local text *generation* only: guidance, triage verdicts and PR verdicts. Nothing indexes or searches through it. Models are your choice; defaults are `llama3.2:3b` and `qwen2.5:0.5b`.
 * **A cloud API key** *(optional)* — any major provider, for escalation
 
@@ -88,8 +88,8 @@ For Maven projects it **follows the inherited POM chain through Maven Central**,
 `review` then uses that profile to review a pull request, caching evidence **by head commit SHA** so re-reviewing unchanged code is instant while a new push re-fetches automatically. No local clone is needed.
 
 ```bash
-oss-cli profile -r apache/logging-log4j2
-oss-cli review 4234
+oss profile -r apache/logging-log4j2
+oss review 4234
 ```
 
 ---
@@ -104,14 +104,14 @@ oss-cli review 4234
 2. **Run the Interactive Wizard:**
    Securely registers your GitHub token, any cloud API keys, local model names, and note folder paths into the SQLite `system_config` table.
    ```bash
-   oss-cli setup
+   oss setup
    ```
 
 3. **Install Global Command (macOS/Linux):**
    ```bash
-   sudo nano /usr/local/bin/oss-cli
+   sudo nano /usr/local/bin/oss
    # Paste: java -jar /absolute/path/to/target/oss-cli-1.9.0.jar "$@"
-   sudo chmod +x /usr/local/bin/oss-cli
+   sudo chmod +x /usr/local/bin/oss
    ```
 
 ---
@@ -138,50 +138,50 @@ The project includes a background daemon (`osscli-master.sh`) that automatically
 
 ```bash
 # 1. Sync all ecosystem repositories (Log4j, Kafka, Spark, Elastic, etc.)
-oss-cli sync --all
+oss sync --all
 
 # 2. Sync your personal 1-year Developer Profile & Google Drive chat logs
-oss-cli sync --me
+oss sync --me
 
 # 3. Fast offline ranking — no AI required
-oss-cli critical
+oss critical
 
 # 4. AI severity analysis (Ollama) + duplicate detection (the built-in embedder)
-oss-cli analyze
-oss-cli duplicates -t 0.85
+oss analyze
+oss duplicates -t 0.85
 
 # 5. Generate your Personal Contribution Roadmap Report
-oss-cli report --me
+oss report --me
 ```
 
 ### Prompt Intelligence Flow (New — Adaptive)
 
 ```bash
 # Ollama answers locally if it can — escalates to expert prompt if context is too large
-oss-cli prompt 1666
+oss prompt 1666
 
 # See exactly what context was retrieved and whether Ollama will answer or escalate
-oss-cli inspect 1666
+oss inspect 1666
 
 # Force the expert prompt regardless (skip local Ollama)
-oss-cli prompt 1666 --force-prompt
+oss prompt 1666 --force-prompt
 
 # Copy the generated expert prompt to clipboard
-oss-cli prompt 1666 --copy
+oss prompt 1666 --copy
 
 # Save expert prompt to a Markdown file
-oss-cli prompt 1666 --out ~/Desktop/issue-1666-prompt.md
+oss prompt 1666 --out ~/Desktop/issue-1666-prompt.md
 
 # Auto-send to an external AI when escalation occurs
-oss-cli prompt 1666 --send-gemini
+oss prompt 1666 --send-gemini
 ```
 
 ### Interactive Chat (Legacy Omni-Cloud)
 
 ```bash
-oss-cli chat 1666            # Escalates to Gemini (Default)
-oss-cli chat 1666 --openai   # Escalates to OpenAI GPT-4o
-oss-cli chat 1666 --claude   # Escalates to Anthropic Claude 3.5
+oss chat 1666            # Escalates to Gemini (Default)
+oss chat 1666 --openai   # Escalates to OpenAI GPT-4o
+oss chat 1666 --claude   # Escalates to Anthropic Claude 3.5
 ```
 
 ---
@@ -192,10 +192,10 @@ Safeguard your entire AI memory (database, embeddings, chat logs) with a single 
 
 ```bash
 # Create a timestamped zip archive (auto-rotates, keeps last 5)
-oss-cli backup
+oss backup
 
 # Restore from a previous archive (preserves your local API keys)
-oss-cli restore /path/to/sa_brain_backup_20260627_104000.zip
+oss restore /path/to/sa_brain_backup_20260627_104000.zip
 ```
 
 ---
