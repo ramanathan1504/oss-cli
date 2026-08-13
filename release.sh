@@ -12,6 +12,12 @@
 # The split matters. The tag ends up pointing at the exact tree that was built
 # and reviewed, and CI rebuilds from that tag rather than trusting an artifact
 # uploaded from a laptop.
+#
+# main is branch-protected, so the release commit cannot be pushed to it
+# directly: it goes up on a release branch, through a pull request, and is
+# squash-merged once CI passes. The squash commit carries the identical tree
+# (the branch is cut from main's head), so tagging it keeps the guarantee
+# above. This script drives that whole loop and only then pushes the tag.
 
 set -e
 
@@ -115,6 +121,8 @@ if [ ! -f "$RELEASE_JAR" ]; then
 fi
 
 echo "→ Committing the released tree..."
+RELEASE_BRANCH="release-v$VERSION"
+git switch -c "$RELEASE_BRANCH"
 git add -A
 git commit -q -m "Release v$VERSION"
 
@@ -125,15 +133,33 @@ if [ -n "$(git status --porcelain)" ]; then
     exit 1
 fi
 
-echo "→ Tagging and pushing..."
+echo "→ main is protected: sending the release commit through a pull request..."
+git push -u origin "$RELEASE_BRANCH"
+gh pr create --title "Release v$VERSION" \
+    --body "Version bump, changelog and doc references for v$VERSION. Cut by release.sh; the tag is applied to this commit once it lands on main."
+PR_NUMBER=$(gh pr view "$RELEASE_BRANCH" --json number -q .number)
+
+echo "→ Waiting for CI on PR #$PR_NUMBER (this gates the merge)..."
+gh pr checks "$PR_NUMBER" --watch --fail-fast
+
+echo "→ Merging..."
+gh pr merge "$PR_NUMBER" --squash --delete-branch
+
+echo "→ Tagging the merged commit..."
+git switch main
+git pull --ff-only origin main
 git tag -a "v$VERSION" -m "OSS-CLI v$VERSION"
-git push origin main
 git push origin "v$VERSION"
 
 echo "========================================"
-echo "✅ v$VERSION tagged and pushed."
+echo "✅ v$VERSION merged and tagged."
 echo
-echo "CI takes it from here: build, GitHub release, Homebrew tap."
+echo "CI takes it from here, in order:"
+echo "   Release        publishes the GitHub release and the jar"
+echo "   Distributions  builds the self-contained archives"
+echo "   Packages       builds the .deb and the choco .nupkg (runs after Distributions)"
+echo "   The tap bumps itself within three hours; to publish immediately:"
+echo "     gh workflow run \"Bump formula\" --repo ramanathan1504/homebrew-oss-cli"
 echo "   gh run watch"
 echo "   https://github.com/ramanathan1504/oss-cli/releases"
 echo "========================================"
