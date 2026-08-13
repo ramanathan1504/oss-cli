@@ -108,7 +108,7 @@ oss-cli review 4234
 3. **Install Global Command (macOS/Linux):**
    ```bash
    sudo nano /usr/local/bin/oss-cli
-   # Paste: java -jar /absolute/path/to/target/oss-cli-1.7.1.jar "$@"
+   # Paste: java -jar /absolute/path/to/target/oss-cli-1.8.2.jar "$@"
    sudo chmod +x /usr/local/bin/oss-cli
    ```
 
