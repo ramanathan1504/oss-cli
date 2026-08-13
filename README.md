@@ -8,18 +8,20 @@ An advanced, offline-first **Prompt Intelligence Platform** for open-source main
 
 ## 🧭 Where this sits, of the three
 
-**This repo knows → `log4j2-workout` runs → `knowledge-creator` remembers.**
+**This repo knows → a runner runs → an archive remembers.**
 
-| Repo | Owns | Reach for it when |
+| Role | Owns | Reach for it when |
 |---|---|---|
 | **this one** | facts about any repo from the GitHub API, cached by head SHA — no clone, any language, any forge | you want PR facts, conventions or a verdict without building anything |
-| `log4j2-workout` | execution — real apps, real JVMs, a version × config × app matrix, `bench review <n>` | the question needs something to actually run, on one project |
-| `knowledge-creator` | the archive: harvest, file, index, retrieve | you want it findable in a year |
+| a **runner** you attach | execution — real applications, real JVMs, a version × config × app matrix, `bench review <n>` | the question needs something to actually run, on one project |
+| a **memory** you attach | the archive: harvest, file, index, retrieve | you want it findable in a year |
 
 The boundary that matters: **OSS-CLI never needs a clone and is never specific
-to one project.** Anything that has to check out a branch, run Maven, or know
-what Log4j in particular does belongs in `log4j2-workout` — which is why the
-red/green PR gates live there and not here.
+to one project.** Anything that has to check out a branch, run a build, or know
+what one particular project does belongs in a runner — which is why the
+red/green PR gates live there and not here. Only you know what a real
+application of your project looks like; the core knows how to walk a matrix, and
+your repository says what the matrix is.
 
 Both write into the same archive and stay out of each other's way by location:
 everything OSS-CLI generates goes to `<topic>/oss-cli/`, hand-written reviews go
@@ -137,7 +139,7 @@ The project includes a background daemon (`osscli-master.sh`) that automatically
 ### Standard Investigation Flow
 
 ```bash
-# 1. Sync all ecosystem repositories (Log4j, Kafka, Spark, Elastic, etc.)
+# 1. Sync every repository you have registered
 oss sync --all
 
 # 2. Sync your personal 1-year Developer Profile & Google Drive chat logs
