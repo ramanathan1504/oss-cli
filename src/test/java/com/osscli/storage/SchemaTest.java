@@ -76,8 +76,20 @@ class SchemaTest {
 
     @BeforeAll
     static void freshDatabase() throws Exception {
-        // Surefire points oss.cli.home at target/. Deleting the file gives a genuinely new database
-        // rather than whatever a previous run left, which is the only state this test is about.
+        // Refuse to run anywhere near the real store, and refuse LOUDLY.
+        //
+        // This test deletes a database. The build redirects OSS_CLI_HOME to target/ so the one it
+        // deletes is disposable -- but a redirection that silently fails to apply turns this line
+        // into data loss, and that is not hypothetical: the redirection was first written as a
+        // system property, which AppPaths does not read, and this deleted a real 496 MB database.
+        //
+        // So the guard does not trust the configuration. It asserts the outcome.
+        String base = AppPaths.BASE_DIR.toString();
+        assertTrue(
+                base.contains("target") || base.contains("test"),
+                "REFUSING TO RUN: base directory is " + base + ", which looks like a real store. "
+                        + "Set OSS_CLI_HOME (the environment variable, not the oss.cli.home property).");
+
         Files.deleteIfExists(AppPaths.DB_PATH);
         DatabaseManager.initializeSchema();
     }
