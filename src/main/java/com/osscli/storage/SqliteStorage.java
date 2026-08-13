@@ -26,6 +26,7 @@ import com.osscli.model.PrEvidence;
 import com.osscli.model.PullRequestMarker;
 import com.osscli.model.References;
 import com.osscli.model.RepoIssue;
+import com.osscli.model.Tier;
 import com.osscli.model.TrendSnapshot;
 import com.osscli.model.User;
 import java.io.IOException;
@@ -1024,8 +1025,12 @@ public class SqliteStorage {
     public static void savePersonalChatMemory(
             String filePath, String fileName, long lastModified, String content, double[] vector, String embeddingModel)
             throws SQLException, IOException {
-        String sql =
-                "INSERT OR REPLACE INTO personal_chat_memory (file_path, file_name, last_modified, content, vector, embedding_model, embedding_dim) VALUES (?, ?, ?, ?, ?, ?, ?);";
+        // Read from the note itself rather than passed in, so every caller records it and none has to
+        // remember to. It is re-read on every write, which is what makes promotion automatic: take
+        // part in a thread you had only collected, and the next harvest and sync move it across.
+        String sql = "INSERT OR REPLACE INTO personal_chat_memory "
+                + "(file_path, file_name, last_modified, content, vector, embedding_model, embedding_dim, tier) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?);";
         try (Connection conn = DatabaseManager.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, filePath);
@@ -1035,6 +1040,7 @@ public class SqliteStorage {
             ps.setString(5, MAPPER.writeValueAsString(vector));
             ps.setString(6, embeddingModel);
             ps.setInt(7, vector == null ? 0 : vector.length);
+            ps.setString(8, Tier.of(content).name());
             ps.executeUpdate();
         }
     }
@@ -1054,8 +1060,8 @@ public class SqliteStorage {
         }
     }
 
-    /** One embedded passage of a note: which note it came from, and where in it. */
-    public record ChatChunk(String filePath, int chunkIndex, double[] vector) {}
+    /** One embedded passage of a note: which note it came from, where in it, and whose work it is. */
+    public record ChatChunk(String filePath, int chunkIndex, double[] vector, Tier tier) {}
 
     /** Replaces every stored passage for one note. Chunk counts change as notes are edited. */
     public static void savePersonalChatChunks(
@@ -1096,8 +1102,12 @@ public class SqliteStorage {
      */
     public static List<ChatChunk> loadPersonalChatChunkVectors() throws SQLException, IOException {
         List<ChatChunk> out = new ArrayList<>();
-        String sql = "SELECT file_path, chunk_index, vector FROM personal_chat_chunk "
-                + "WHERE vector IS NOT NULL AND vector != '' AND embedding_model = ?;";
+        // The tier lives on the note, not the passage: one note is one provenance, and a column on
+        // both would be two places to disagree. LEFT JOIN so a passage whose note row is missing is
+        // still returned rather than silently dropped from retrieval.
+        String sql = "SELECT c.file_path, c.chunk_index, c.vector, m.tier "
+                + "FROM personal_chat_chunk c LEFT JOIN personal_chat_memory m ON m.file_path = c.file_path "
+                + "WHERE c.vector IS NOT NULL AND c.vector != '' AND c.embedding_model = ?;";
         try (Connection conn = DatabaseManager.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, com.osscli.Defaults.EMBEDDING_MODEL);
@@ -1106,7 +1116,8 @@ public class SqliteStorage {
                     out.add(new ChatChunk(
                             rs.getString("file_path"),
                             rs.getInt("chunk_index"),
-                            MAPPER.readValue(rs.getString("vector"), double[].class)));
+                            MAPPER.readValue(rs.getString("vector"), double[].class),
+                            Tier.of(rs.getString("tier"), Tier.KNOWLEDGE)));
                 }
             }
         }

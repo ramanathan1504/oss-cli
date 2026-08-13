@@ -32,7 +32,7 @@ public class DatabaseManager {
 
     private static final Logger LOGGER = LogManager.getLogger(DatabaseManager.class);
     // private static final String DB_URL = "jdbc:sqlite:data/issue_intelligence.db";
-    private static final int CURRENT_SCHEMA_VERSION = 12;
+    private static final int CURRENT_SCHEMA_VERSION = 13;
 
     /** Tables whose rows carry an embedding vector and therefore need provenance. */
     static final String[] VECTOR_TABLES = {"personal_chat_memory", "personal_pr_memory", "embeddings"};
@@ -325,6 +325,29 @@ public class DatabaseManager {
                             + "ON issue_references(repository, from_number);");
                     stmt.execute("CREATE INDEX IF NOT EXISTS idx_refs_to "
                             + "ON issue_references(to_repository, to_number);");
+                }
+            }
+        },
+        // Migration 13: Whether a note is yours or merely collected.
+        //
+        // Harvesting whole repositories puts other people's conversations in the same corpus as your
+        // own conclusions. Both belong there; ranked identically the collected material wins on
+        // volume, because there is far more of it. Recorded per note so retrieval can prefer what you
+        // worked out without discarding what you gathered.
+        new Migration() {
+            @Override
+            public int getTargetVersion() {
+                return 13;
+            }
+
+            @Override
+            public void execute(Connection conn) throws SQLException {
+                LOGGER.info("Upgrading database schema to Version 13 (knowledge and reference tiers)...");
+                // Existing rows predate harvesting whole repositories, so every one of them is a note
+                // the user wrote or a thread they were in. KNOWLEDGE is the honest default.
+                addColumnIfMissing(conn, "personal_chat_memory", "tier", "TEXT DEFAULT 'KNOWLEDGE'");
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("UPDATE personal_chat_memory SET tier = 'KNOWLEDGE' WHERE tier IS NULL;");
                 }
             }
         }
