@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.1
+
+_2026-08-13_
+
+- One unreadable file stopped indexing the rest of its folder (#52)
+- Call it oss in the docs, starting with the install command that fails (#51)
+
+
 ## 1.9.0
 
 _2026-08-13_
