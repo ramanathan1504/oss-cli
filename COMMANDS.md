@@ -12,7 +12,7 @@ This guide outlines all subcommands available in the `oss-cli` CLI platform.
 ### `setup`
 Interactive wizard to configure your secure environment, API keys, Google Drive paths, and AI models.
 ```bash
-oss-cli setup
+oss setup
 ```
 *   **Security:** Checks active environment variables and the macOS Keychain for `GITHUB_TOKEN`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, and `ANTHROPIC_API_KEY`.
 *   **Storage:** Saves all configurations to the local SQLite `system_config` table.
@@ -26,8 +26,8 @@ The embedder is all-MiniLM-L6-v2 (quantised, about 22 MB, Apache-2.0). It runs i
 *   `--fetch` : Download it. Once, about 22 MB.
 
 ```bash
-oss-cli model            # present or not, and what it would be searching
-oss-cli model --fetch
+oss model            # present or not, and what it would be searching
+oss model --fetch
 ```
 
 Without it nothing breaks — `search`, `duplicates` and note indexing rank by shared terms instead of by meaning, which needs nothing installed.
@@ -52,10 +52,10 @@ Every sync builds the vector index for the repositories it touched, using the bu
 `--add` also builds the repository profile — see [`profile`](#profile).
 
 ```bash
-oss-cli sync --all
-oss-cli sync --me
-oss-cli sync --add apache/kafka
-oss-cli sync --remove apache/camel
+oss sync --all
+oss sync --me
+oss sync --add apache/kafka
+oss sync --remove apache/camel
 ```
 
 ---
@@ -71,8 +71,8 @@ Everything is pattern-matched, never hardcoded per project. Documentation is mat
 *   `--rebuild` : Re-read the repository even if a profile is stored.
 
 ```bash
-oss-cli profile -r apache/logging-log4j2
-oss-cli profile --rebuild
+oss profile -r apache/logging-log4j2
+oss profile --rebuild
 ```
 
 Detected conventions are tagged with their source, so rules inherited from elsewhere are visible as such:
@@ -94,7 +94,7 @@ Reports what the project enforces **as instructions rather than plugin names** �
 *   `--no-steps` : Skip the model-written build steps and list the source documents only.
 
 ```bash
-oss-cli onboard -r apache/logging-log4j2
+oss onboard -r apache/logging-log4j2
 ```
 
 Build commands are extracted from the project's own `BUILDING` / `CONTRIBUTING` document, and the model is told to return nothing rather than supply commands from general knowledge — a plausible invented command fails somewhere unrelated to the real setup and costs more time than an admission.
@@ -128,9 +128,9 @@ No local clone is required — everything comes from the GitHub API.
 Escalation fires **only when it would change the answer** — a diff that already fits the local budget is answered locally and says so, rather than spending a cloud call to reread what the local model could see anyway.
 
 ```bash
-oss-cli review 4234
-oss-cli review 4234 --no-verdict
-oss-cli review 4234 -r apache/kafka --refresh
+oss review 4234
+oss review 4234 --no-verdict
+oss review 4234 -r apache/kafka --refresh
 ```
 
 When a verdict is produced it is filed to `<topic>/oss-cli/` in your notes archive and indexed, so it becomes retrievable evidence for later questions.
@@ -159,13 +159,13 @@ Retrieves from all local sources:
 - Cross-project JIRA dependencies
 
 ```bash
-oss-cli prompt 1666                   # Ollama answers, or builds expert prompt if too complex
-oss-cli prompt 1666 --copy            # Copy generated prompt to clipboard (macOS pbcopy)
-oss-cli prompt 1666 --out prompt.md   # Save prompt to a Markdown file
-oss-cli prompt 1666 --send-gemini     # Auto-send to Gemini when escalation occurs
-oss-cli prompt 1666 --send-openai     # Auto-send to OpenAI when escalation occurs
-oss-cli prompt 1666 --send-claude     # Auto-send to Anthropic when escalation occurs
-oss-cli prompt 1666 --force-prompt    # Skip Ollama — always build and display the expert prompt
+oss prompt 1666                   # Ollama answers, or builds expert prompt if too complex
+oss prompt 1666 --copy            # Copy generated prompt to clipboard (macOS pbcopy)
+oss prompt 1666 --out prompt.md   # Save prompt to a Markdown file
+oss prompt 1666 --send-gemini     # Auto-send to Gemini when escalation occurs
+oss prompt 1666 --send-openai     # Auto-send to OpenAI when escalation occurs
+oss prompt 1666 --send-claude     # Auto-send to Anthropic when escalation occurs
+oss prompt 1666 --force-prompt    # Skip Ollama — always build and display the expert prompt
 ```
 
 *   **Thresholds (configurable via `setup`):**
@@ -177,8 +177,8 @@ oss-cli prompt 1666 --force-prompt    # Skip Ollama — always build and display
 Shows the raw context retrieval result for an issue — what documents were found, their sources, relevance scores, and token counts. Critically, it also shows **whether Ollama would answer locally or escalate to a prompt**, so you can understand the decision before running `prompt`.
 
 ```bash
-oss-cli inspect 1666
-oss-cli inspect 1666 -r apache/kafka
+oss inspect 1666
+oss inspect 1666 -r apache/kafka
 ```
 
 *   **Output includes:**
@@ -199,23 +199,23 @@ Opens a live, interactive REPL (Read-Eval-Print Loop) to act as your pair-progra
 *   **Real-Time Memory:** Upon typing `exit`, the chat transcript is automatically saved to your Google Drive as a Markdown file and instantly embedded back into SQLite memory.
 
 ```bash
-oss-cli chat 1666            # Escalates to Gemini (Default)
-oss-cli chat 1666 --openai   # Escalates to OpenAI GPT-4o
-oss-cli chat 1666 --claude   # Escalates to Anthropic Claude 3.5
+oss chat 1666            # Escalates to Gemini (Default)
+oss chat 1666 --openai   # Escalates to OpenAI GPT-4o
+oss chat 1666 --claude   # Escalates to Anthropic Claude 3.5
 ```
 
 ### `guide`
 Generates a structured, step-by-step resolution blueprint for a specific issue using local RAG (Retrieval-Augmented Generation).
 *   `--gemini` : Bypass the local model and route immediately to the Gemini API.
 ```bash
-oss-cli guide 1666
+oss guide 1666
 ```
 
 ### `triage`
 Executes an automated triage audit on a specific issue.
 *   Outputs V1 severity, local AI severity, semantic duplicate overlaps, JIRA-bridge dependencies, and immediate recommended actions.
 ```bash
-oss-cli triage 4088
+oss triage 4088
 ```
 
 ---
@@ -226,8 +226,8 @@ oss-cli triage 4088
 Performs a fast, fully **offline** severity ranking of all locally-synced issues using the V1 keyword-score engine. No Ollama or cloud API required. Ideal for an instant triage snapshot.
 
 ```bash
-oss-cli critical
-oss-cli critical -r apache/kafka
+oss critical
+oss critical -r apache/kafka
 ```
 *   **Output:** Summary count (Critical / High / Medium / Low) followed by ranked issue lists sorted by score descending.
 *   **Options:** `-r`, `--repo` — Target repository (defaults to `default.repository` if not provided).
@@ -236,7 +236,7 @@ oss-cli critical -r apache/kafka
 Performs an offline semantic vector lookup on your backlog, using the built-in embedder. No model server is involved.
 *   `-g`, `--global` : Run the search across all synced repositories simultaneously.
 ```bash
-oss-cli search "deadlock in network appender" --global
+oss search "deadlock in network appender" --global
 ```
 When nothing has been indexed yet, or the embedding model has not been fetched, the search ranks by shared terms instead of refusing — the issues are already local, and declining to search data you have is the wrong answer to a missing optional layer.
 
@@ -244,34 +244,34 @@ When nothing has been indexed yet, or the embedding model has not been fetched, 
 Compiles SQLite data into a unified Weekly Health Report in Markdown format.
 *   `--me` : Generates a highly personalized roadmap tailored to your Developer Expertise Vector, including Regression Guard alerts and your specific stale PRs.
 ```bash
-oss-cli report --me
-oss-cli report -r apache/kafka
+oss report --me
+oss report -r apache/kafka
 ```
 
 ### `trend`
 Tracks project health metrics over time.
 *   `-s`, `--save` : Save today's metrics as a new historical snapshot.
 ```bash
-oss-cli trend --save
+oss trend --save
 ```
 
 ### `analyze`
 Performs batch AI Severity Analysis on all open issues using local Ollama.
 ```bash
-oss-cli analyze
+oss analyze
 ```
 
 ### `duplicates`
 Identifies duplicate issue clusters using local vector embeddings (Cosine Similarity). The vectors come from the built-in embedder, so no model server is involved; anything not indexed yet is embedded here and cached. Near-duplicates are the one thing shared terms cannot find — they say the same thing in different words — so without the model this clusters only what was indexed earlier and says how many issues it left out.
 *   `-t`, `--threshold` : Cosine similarity threshold, 0.0 to 1.0 (default: `0.80`).
 ```bash
-oss-cli duplicates -t 0.85
+oss duplicates -t 0.85
 ```
 
 ### `hidden-critical`
 Cross-references raw metadata against AI evaluations to detect underestimated security threats.
 ```bash
-oss-cli hidden-critical
+oss hidden-critical
 ```
 
 ---
@@ -281,7 +281,7 @@ oss-cli hidden-critical
 ### `backup`
 Export your entire AI memory and database into a portable archive, with automatic rotation that keeps the last 5 backups.
 ```bash
-oss-cli backup
+oss backup
 ```
 *   **Archive format:** `sa_brain_backup_yyyyMMdd_HHmmss.zip` (contains `.db` and `.txt` files from `data/`).
 *   **Destination:** Uses `backup.path` from `system_config`, or defaults to the global backups folder.
@@ -290,7 +290,7 @@ oss-cli backup
 ### `restore`
 Import and restore your AI memory and database from a previously created backup archive.
 ```bash
-oss-cli restore /path/to/sa_brain_backup_20260627_104000.zip
+oss restore /path/to/sa_brain_backup_20260627_104000.zip
 ```
 *   **Parameters:** `<backup-file>` — Path to the `.zip` backup archive.
 *   **Safe restore:** Buffers all local `system_config` values (API keys, model paths) before extraction and re-applies them afterward — your credentials are never overwritten.
@@ -329,4 +329,4 @@ oss-cli restore /path/to/sa_brain_backup_20260627_104000.zip
 | `backup`          | Offline        | No                      | Export AI memory to zip archive              |
 | `restore`         | Offline        | No                      | Restore AI memory from zip archive           |
 
-**Embedder** means the built-in all-MiniLM-L6-v2 that runs in this process — `oss-cli model --fetch`, once, and nothing is running afterwards. **Ollama** means local text generation, and nothing in this table indexes or searches through it.
+**Embedder** means the built-in all-MiniLM-L6-v2 that runs in this process — `oss model --fetch`, once, and nothing is running afterwards. **Ollama** means local text generation, and nothing in this table indexes or searches through it.
