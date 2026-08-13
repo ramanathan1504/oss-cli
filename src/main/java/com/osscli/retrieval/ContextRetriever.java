@@ -259,11 +259,18 @@ public class ContextRetriever {
                     if (!seenPassages.add(passage.strip())) continue;
                     String label = SqliteStorage.loadPersonalChatFileName(ch.filePath());
                     if (label == null) label = ch.filePath();
+                    // Collected discussion ranks below work you did. It is not excluded -- it is
+                    // often the only account of a problem -- but there is far more of it, and on an
+                    // equal footing it would fill the budget by weight of numbers and answer from
+                    // conversations the user has never read. The source says which it is, so the
+                    // assembled prompt shows where each passage came from rather than implying it
+                    // is all your own reasoning.
+                    boolean collected = ch.tier() == com.osscli.model.Tier.REFERENCE;
                     candidates.add(new PromptContextChunk(
-                            "chat_memory",
+                            collected ? "reference" : "chat_memory",
                             label + " (passage " + (ch.chunkIndex() + 1) + ")",
                             passage,
-                            bestScore.get(ch.filePath()),
+                            bestScore.get(ch.filePath()) * (collected ? 0.75 : 1.0),
                             estimateTokens(passage),
                             false));
                 }
