@@ -86,12 +86,36 @@ public final class Live implements AutoCloseable {
     private Thread ticker;
     private volatile int lastWidth = 0;
 
+    /**
+     * Terminal width, read once.
+     *
+     * <p>COLUMNS is exported by interactive shells and is the only way to ask without spawning a
+     * process every frame. Eighty is the floor everything has agreed on since hardware terminals,
+     * and being too narrow only costs a shortened status; being too wide costs a broken redraw.
+     */
+    private final int width = terminalWidth();
+
     private Live(String title) {
         this.title = title;
         // No console means piped, redirected, cron or CI. NO_COLOR is the de-facto opt-out and is
         // honoured because someone who sets it has already said what they want.
         this.animated = System.console() != null && System.getenv("NO_COLOR") == null;
         this.quips = this.animated && System.getenv("OSS_NO_QUIPS") == null;
+    }
+
+    private static int terminalWidth() {
+        try {
+            String cols = System.getenv("COLUMNS");
+            if (cols != null && !cols.isBlank()) {
+                int n = Integer.parseInt(cols.trim());
+                if (n > 20) {
+                    return Math.min(n, 200);
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // An unparseable COLUMNS is not worth a failure; the default is always safe.
+        }
+        return 80;
     }
 
     /** Begin a live line. Use in try-with-resources so it is always cleared. */
@@ -131,11 +155,32 @@ public final class Live implements AutoCloseable {
     }
 
     private synchronized void draw(String frame) {
+        // Composed against a width budget rather than concatenated blindly. A line longer than the
+        // terminal wraps, and once it wraps the carriage return only rewinds the last visual row --
+        // so the redraw leaves the earlier rows stranded and the "spinner" becomes a slowly growing
+        // wall of half-frames. The status is trimmed first and the quip dropped entirely, because
+        // what the command is doing matters and the joke does not.
         String s = status.get();
+        String time = elapsed();
+        int budget = width - visible(frame) - visible(title) - visible(time) - 3;
+
+        String q = quip();
+        if (!q.isEmpty() && visible(q) + 2 <= budget - minimumStatus(s)) {
+            budget -= visible(q);
+        } else {
+            q = "";
+        }
+
+        String shown = s;
+        if (!shown.isEmpty()) {
+            int room = budget - 3; // " — "
+            shown = room <= 1 ? "" : (visible(shown) <= room ? shown : shown.substring(0, Math.max(0, room - 1)) + "…");
+        }
+
         String line = "\r\u001b[36m" + frame + "\u001b[0m " + title
-                + (s.isEmpty() ? "" : " \u001b[2m— " + s + "\u001b[0m")
-                + " \u001b[2m" + elapsed() + "\u001b[0m"
-                + quip();
+                + (shown.isEmpty() ? "" : " \u001b[2m— " + shown + "\u001b[0m")
+                + " \u001b[2m" + time + "\u001b[0m"
+                + q;
         // Pad to the previous width so a shorter status cannot leave the tail of a longer one
         // stranded on screen.
         int visible = visibleLength(line);
@@ -146,6 +191,16 @@ public final class Live implements AutoCloseable {
         lastWidth = Math.max(visible, 0);
         out.print(padded);
         out.flush();
+    }
+
+    /** Visible length of a fragment, ignoring colour codes. */
+    private static int visible(String s) {
+        return s.replaceAll("\u001b\\[[0-9;]*m", "").length();
+    }
+
+    /** Keep at least this much of the status before a quip is allowed to take room. */
+    private static int minimumStatus(String s) {
+        return s.isEmpty() ? 0 : Math.min(visible(s), 24) + 3;
     }
 
     /** Length ignoring ANSI escapes, so padding maths is not thrown off by colour codes. */
