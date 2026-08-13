@@ -254,8 +254,8 @@ Two things must both be true, and neither can be made permanent:
 2. **You confirm that write, now, by retyping the repository name.** Every time.
 
 ```bash
-oss bench --approve-upstream apache/logging-log4j2 hub --pr 4234
-./bench hub --approve-upstream apache/logging-log4j2
+oss bench --approve-upstream owner/name hub --pr 4234
+./bench hub --approve-upstream owner/name
 ```
 
 This binds every path equally — a command, an extension, a local model, a cloud

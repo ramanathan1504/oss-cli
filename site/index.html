@@ -553,13 +553,13 @@ oss doctor</pre>
     <div class="step">
       <span class="step-h">Register a repository and sync it</span>
 <pre class="block"><span class="c"># any repository you want to follow</span>
-oss sync --add apache/kafka
+oss sync --add owner/name
 
 <span class="c"># pulls issues and PRs, then builds the search index</span>
 oss sync --all
 
 <span class="c"># review a pull request with everything you have connected</span>
-oss review 4234 -r apache/kafka</pre>
+oss review 4234 -r owner/name</pre>
     </div>
     <p class="note">
       <strong>Optional, any time:</strong> run <code>oss model --fetch</code> for search by

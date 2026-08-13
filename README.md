@@ -88,7 +88,7 @@ For Maven projects it **follows the inherited POM chain through Maven Central**,
 `review` then uses that profile to review a pull request, caching evidence **by head commit SHA** so re-reviewing unchanged code is instant while a new push re-fetches automatically. No local clone is needed.
 
 ```bash
-oss profile -r apache/logging-log4j2
+oss profile -r owner/name
 oss review 4234
 ```
 
@@ -127,7 +127,7 @@ The project includes a background daemon (`osscli-master.sh`) that automatically
    ```
 3. Monitor the background service logs:
    ```bash
-   tail -f ~/apache/issue-analyzer/osscli_run.log
+   tail -f ~/.oss-cli/logs/oss-cli.log
    ```
 
 ---

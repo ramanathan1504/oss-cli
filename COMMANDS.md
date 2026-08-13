@@ -54,8 +54,8 @@ Every sync builds the vector index for the repositories it touched, using the bu
 ```bash
 oss sync --all
 oss sync --me
-oss sync --add apache/kafka
-oss sync --remove apache/camel
+oss sync --add owner/name
+oss sync --remove owner/name
 ```
 
 ---
@@ -71,7 +71,7 @@ Everything is pattern-matched, never hardcoded per project. Documentation is mat
 *   `--rebuild` : Re-read the repository even if a profile is stored.
 
 ```bash
-oss profile -r apache/logging-log4j2
+oss profile -r owner/name
 oss profile --rebuild
 ```
 
@@ -94,7 +94,7 @@ Reports what the project enforces **as instructions rather than plugin names** �
 *   `--no-steps` : Skip the model-written build steps and list the source documents only.
 
 ```bash
-oss onboard -r apache/logging-log4j2
+oss onboard -r owner/name
 ```
 
 Build commands are extracted from the project's own `BUILDING` / `CONTRIBUTING` document, and the model is told to return nothing rather than supply commands from general knowledge — a plausible invented command fails somewhere unrelated to the real setup and costs more time than an admission.
@@ -130,7 +130,7 @@ Escalation fires **only when it would change the answer** — a diff that alread
 ```bash
 oss review 4234
 oss review 4234 --no-verdict
-oss review 4234 -r apache/kafka --refresh
+oss review 4234 -r owner/name --refresh
 ```
 
 When a verdict is produced it is filed to `<topic>/oss-cli/` in your notes archive and indexed, so it becomes retrievable evidence for later questions.
@@ -178,7 +178,7 @@ Shows the raw context retrieval result for an issue — what documents were foun
 
 ```bash
 oss inspect 1666
-oss inspect 1666 -r apache/kafka
+oss inspect 1666 -r owner/name
 ```
 
 *   **Output includes:**
@@ -227,7 +227,7 @@ Performs a fast, fully **offline** severity ranking of all locally-synced issues
 
 ```bash
 oss critical
-oss critical -r apache/kafka
+oss critical -r owner/name
 ```
 *   **Output:** Summary count (Critical / High / Medium / Low) followed by ranked issue lists sorted by score descending.
 *   **Options:** `-r`, `--repo` — Target repository (defaults to `default.repository` if not provided).
@@ -245,7 +245,7 @@ Compiles SQLite data into a unified Weekly Health Report in Markdown format.
 *   `--me` : Generates a highly personalized roadmap tailored to your Developer Expertise Vector, including Regression Guard alerts and your specific stale PRs.
 ```bash
 oss report --me
-oss report -r apache/kafka
+oss report -r owner/name
 ```
 
 ### `trend`
