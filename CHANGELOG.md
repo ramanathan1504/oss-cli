@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.0
+
+_2026-08-13_
+
+- One embedder, in this process, and Ollama only for what it writes (#49)
+- release.sh: wait for checks to exist before watching them (#48)
+
+
 ## 1.8.3
 
 _2026-08-13_
