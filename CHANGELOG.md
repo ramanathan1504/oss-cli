@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.2
+
+_2026-08-13_
+
+- alias: refuse shell keywords and builtins, which no shim can ever be (#44)
+
+
 ## 1.7.1
 
 _2026-08-12_
