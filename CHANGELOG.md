@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.8.3
+
+_2026-08-13_
+
+- Packages runs after Distributions, ships an unversioned deb, and release.sh survives branch protection (#46)
+- Bump com.fasterxml.jackson.core:jackson-databind from 2.20.0 to 2.21.5 (#11)
+- ci: bump actions/setup-java from 4 to 5 (#13)
+- deps: bump the routine group with 6 updates (#14)
+- ci: bump actions/checkout from 4 to 7 (#15)
+- ci: bump actions/upload-artifact from 4 to 7 (#16)
+
+
 ## 1.8.2
 
 _2026-08-13_
