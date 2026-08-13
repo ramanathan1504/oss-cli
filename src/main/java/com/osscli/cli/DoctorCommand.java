@@ -162,30 +162,43 @@ public class DoctorCommand implements Callable<Integer> {
     }
 
     // ── models ──────────────────────────────────────────────────────────────
-    /** @return the configured embedding model, needed by the dimension check. */
+    /** @return the built-in embedder's name, needed by the vector provenance check. */
     private String checkModels() {
-        String embed = cfg("ollama.model.embedding", "all-minilm");
+        String embed = com.osscli.retrieval.Embeddings.MODEL;
+
+        // The embedder runs in this process, so the question is whether its weights are on disk --
+        // not whether a server is up. It is also never fatal: term search is the floor, and a report
+        // that calls an optional layer a failure teaches people to ignore the report.
+        if (com.osscli.retrieval.Embeddings.isReady()) {
+            ok("embedding model", embed + " (built in, in-process)");
+        } else {
+            warn(
+                    "embedding model",
+                    "not fetched — search and pick answer by shared terms",
+                    com.osscli.retrieval.Embeddings.ABSENT_HINT);
+        }
+
         String guidance = cfg("ollama.model.guidance", null);
         String triage = cfg("ollama.model.triage", null);
+        String url = cfg("ollama.url", com.osscli.Defaults.OLLAMA_URL);
 
-        boolean serverUp;
-        try {
-            serverUp = new OllamaClient(embed).isModelAvailable() || pingServer();
-        } catch (Exception e) {
-            serverUp = false;
-        }
-        if (!serverUp) {
-            fail(
-                    "model server",
-                    "not reachable at " + cfg("ollama.url", "http://localhost:11434"),
-                    "Start it (e.g. 'ollama serve'), or point ollama.url at your own endpoint.");
+        // Ollama is external and optional, and since embedding moved in-process it is only ever used
+        // to generate local verdicts. Nothing indexes or searches through it any more, so an absent
+        // daemon costs the local answer and nothing else -- the expert prompt still builds.
+        if (guidance == null && triage == null) {
+            ok("ollama", "not connected — local verdicts off, prompts still build");
             return embed;
         }
-        ok("model server", "reachable");
+        if (!pingServer()) {
+            warn(
+                    "ollama",
+                    "not reachable at " + url,
+                    "Optional — it adds local verdicts. Start it ('ollama serve'), "
+                            + "or set ollama.url to wherever it runs.");
+            return embed;
+        }
+        ok("ollama", "reachable at " + url);
 
-        // The embedding model is the one that matters most: without it nothing can
-        // be indexed or searched at all.
-        checkOneModel("embedding model", embed, true);
         if (guidance != null) {
             checkOneModel("guidance model", guidance, false);
         } else {

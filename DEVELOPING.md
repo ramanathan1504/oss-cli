@@ -14,8 +14,9 @@ com.osscli
 ├── Main / RootCommand  picocli entry point
 ├── cli/                one class per subcommand
 ├── github/             GitHubClient — REST + search
-├── llm/                OllamaClient, ClaudeClient, GeminiClient, OpenAiClient
+├── llm/                OllamaClient, ClaudeClient, GeminiClient, OpenAiClient — generation only
 ├── retrieval/          ContextRetriever — assembles prompt context
+│                       Embeddings / LocalEmbedder — the in-process embedder
 ├── storage/            DatabaseManager (schema), SqliteStorage (queries)
 ├── model/              records
 └── report/             Markdown report writers
@@ -23,6 +24,11 @@ com.osscli
 
 Four LLM clients behind one shape is deliberate: **no provider is load-bearing.**
 Anything that makes one of them required is a regression.
+
+Embedding is not one of the four. It runs in this process — `Embeddings` over
+`LocalEmbedder`, ONNX Runtime, all-MiniLM-L6-v2 — so nothing that indexes or
+searches needs a daemon installed and running. `llm/` is only ever asked to
+generate text.
 
 ---
 
@@ -53,6 +59,14 @@ emit 384, 768 or 1024 dimensions. Mix them in one table and cosine similarity
 either compares unrelated coordinate spaces or short-circuits to `0.0` on a
 length check — which reads as "unrelated" rather than "incomparable". The user
 sees bad retrieval, never an error.
+
+There is one producer now — `Embeddings.MODEL`, recorded as
+`all-MiniLM-L6-v2-onnx`. Provenance did not stop mattering when the choice went
+away: reads filter on the model name (`loadEmbeddings`,
+`loadEmbeddedIssueNumbers`), so vectors an Ollama daemon wrote under
+`all-minilm` are ignored and re-embedded on the next sync rather than compared.
+Those are 384 dimensions as well, so a length check would never have caught
+them — the name is the only thing that does.
 
 Rules when touching vectors:
 
@@ -149,6 +163,12 @@ retrieve → totalTokens > contextLimit ?  → build expert prompt
 ```
 
 The local model is asked for strict JSON: `{answer, confidence, escalate}`.
+
+`OllamaClient` resolves its endpoint from `ollama.url` on every request. It used
+to carry `http://localhost:11434` as a literal in three request paths, so the
+configured value was read by `doctor` and by nothing else — a remote endpoint
+reported reachable while every real call went to localhost. Keep it resolved in
+one place: three copies of an endpoint is how that happened.
 
 **Three traps when adding a model.** Reasoning models may return their content in
 a separate field, leaving the parsed response empty — which looks like a low-

@@ -11,25 +11,39 @@ expert prompt to send wherever you like. You choose what leaves your machine.
 
 ## 1. What you need
 
-|                            | Why                                               |
-|----------------------------|---------------------------------------------------|
-| Java 17 + Maven            | building and running                              |
-| A model server             | embeddings, and local answers. Ollama by default. |
-| `gh` CLI or a GitHub token | syncing repositories and your own PR history      |
+|                            | Why                                                              |
+|----------------------------|------------------------------------------------------------------|
+| Java 17 + Maven            | building and running                                             |
+| The embedding model        | search by meaning. Ships with the tool, runs in this process     |
+| Ollama *(optional)*        | local answers, triage and PR verdicts — generation, nothing else |
+| `gh` CLI or a GitHub token | syncing repositories and your own PR history                     |
 
-**Model choice is yours and is config, not code.** Three roles are configured
-separately, because they have different demands:
+**Model choice is yours and is config, not code** — for the two roles that
+generate text, because they have different demands:
 
 | Role      | Config key               | What it does                           |
 |-----------|--------------------------|----------------------------------------|
-| embedding | `ollama.model.embedding` | turns notes and questions into vectors |
 | triage    | `ollama.model.triage`    | cheap, high-volume classification      |
 | guidance  | `ollama.model.guidance`  | writes the local answer                |
 
-The **embedding model matters most**. No corpus of any size fits in a context
-window, so every question is answered from retrieved passages — retrieval
-quality sets the ceiling, and a larger chat model cannot recover text the
-embedder never saw.
+**Embedding is not one of them, and no longer has a key.** all-MiniLM-L6-v2
+ships inside the tool and runs in-process, so there is no endpoint to point at
+and no name to get wrong. `ollama.model.embedding` is gone: `setup` does not ask
+for it, nothing seeds it, and an old database that still carries it is ignored.
+It is fetched once, by a command you type:
+
+```bash
+oss-cli model --fetch     # about 22 MB, Apache-2.0, stored under ~/.oss-cli/models
+```
+
+Nothing fetches it for you — a command that quietly pulls 22 MB the first time
+it runs is one people stop trusting. Until it is there, `search`, `duplicates`
+and note indexing answer by shared terms instead of by meaning, which works and
+needs nothing installed.
+
+Retrieval quality still sets the ceiling. No corpus of any size fits in a
+context window, so every question is answered from retrieved passages, and a
+larger chat model cannot recover text the embedder never saw.
 
 Two practical cautions when picking a guidance model:
 
@@ -39,6 +53,11 @@ Two practical cautions when picking a guidance model:
   non-reasoning model.
 - **Match `ollama.context_limit` to reality.** It is the escalation trigger. Set
   it below what retrieval actually assembles and you escalate needlessly.
+
+**Ollama does not have to be on this machine.** `ollama.url` is read by every
+request now. It used to be read only by `doctor` while the client carried
+`http://localhost:11434` as a literal, so a configured remote endpoint was
+reported reachable while every real request went to localhost anyway.
 
 ---
 
@@ -57,7 +76,8 @@ command, put a wrapper on your `PATH`:
 exec java -jar /absolute/path/to/target/oss-cli-1.8.3.jar "$@"
 ```
 
-Everything lives under `~/.oss-cli/` — database, reports, backups.
+Everything lives under `~/.oss-cli/` — database, reports, backups, and the
+embedding model once you fetch it.
 
 **Upgrading from a pre-rename build?** Data in `~/.issue-ai/` is moved across
 automatically on first run. It moves only when the new location has no database,
@@ -75,6 +95,12 @@ comma-separated list of folders and run:
 oss-cli sync --all    # public repository backlogs
 oss-cli sync --me     # your PR history + the folders in drive.paths
 ```
+
+`sync --me` is the one command that requires the embedder, because everything it
+builds is vectors; it stops and tells you how to fetch it rather than running to
+no effect. `sync --all` does not — the issue data is saved either way, and only
+the vector index waits. If Ollama is absent, `sync --me` skips the development
+stories it writes and indexes everything else as usual.
 
 ### Choosing what to include
 
@@ -156,25 +182,88 @@ SELECT file_name FROM personal_chat_memory WHERE content LIKE '%ghp_%';
 
 ---
 
-## 4. Changing the embedding model
+## 4. One embedder, and why every vector still carries its name
 
 Vectors from different models are not comparable, and the failure is silent:
-different models emit different dimensions, and comparing across them yields
-plausible-looking nonsense rather than an error.
+comparing across them yields plausible-looking nonsense rather than an error.
 
-Every vector is therefore stored with its model and dimension. Change the model
-and the next sync detects it, re-embeds, and says so:
+Every vector is therefore stored with the model and dimension that produced it,
+and every read filters on that name. With one built-in embedder there is nothing
+left to choose, so what the filter now protects you from is history. Vectors
+written by the earlier setup — where an Ollama daemon served the same weights
+under the name `all-minilm` — are recorded under that name and ignored. They are
+also 384 dimensions, so nothing would have caught the mix by shape, and they are
+quantised and pooled differently enough not to be comparable.
 
-```
-Embedding model changed (all-minilm -> nomic-embed-text) — re-embedding 'note.md'...
-```
-
-Nothing to clean up. Rows written before provenance tracking existed have no
-recorded model, are treated as unknown, and get re-embedded once.
+Nothing to clean up. Ignored vectors are re-embedded in-process on the next
+sync, and rows written before provenance tracking existed have no recorded model,
+are treated as unknown, and get re-embedded once.
 
 ---
 
-## 5. Daily use
+## 5. Connecting a model that writes
+
+The embedder above is the only model that ships with the tool. Anything that
+*writes* — a verdict, a triage audit, an answer — is something you connect, and
+both kinds are optional. With neither, `prompt` still assembles the expert
+prompt and hands it to you.
+
+### Locally, with Ollama
+
+Ollama is used for generation and nothing else. It is never asked to embed, so
+`search`, `duplicates`, `pick` and note indexing do not involve it at all.
+
+```bash
+ollama serve
+ollama pull llama3.2:3b       # then name it during 'oss-cli setup'
+```
+
+It does not have to be on this machine. `setup` asks where it is, so a laptop
+can borrow a desktop's GPU:
+
+```
+Current Ollama address: [ http://localhost:11434 ]
+Enter new Ollama address (e.g. http://gpu-box.local:11434) or press Enter to keep current:
+```
+
+That address is `ollama.url`, and until now it was seeded, displayed by
+`doctor`, and read by nothing — every request went to localhost whatever it
+said, so pointing it at another host produced a clean bill of health and a tool
+that could not reach a model.
+
+### In the cloud, with a key
+
+Keys are read from the environment first, then the macOS Keychain. They are
+never written to the database, which is why `restore` can put a backup back
+without touching them.
+
+| Provider  | Environment variable          | Keychain item        |
+|-----------|-------------------------------|----------------------|
+| Anthropic | `ANTHROPIC_API_KEY`           | `anthropic_api_key`  |
+| OpenAI    | `OPENAI_API_KEY`              | `openai_api_key`     |
+| Google    | `GEMINI_API_KEY`              | `gemini_api_key`     |
+| GitHub    | `GITHUB_TOKEN` or `GH_TOKEN`  | `github_token`       |
+
+```bash
+export ANTHROPIC_API_KEY=sk-...
+
+# or so it survives a new shell:
+security add-generic-password -s anthropic_api_key -a "$USER" -w
+```
+
+`setup` records which *model* to call for each provider. The key itself stays
+outside the database.
+
+Nothing is ever sent because a key exists. Escalation is a flag you type:
+
+```bash
+oss-cli prompt <n> --send-claude     # or --send-openai, --send-gemini
+oss-cli review <n> --escalate        # uses whichever key is configured
+```
+
+---
+
+## 6. Daily use
 
 ```bash
 oss-cli critical                # offline ranking by community signal
@@ -205,7 +294,7 @@ guess. Use `inspect` to see the decision before committing to it.
 
 ---
 
-## 6. Where your data lives, and how not to destroy it
+## 7. Where your data lives, and how not to destroy it
 
 Everything sits under `~/.oss-cli` — database, reports, backups, logs. Set
 `OSS_CLI_HOME` and all of it moves as a set:
@@ -245,7 +334,7 @@ healthy-looking but empty install is otherwise indistinguishable from data loss.
 
 ---
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 | Symptom                             | Likely cause                                                                                              |
 |-------------------------------------|-----------------------------------------------------------------------------------------------------------|
@@ -253,12 +342,13 @@ healthy-looking but empty install is otherwise indistinguishable from data loss.
 | Database looks empty after upgrade  | Both old and new data directories exist.                                                                  |
 | Everything escalates                | Guidance model not installed, or `context_limit` too low.                                                 |
 | Local answers empty                 | Reasoning model returning output in a separate field.                                                     |
-| Similarity results nonsensical      | Mixed embedding models. Re-sync to rebuild.                                                               |
+| Search matches only shared words    | The embedding model is not fetched — `oss-cli model --fetch`.                                             |
+| Fewer similar results than expected | Vectors from the old Ollama embedder are ignored. Re-sync to rebuild them in-process.                     |
 | Long notes never retrieved          | Passages not built yet — run `sync --me` once after upgrading.                                            |
 
 ---
 
-## 8. Backups contain everything
+## 9. Backups contain everything
 
 `backup` archives the database — which includes the full text of everything you
 ingested. If a secret ever entered, it is in the backups too. Rotating the

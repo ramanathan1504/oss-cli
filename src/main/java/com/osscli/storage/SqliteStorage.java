@@ -475,13 +475,25 @@ public class SqliteStorage {
         }
     }
 
+    /**
+     * Vectors for one repository that the current embedder can actually be compared against.
+     *
+     * <p>Filtered by {@code embedding_model}, and that filter is not optional. Vectors from two
+     * models share no axes, so a similarity between them is arithmetic without meaning -- and
+     * because the models this tool has used are all 384 dimensions, nothing about the shape gives
+     * the mix away. It does not error, it does not warn, it just ranks the wrong thing first.
+     *
+     * <p>Rows from a superseded model are left in place rather than deleted: the next sync re-embeds
+     * what is missing, and until it does, an old row costs nothing but a little disk.
+     */
     public static List<IssueEmbedding> loadEmbeddings(String repository) throws SQLException, IOException {
-        String sql = "SELECT * FROM embeddings WHERE repository = ?;";
+        String sql = "SELECT * FROM embeddings WHERE repository = ? AND embedding_model = ?;";
         List<IssueEmbedding> results = new ArrayList<>();
 
         try (Connection conn = DatabaseManager.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, repository);
+            ps.setString(2, com.osscli.Defaults.EMBEDDING_MODEL);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     long num = rs.getLong("issue_number");
@@ -684,19 +696,26 @@ public class SqliteStorage {
     // 7. Global Multi-Repo Operations
     // ==========================================
 
+    /**
+     * Every repository's vectors, filtered to the current embedder for the same reason as {@link
+     * #loadEmbeddings(String)} -- more so here, because a global search is exactly where vectors
+     * written by different models at different times would otherwise meet.
+     */
     public static List<IssueEmbedding> loadAllEmbeddings() throws SQLException, IOException {
-        String sql = "SELECT * FROM embeddings;";
+        String sql = "SELECT * FROM embeddings WHERE embedding_model = ?;";
         List<IssueEmbedding> results = new ArrayList<>();
 
         try (Connection conn = DatabaseManager.getConnection();
-                Statement stmt = conn.createStatement();
-                ResultSet rs = stmt.executeQuery(sql)) {
-            while (rs.next()) {
-                String repo = rs.getString("repository");
-                long num = rs.getLong("issue_number");
-                String jsonVector = rs.getString("vector");
-                double[] vector = MAPPER.readValue(jsonVector, double[].class);
-                results.add(new IssueEmbedding(repo, num, vector));
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, com.osscli.Defaults.EMBEDDING_MODEL);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String repo = rs.getString("repository");
+                    long num = rs.getLong("issue_number");
+                    String jsonVector = rs.getString("vector");
+                    double[] vector = MAPPER.readValue(jsonVector, double[].class);
+                    results.add(new IssueEmbedding(repo, num, vector));
+                }
             }
         }
         return results;
@@ -972,16 +991,18 @@ public class SqliteStorage {
      */
     public static List<ChatChunk> loadPersonalChatChunkVectors() throws SQLException, IOException {
         List<ChatChunk> out = new ArrayList<>();
-        String sql =
-                "SELECT file_path, chunk_index, vector FROM personal_chat_chunk WHERE vector IS NOT NULL AND vector != '';";
+        String sql = "SELECT file_path, chunk_index, vector FROM personal_chat_chunk "
+                + "WHERE vector IS NOT NULL AND vector != '' AND embedding_model = ?;";
         try (Connection conn = DatabaseManager.getConnection();
-                Statement stmt = conn.createStatement();
-                ResultSet rs = stmt.executeQuery(sql)) {
-            while (rs.next()) {
-                out.add(new ChatChunk(
-                        rs.getString("file_path"),
-                        rs.getInt("chunk_index"),
-                        MAPPER.readValue(rs.getString("vector"), double[].class)));
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, com.osscli.Defaults.EMBEDDING_MODEL);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    out.add(new ChatChunk(
+                            rs.getString("file_path"),
+                            rs.getInt("chunk_index"),
+                            MAPPER.readValue(rs.getString("vector"), double[].class)));
+                }
             }
         }
         return out;
@@ -1075,34 +1096,38 @@ public class SqliteStorage {
     // ==========================================
 
     public static List<com.osscli.model.PrMemory> loadAllPersonalPrMemories() throws SQLException, IOException {
-        String sql = "SELECT * FROM personal_pr_memory;";
+        String sql = "SELECT * FROM personal_pr_memory WHERE embedding_model = ?;";
         List<com.osscli.model.PrMemory> results = new ArrayList<>();
         try (Connection conn = DatabaseManager.getConnection();
-                Statement stmt = conn.createStatement();
-                ResultSet rs = stmt.executeQuery(sql)) {
-            while (rs.next()) {
-                double[] vector = MAPPER.readValue(rs.getString("vector"), double[].class);
-                results.add(new com.osscli.model.PrMemory(
-                        rs.getString("repository"),
-                        rs.getLong("pr_number"),
-                        rs.getString("files_changed"),
-                        rs.getString("generated_story"),
-                        vector));
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, com.osscli.Defaults.EMBEDDING_MODEL);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    double[] vector = MAPPER.readValue(rs.getString("vector"), double[].class);
+                    results.add(new com.osscli.model.PrMemory(
+                            rs.getString("repository"),
+                            rs.getLong("pr_number"),
+                            rs.getString("files_changed"),
+                            rs.getString("generated_story"),
+                            vector));
+                }
             }
         }
         return results;
     }
 
     public static List<com.osscli.model.ChatMemory> loadAllPersonalChatMemories() throws SQLException, IOException {
-        String sql = "SELECT file_name, content, vector FROM personal_chat_memory;";
+        String sql = "SELECT file_name, content, vector FROM personal_chat_memory WHERE embedding_model = ?;";
         List<com.osscli.model.ChatMemory> results = new ArrayList<>();
         try (Connection conn = DatabaseManager.getConnection();
-                Statement stmt = conn.createStatement();
-                ResultSet rs = stmt.executeQuery(sql)) {
-            while (rs.next()) {
-                double[] vector = MAPPER.readValue(rs.getString("vector"), double[].class);
-                results.add(
-                        new com.osscli.model.ChatMemory(rs.getString("file_name"), rs.getString("content"), vector));
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, com.osscli.Defaults.EMBEDDING_MODEL);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    double[] vector = MAPPER.readValue(rs.getString("vector"), double[].class);
+                    results.add(new com.osscli.model.ChatMemory(
+                            rs.getString("file_name"), rs.getString("content"), vector));
+                }
             }
         }
         return results;

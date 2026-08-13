@@ -16,7 +16,8 @@ You install the core once. Everything else is optional and attaches later.
 | **Java 17+** | the CLI is a Java jar | `java -version` |
 | **Homebrew** | how the core installs | `brew --version` |
 | GitHub token | reading repositories | `gh auth status`, or macOS Keychain |
-| Ollama | *optional* — local verdicts, embeddings | `ollama list` |
+| Embedding model | *optional* — search by meaning. About 22 MB, runs in-process, fetched once by `oss-cli model --fetch` | `oss-cli model` |
+| Ollama | *optional* — local verdicts and guidance. Nothing indexes or searches through it | `ollama list` |
 | Cloud API key | *optional* — escalation past the local budget | — |
 | Maven 3.9+ | *only* to build from source | `mvn -v` |
 
@@ -53,11 +54,12 @@ Check everything at once:
 oss-cli doctor
 ```
 
-> `doctor` **exits non-zero when any optional prerequisite is missing** — a
-> stopped Ollama, or a token held in the Keychain rather than `GITHUB_TOKEN`,
-> both report and both set exit 1. That is a report, not a broken install. Read
-> the lines, not the exit code; do not wire it into a script that treats
-> non-zero as fatal.
+> `doctor` **reports layers, not only failures.** An unfetched embedding model,
+> a stopped Ollama, or a token held in the Keychain rather than `GITHUB_TOKEN`
+> are all reported as warnings and none of them sets exit 1 — the tool still
+> runs, just not at its best. Exit 1 is kept for something actually broken, such
+> as a `drive.paths` folder that no longer exists. Read the lines, not the exit
+> code.
 
 ---
 
@@ -164,6 +166,7 @@ verb unusable.
 ~/.oss-cli/                                YOUR DATA — never inside a clone
   ├── extensions.json                      what is attached (paths + manifest snapshots)
   ├── data/issue_intelligence.db           issues, PRs, vectors, notes
+  ├── models/                              the embedding model, if you fetched it
   └── logs/                                rotating logs
 ```
 
@@ -181,9 +184,9 @@ oss-cli/
 │   ├── safety/       the upstream write guard
 │   ├── serve/        the local service and its page
 │   ├── github/       API client — GET only
-│   ├── retrieval/    context assembly, vectors
+│   ├── retrieval/    context assembly, the in-process embedder, vectors
 │   ├── storage/      SQLite
-│   └── llm/          Ollama and cloud clients
+│   └── llm/          Ollama and cloud clients — generation only
 ├── site/index.html   the public site (Cloudflare Pages)
 ├── release.sh        cut a release; CI publishes and updates the tap
 └── pom.xml
@@ -296,7 +299,7 @@ schema migrations are one-way.
 | `STALE` in `ext list` | the manifest changed on disk — `oss-cli ext refresh <name>` |
 | `MISSING` in `ext list` | the checkout moved — re-add it at the new path |
 | `refused — no --approve-upstream` | working as designed; see §6 |
-| `doctor` exits 1 | expected when an *optional* prerequisite (Ollama, `GITHUB_TOKEN` in env) is absent |
+| `doctor` exits 1 | something is genuinely wrong — a missing `drive.paths` folder, or vectors from more than one model. A missing *optional* piece (the embedding model, Ollama, `GITHUB_TOKEN` in env) only warns |
 | `could not listen on port 1504` | another instance is serving — `--port <n>` |
 | Hub shows stale content after a code edit | the agent loads its source at start: `launchctl kickstart -k gui/$(id -u)/com.ramanathan.bench-hub` |
 | Daily harvest reports failed stages | `gh` is unauthenticated under launchd (no keychain); an interactive `gh auth status` will say it is fine. `./kb doctor` |

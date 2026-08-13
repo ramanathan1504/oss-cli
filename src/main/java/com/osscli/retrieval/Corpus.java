@@ -87,13 +87,7 @@ public final class Corpus {
 
         // The model is optional and asked for by presence, never downloaded behind your back: a
         // command that quietly pulls 22 MB the first time it runs is a command people stop trusting.
-        if (LocalEmbedder.isDownloaded()) {
-            try {
-                c.embedder = LocalEmbedder.load(onProgress);
-            } catch (Exception e) {
-                onProgress.accept("model present but would not load; using term search");
-            }
-        }
+        c.embedder = Embeddings.ifPresent(onProgress);
         return c;
     }
 
@@ -129,12 +123,15 @@ public final class Corpus {
         List<Hit> out = new ArrayList<>();
         for (Doc d : docs) {
             double[] v = vectorFor(d);
-            if (v == null) {
+            // A length mismatch means two different models, whose vectors share no axes. Comparing
+            // the overlapping prefix produced a number rather than an error, and a plausible number
+            // with no basis is worse than no answer: it ranks, so it looks like it worked.
+            if (v == null || v.length != q.length) {
                 continue;
             }
             // Both vectors are L2-normalised by the embedder, so the dot product IS the cosine.
             double dot = 0;
-            for (int i = 0; i < Math.min(q.length, v.length); i++) {
+            for (int i = 0; i < v.length; i++) {
                 dot += q[i] * v[i];
             }
             out.add(new Hit(d.id(), d.title(), d.kind(), dot * weightFactor(d), true));
@@ -146,31 +143,81 @@ public final class Corpus {
     /**
      * The vector for a document, computed once and kept.
      *
-     * <p>Keyed by a hash of the content, so editing a note re-embeds it and leaving it alone does
+     * <p>Keyed by a digest of the content, so editing a note re-embeds it and leaving it alone does
      * not. A cache keyed by filename would go quietly stale, which is worse than no cache.
+     *
+     * <p>The digest is SHA-256 and not {@link String#hashCode()}. A 32-bit hash over a corpus of
+     * notes collides, and a collision here does not corrupt anything visibly -- it silently hands
+     * back another note's vector, so the wrong document ranks first and nothing anywhere reports a
+     * fault. Two notes are far more alike than two random strings, which is exactly the input a
+     * 32-bit hash is worst at.
+     *
+     * <p>Each entry names the model and dimension that produced it. Vectors from different models
+     * are not comparable, and an entry left behind by a previous model is indistinguishable from a
+     * current one without saying so.
      */
     private double[] vectorFor(Doc d) throws IOException {
-        Path f = VECTORS.resolve(Integer.toHexString(d.body().hashCode()) + ".vec");
+        Path f = VECTORS.resolve(digest(d.body()) + ".vec");
         if (Files.isRegularFile(f)) {
-            try {
-                String[] parts = Files.readString(f).trim().split(",");
-                double[] v = new double[parts.length];
-                for (int i = 0; i < parts.length; i++) {
-                    v[i] = Double.parseDouble(parts[i]);
-                }
-                return v;
-            } catch (RuntimeException e) {
-                // A corrupt cache entry is not worth failing a search over; recompute it.
+            double[] cached = readCached(f);
+            if (cached != null) {
+                return cached;
             }
         }
         double[] v = embedder.embed(d.body());
         StringBuilder sb = new StringBuilder();
+        sb.append(Embeddings.MODEL).append(' ').append(v.length).append('\n');
         for (int i = 0; i < v.length; i++) {
             sb.append(i == 0 ? "" : ",").append(v[i]);
         }
         Files.createDirectories(VECTORS);
         Files.writeString(f, sb.toString());
         return v;
+    }
+
+    /** A cached vector, or null when it is corrupt, stale or from another model -- all of which mean "recompute". */
+    private static double[] readCached(Path f) {
+        try {
+            String body = Files.readString(f);
+            int nl = body.indexOf('\n');
+            if (nl < 0) {
+                // Written before entries carried provenance. Unreadable by definition: it cannot say
+                // which model produced it, so it cannot be trusted to be comparable with a new one.
+                return null;
+            }
+            String[] head = body.substring(0, nl).trim().split(" ");
+            if (head.length != 2 || !Embeddings.MODEL.equals(head[0])) {
+                return null;
+            }
+            String[] parts = body.substring(nl + 1).trim().split(",");
+            if (parts.length != Integer.parseInt(head[1]) || parts.length != Embeddings.DIMENSIONS) {
+                return null;
+            }
+            double[] v = new double[parts.length];
+            for (int i = 0; i < parts.length; i++) {
+                v[i] = Double.parseDouble(parts[i]);
+            }
+            return v;
+        } catch (IOException | RuntimeException e) {
+            // A corrupt cache entry is not worth failing a search over; recompute it.
+            return null;
+        }
+    }
+
+    /** Content digest, truncated to 40 hex characters -- 160 bits, which will not collide over a note corpus. */
+    private static String digest(String body) {
+        try {
+            byte[] h = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(body.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(h.length * 2);
+            for (byte b : h) {
+                sb.append(Character.forDigit((b >> 4) & 0xF, 16)).append(Character.forDigit(b & 0xF, 16));
+            }
+            return sb.substring(0, 40);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            // SHA-256 is required of every Java runtime; if it is absent the platform is not one.
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
     }
 
     // -------------------------------------------------------------------- terms ---

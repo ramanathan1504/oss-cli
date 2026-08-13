@@ -573,9 +573,11 @@ public class DatabaseManager {
      * unset.
      */
     private static String getSeedConfigTableSql() {
+        // No 'ollama.model.embedding' here any more. The embedder ships inside the tool and runs in
+        // this process, so there is nothing to configure -- and a key that looks configurable but is
+        // ignored is worse than no key, because it invites an answer that silently does nothing.
         return "INSERT OR IGNORE INTO system_config (key, value) VALUES "
                 + "('ollama.model.triage', '" + com.osscli.Defaults.TRIAGE_MODEL + "'), "
-                + "('ollama.model.embedding', '" + com.osscli.Defaults.EMBEDDING_MODEL + "'), "
                 + "('ollama.model.guidance', '" + com.osscli.Defaults.GUIDANCE_MODEL + "'), "
                 + "('ollama.url', '" + com.osscli.Defaults.OLLAMA_URL + "'), "
                 + "('drive.paths', '');";

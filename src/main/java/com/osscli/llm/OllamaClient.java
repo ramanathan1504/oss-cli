@@ -23,7 +23,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.List;
 import java.util.Map;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -31,8 +30,6 @@ import org.apache.logging.log4j.Logger;
 public class OllamaClient {
 
     private static final Logger LOGGER = LogManager.getLogger(OllamaClient.class);
-    private static final String OLLAMA_URL = "http://localhost:11434/api/generate";
-    private static final String OLLAMA_EMBED_URL = "http://localhost:11434/api/embed";
     private static final ObjectMapper MAPPER = new ObjectMapper();
     /**
      * How long to wait for a generation to finish.
@@ -49,6 +46,7 @@ public class OllamaClient {
     private final HttpClient httpClient;
     private final String model;
     private final Duration requestTimeout;
+    private final String baseUrl;
 
     public OllamaClient(String model) {
         this(model, resolveTimeout());
@@ -57,8 +55,40 @@ public class OllamaClient {
     public OllamaClient(String model, Duration requestTimeout) {
         this.model = model;
         this.requestTimeout = requestTimeout;
+        this.baseUrl = resolveBaseUrl();
         this.httpClient =
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+    }
+
+    /**
+     * Where the daemon is, from {@code ollama.url}.
+     *
+     * <p>This used to be the string {@code http://localhost:11434}, written into three request
+     * builders. The key was seeded at install, offered by {@code setup} and reported by {@code
+     * doctor} -- which pinged the configured address and said "reachable" -- while every actual
+     * request went to localhost regardless. Pointing this at a machine with a GPU therefore produced
+     * a clean bill of health and a tool that could not reach a model, with nothing connecting the
+     * two symptoms.
+     *
+     * <p>Ollama is external by design: it is a connector you attach for local generation, and
+     * attaching it has to include saying where it is.
+     */
+    private static String resolveBaseUrl() {
+        try {
+            String configured = com.osscli.storage.SqliteStorage.loadConfig("ollama.url");
+            if (configured != null && !configured.isBlank()) {
+                String trimmed = configured.trim();
+                return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Could not read ollama.url, using default: {}", e.getMessage());
+        }
+        return com.osscli.Defaults.OLLAMA_URL;
+    }
+
+    /** The address in use, so a caller reporting a failure can name the host it actually tried. */
+    public String endpoint() {
+        return baseUrl;
     }
 
     private static Duration resolveTimeout() {
@@ -82,7 +112,7 @@ public class OllamaClient {
         String jsonPayload = MAPPER.writeValueAsString(requestBody);
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(OLLAMA_URL))
+                .uri(URI.create(baseUrl + "/api/generate"))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
                 .timeout(requestTimeout)
@@ -106,48 +136,11 @@ public class OllamaClient {
         }
     }
 
-    public double[] generateEmbedding(String text) throws IOException, InterruptedException {
-        Map<String, Object> requestBody = Map.of(
-                "model", model,
-                "input", text);
-
-        String jsonPayload = MAPPER.writeValueAsString(requestBody);
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(OLLAMA_EMBED_URL))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
-                .timeout(requestTimeout)
-                .build();
-
-        try {
-            LOGGER.debug("Sending embedding request to Ollama for input length: {}", text.length());
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-            if (response.statusCode() != 200) {
-                LOGGER.error("Ollama Embed API failed with status code {}: {}", response.statusCode(), response.body());
-                throw new IOException("Ollama returned unexpected HTTP status: " + response.statusCode());
-            }
-
-            Map<?, ?> responseMap = MAPPER.readValue(response.body(), Map.class);
-            List<?> embeddingsList = (List<?>) responseMap.get("embeddings");
-            if (embeddingsList == null || embeddingsList.isEmpty()) {
-                LOGGER.error("No embeddings array returned by Ollama service response.");
-                throw new IOException("No embeddings returned by Ollama service");
-            }
-
-            List<?> vectorList = (List<?>) embeddingsList.get(0);
-            double[] vector = new double[vectorList.size()];
-            for (int i = 0; i < vectorList.size(); i++) {
-                vector[i] = ((Number) vectorList.get(i)).doubleValue();
-            }
-            return vector;
-
-        } catch (IOException e) {
-            LOGGER.error("Failed to connect or generate vector embedding with Ollama service: {}", e.getMessage());
-            throw e;
-        }
-    }
+    // No generateEmbedding here. Embedding is done in-process by
+    // com.osscli.retrieval.Embeddings, and leaving a second one reachable through this class is how
+    // there came to be two in the first place: one corpus embedded by a daemon, another by the
+    // bundled model, and vectors that could not be compared across the two. Generation is what this
+    // client is for.
 
     /**
      * Whether the Ollama daemon answers on its default port. Checked separately from {@link #isModelAvailable()} so a
@@ -176,7 +169,7 @@ public class OllamaClient {
     /** Returns the raw /api/tags body, or null if the daemon responded with a non-200. */
     private String tagList() throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:11434/api/tags"))
+                .uri(URI.create(baseUrl + "/api/tags"))
                 .GET()
                 .timeout(Duration.ofSeconds(5)) // Fast 5-second connection check
                 .build();
@@ -195,7 +188,7 @@ public class OllamaClient {
         String jsonPayload = MAPPER.writeValueAsString(requestBody);
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(OLLAMA_URL))
+                .uri(URI.create(baseUrl + "/api/generate"))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
                 .timeout(requestTimeout)

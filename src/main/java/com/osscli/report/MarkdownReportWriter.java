@@ -324,6 +324,21 @@ public class MarkdownReportWriter implements ReportWriter {
             throw new IOException("Missing personal developer vector in system_config table.");
         }
 
+        // This vector lives in the config table rather than a vector table, so it never got the
+        // embedding_model column that keeps the rest of them honest. Written by one model and
+        // compared against issue vectors from another, it produces similarities that are numbers
+        // and nothing more -- and every model this tool has used emits 384 dimensions, so the shape
+        // never gives it away. Treated as absent instead, which 'sync --me' repairs.
+        String devVectorModel = SqliteStorage.loadConfig("developer.vector.model");
+        if (!com.osscli.retrieval.Embeddings.MODEL.equals(devVectorModel)) {
+            LOGGER.error(
+                    "Developer Expertise Vector was built by '{}', but the embedder is '{}'.",
+                    devVectorModel == null ? "an unrecorded model" : devVectorModel,
+                    com.osscli.retrieval.Embeddings.MODEL);
+            LOGGER.error("Run 'sync --me' to rebuild it; comparing the two would rank by nothing.");
+            throw new IOException("Developer vector was produced by a different embedding model.");
+        }
+
         // Deserialize your 1-year developer vector
         double[] devVector = MAPPER.readValue(devVectorJson, double[].class);
         Instant now = Instant.now();

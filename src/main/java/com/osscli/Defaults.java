@@ -46,11 +46,25 @@ public final class Defaults {
     public static final String TRIAGE_MODEL = "qwen2.5:0.5b";
 
     /**
-     * Embeddings matter more than the chat model: no corpus fits in a context window, so retrieval
-     * quality sets the ceiling and a larger chat model cannot recover text the embedder never read.
-     * This one is tiny and fast; larger embedders retrieve better if you can afford them.
+     * The built-in embedder, recorded beside every vector it produces.
+     *
+     * <p>Unlike the models above this is not a configurable default -- it is the identity of the
+     * embedder that ships inside the tool, kept here because {@code storage} must name it to keep
+     * one model's vectors from being compared against another's, and reaching into {@code
+     * retrieval} for it would point the two packages at each other.
+     *
+     * <p>Embeddings matter more than the chat model: no corpus fits in a context window, so
+     * retrieval quality sets the ceiling and a larger chat model cannot recover text the embedder
+     * never read. all-MiniLM-L6-v2 is chosen for what this tool is allowed to ask of a machine --
+     * Apache-2.0, 22 MB quantised, and six layers, which is what keeps indexing thousands of issues
+     * viable on a laptop CPU. Deeper 384-dimension models retrieve better and cost roughly double
+     * per document to index.
+     *
+     * <p>The {@code -onnx} suffix distinguishes these vectors from ones a daemon produced from the
+     * same weights under the name {@code all-minilm}. Both are 384 dimensions, so nothing would
+     * catch the mix by shape; they are quantised and pooled differently and are not comparable.
      */
-    public static final String EMBEDDING_MODEL = "all-minilm";
+    public static final String EMBEDDING_MODEL = "all-MiniLM-L6-v2-onnx";
 
     public static final String OLLAMA_URL = "http://localhost:11434";
 

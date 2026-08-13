@@ -16,10 +16,10 @@
  */
 package com.osscli.cli;
 
-import com.osscli.llm.OllamaClient;
 import com.osscli.model.Issue;
 import com.osscli.model.IssueEmbedding;
 import com.osscli.model.RepoIssue;
+import com.osscli.retrieval.Embeddings;
 import com.osscli.storage.SqliteStorage;
 import com.osscli.ui.NextSteps;
 import java.io.IOException;
@@ -56,11 +56,6 @@ public class SearchCommand implements Callable<Integer> {
     private boolean global;
 
     @Option(
-            names = {"-m", "--model"},
-            description = "Ollama embedding model to use")
-    private String modelName;
-
-    @Option(
             names = {"-n", "--limit"},
             description = "Number of top search results to return",
             defaultValue = "5")
@@ -68,14 +63,6 @@ public class SearchCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
-        // Resolve dynamic embedding model
-        if (modelName == null) {
-            modelName = SqliteStorage.loadConfig("ollama.model.embedding");
-            if (modelName == null) {
-                modelName = "all-minilm";
-            }
-        }
-
         Map<String, Issue> issueMap = new HashMap<>();
         List<IssueEmbedding> embeddings;
 
@@ -105,26 +92,29 @@ public class SearchCommand implements Callable<Integer> {
         }
 
         if (embeddings.isEmpty()) {
-            // No embeddings means no model has run -- but the ISSUES are right here, and refusing
-            // to search data you already have is the wrong answer to "you have not installed
-            // Ollama". Falling back keeps finding working; a model, when present, still wins on
+            // No embeddings means nothing has been indexed yet -- but the ISSUES are right here, and
+            // refusing to search data you already have is the wrong answer to "you have not fetched
+            // the model". Falling back keeps finding working; the model, when present, still wins on
             // meaning and this becomes the floor rather than the ceiling.
             return searchWithoutAModel(issueMap);
         }
 
-        LOGGER.info("Generating semantic vector for query: \"{}\" (Model: {})...", query, modelName);
-        OllamaClient client = new OllamaClient(modelName);
+        LOGGER.info("Generating semantic vector for query: \"{}\" (Model: {})...", query, Embeddings.MODEL);
         double[] queryVector;
 
         try {
-            queryVector = client.generateEmbedding(query);
-        } catch (IOException | InterruptedException | RuntimeException e) {
-            // Stored vectors are useless without one for the QUERY, so a stopped model server made
-            // search fail outright even though every issue was sitting in SQLite. That is the
-            // common case -- embeddings from a previous run, no model running now -- and failing
-            // there taught people that search needs a server. It does not; it only searches better
-            // with one.
-            LOGGER.info("Model server unreachable ({}). Falling back to text search.", e.getMessage());
+            queryVector = Embeddings.embed(query, m -> LOGGER.info("  {}", m));
+        } catch (IOException | RuntimeException e) {
+            LOGGER.info("Could not embed the query ({}). Falling back to text search.", e.getMessage());
+            return searchWithoutAModel(issueMap);
+        }
+
+        if (queryVector == null) {
+            // Stored vectors are useless without one for the QUERY. This is the common case after
+            // the model is removed -- vectors from a previous run, no model now -- and failing here
+            // would teach people that search needs one. It does not; it only searches better with it.
+            LOGGER.info("No local model — searching {} item(s) by shared terms instead.", issueMap.size());
+            LOGGER.info("  {}", Embeddings.ABSENT_HINT);
             return searchWithoutAModel(issueMap);
         }
 

@@ -387,8 +387,13 @@ td .need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)}
       </div>
       <div class="rung opt">
         <span class="mark" aria-hidden="true">○</span>
+        <span class="what">Search by meaning<span class="needs">optional: the built-in model</span></span>
+        <span class="gives">One command, oss-cli model --fetch, puts a 22 MB model on your disk and runs it inside the process. No server and no daemon, and it is never downloaded unless you ask. Without it, search and duplicates rank by shared terms instead.</span>
+      </div>
+      <div class="rung opt">
+        <span class="mark" aria-hidden="true">○</span>
         <span class="what">Local answers<span class="needs">optional: Ollama</span></span>
-        <span class="gives">Semantic search across every issue you have synced, and a verdict on a pull request — generated on your own machine, with nothing sent anywhere.</span>
+        <span class="gives">A verdict on a pull request, a triage audit, an answer to a question — generated on your own machine, with nothing sent anywhere.</span>
       </div>
       <div class="rung opt">
         <span class="mark" aria-hidden="true">○</span>
@@ -557,9 +562,10 @@ oss-cli sync --all
 oss-cli review 4234 -r apache/kafka</pre>
     </div>
     <p class="note">
-      <strong>Optional, any time:</strong> install <a href="https://ollama.com">Ollama</a> for local
-      answers and semantic search, then run <code>oss-cli setup</code> to point OSS-CLI at your
-      own note folders. Skip both and every command above still works.
+      <strong>Optional, any time:</strong> run <code>oss-cli model --fetch</code> for search by
+      meaning, install <a href="https://ollama.com">Ollama</a> for local answers and verdicts, then
+      run <code>oss-cli setup</code> to point OSS-CLI at your own note folders. Skip all three and
+      every command above still works.
     </p>
   </div>
 </section>
@@ -586,7 +592,7 @@ oss-cli review 4234 -r apache/kafka</pre>
           <tr><td><code>profile</code></td><td class="need">token</td><td>Shows a project's language, build, toolchain and enforced conventions</td></tr>
           <tr><td><code>review &lt;pr&gt;</code></td><td class="need">token</td><td>Reviews a pull request using every source you have connected</td></tr>
           <tr><td><code>prompt &lt;issue&gt;</code></td><td class="need">token</td><td>Answers locally, or assembles a complete expert prompt when it cannot</td></tr>
-          <tr><td><code>search &lt;query&gt;</code></td><td class="need">Ollama</td><td>Semantic search across everything you have indexed</td></tr>
+          <tr><td><code>search &lt;query&gt;</code></td><td class="need">—</td><td>Searches everything you have indexed — by meaning with the built-in model, by shared terms without it</td></tr>
           <tr><td><code>triage &lt;issue&gt;</code></td><td class="need">Ollama</td><td>Full triage audit for a single issue</td></tr>
           <tr><td><code>doctor</code></td><td class="need">—</td><td>Checks every prerequisite and says exactly what to fix</td></tr>
         </tbody>

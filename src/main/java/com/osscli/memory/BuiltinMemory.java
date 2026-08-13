@@ -1,6 +1,7 @@
 package com.osscli.memory;
 
 import com.osscli.AppPaths;
+import com.osscli.retrieval.Corpus;
 import com.osscli.retrieval.PassageSplitter;
 import com.osscli.retrieval.TextIndex;
 import java.io.IOException;
@@ -105,6 +106,18 @@ public final class BuiltinMemory {
             return 0;
         }
 
+        // With the model present this asks the same corpus 'pick' asks, rather than keeping a
+        // private opinion about the same notes. Two commands ranking one set of notes by two
+        // different methods is how they come to disagree about the user's own writing -- and it
+        // read as the model doing nothing, since 'memory search' said "shared terms" no matter
+        // what was installed.
+        if (com.osscli.retrieval.Embeddings.isReady()) {
+            Integer done = searchByMeaning(query, notes.size());
+            if (done != null) {
+                return done;
+            }
+        }
+
         TextIndex ix = new TextIndex();
         for (Note n : notes) {
             // Indexed by passage rather than by whole file: a long note matching one paragraph
@@ -132,6 +145,44 @@ public final class BuiltinMemory {
             }
         }
         return 0;
+    }
+
+    /**
+     * Rank by meaning, through the shared corpus.
+     *
+     * <p>Returns null when the corpus cannot answer -- no model after all, or nothing of ours in it --
+     * so the caller falls through to term search rather than reporting an empty result. An empty
+     * answer and a missing capability look identical to the person reading them, and only one of
+     * them means "there is nothing here".
+     */
+    private static Integer searchByMeaning(String query, int noteCount) {
+        try {
+            Corpus corpus = Corpus.load(m -> System.out.println("  " + m));
+            if (!corpus.semantic()) {
+                return null;
+            }
+            // Notes only. The corpus also holds review write-ups, and 'memory search' is asked about
+            // what you filed -- widening it here would answer a question nobody asked.
+            List<Corpus.Hit> hits = corpus.search(query, 8).stream()
+                    .filter(h -> "note".equals(h.kind()))
+                    .toList();
+            if (hits.isEmpty()) {
+                return null;
+            }
+            System.out.println("  " + hits.size() + " of " + noteCount + " note(s), by meaning");
+            System.out.println();
+            for (Corpus.Hit h : hits) {
+                String file = h.id().startsWith("note:") ? h.id().substring(5) : h.id();
+                System.out.printf("  %.2f  %s%n", h.score(), file);
+                if (!h.title().isBlank()) {
+                    System.out.println("        " + h.title());
+                }
+            }
+            return 0;
+        } catch (Exception e) {
+            // Ranking by meaning is the better answer, not the only one.
+            return null;
+        }
     }
 
     // -------------------------------------------------------------------- index ---
