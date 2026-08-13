@@ -32,7 +32,7 @@ public class DatabaseManager {
 
     private static final Logger LOGGER = LogManager.getLogger(DatabaseManager.class);
     // private static final String DB_URL = "jdbc:sqlite:data/issue_intelligence.db";
-    private static final int CURRENT_SCHEMA_VERSION = 11;
+    private static final int CURRENT_SCHEMA_VERSION = 12;
 
     /** Tables whose rows carry an embedding vector and therefore need provenance. */
     static final String[] VECTOR_TABLES = {"personal_chat_memory", "personal_pr_memory", "embeddings"};
@@ -300,6 +300,33 @@ public class DatabaseManager {
                     stmt.execute(getCreateRepoProfileTableSql());
                 }
             }
+        },
+        // Migration 12: What one issue says about another.
+        //
+        // Retrieval ranked everything by similarity, which cannot see a reference. A pull request
+        // whose whole body is "fixes #4100" shares almost no wording with the issue it closes, so
+        // the two scored as unrelated at exactly the moment they were most related. These edges are
+        // read out of what people wrote and followed directly, beside the ranking rather than
+        // instead of it.
+        new Migration() {
+            @Override
+            public int getTargetVersion() {
+                return 12;
+            }
+
+            @Override
+            public void execute(Connection conn) throws SQLException {
+                LOGGER.info("Upgrading database schema to Version 12 (issue reference index)...");
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute(getCreateIssueReferencesTableSql());
+                    // Looked up in one direction constantly -- "what does this issue point at" --
+                    // and in the other only when asked, so only the first is indexed.
+                    stmt.execute("CREATE INDEX IF NOT EXISTS idx_refs_from "
+                            + "ON issue_references(repository, from_number);");
+                    stmt.execute("CREATE INDEX IF NOT EXISTS idx_refs_to "
+                            + "ON issue_references(to_repository, to_number);");
+                }
+            }
         }
     };
 
@@ -413,10 +440,22 @@ public class DatabaseManager {
             // Handle unversioned or legacy database migrations
             if (currentVersion == 0) {
                 if (!tableExists(conn, "issues")) {
-                    // Fresh Database - Build the complete fresh schema natively to latest version
+                    // Fresh database. Migration 1 builds the core schema, and then every later
+                    // migration runs on top of it exactly as it would on an existing database.
+                    //
+                    // It used to stamp CURRENT_SCHEMA_VERSION here instead, which said "Migration 1
+                    // already contains everything the later ones add". Nothing enforced that, and it
+                    // had drifted: a database created this way was stamped 11 while missing
+                    // personal_chat_chunk from Migration 10 and pr_cache and repo_profile from
+                    // Migration 11 -- so a new install had no passage index, no review cache and no
+                    // repository profiles, and reported a schema version claiming otherwise.
+                    //
+                    // Running the real migrations is what keeps a new database and an upgraded one
+                    // identical, rather than a promise somebody has to remember to keep. Every
+                    // migration from 3 onwards is written to be safe when its work is already done.
                     MIGRATIONS[0].execute(conn);
-                    setVersion(conn, CURRENT_SCHEMA_VERSION);
-                    currentVersion = CURRENT_SCHEMA_VERSION;
+                    setVersion(conn, 2);
+                    currentVersion = 2;
                 } else if (!columnExists(conn, "issues", "repository")) {
                     // Old unversioned single-repo DB (V1)
                     MIGRATIONS[1].execute(conn);
@@ -652,6 +691,32 @@ public class DatabaseManager {
                     changed_files INTEGER,
                     fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (repository, pr_number, head_sha)
+                );
+                """;
+    }
+
+    /**
+     * Edges between issues, pull requests and commits, as written by the people who wrote them.
+     *
+     * <p>{@code to_ref} is the identity -- {@code owner/name#123} or {@code sha:abc123} -- and exists so the primary
+     * key stays simple. The parsed halves are stored beside it because retrieval looks up by number, and re-parsing a
+     * string on every read to recover what was already known is work with no reader.
+     *
+     * <p>A reference to a repository that has never been synced is still recorded. It costs a row, it is true whether
+     * or not this machine has the other side, and dropping it would mean re-reading every body the day that repository
+     * is added.
+     */
+    private static String getCreateIssueReferencesTableSql() {
+        return """
+                CREATE TABLE IF NOT EXISTS issue_references (
+                    repository TEXT NOT NULL,
+                    from_number INTEGER NOT NULL,
+                    kind TEXT NOT NULL,
+                    to_ref TEXT NOT NULL,
+                    to_repository TEXT,
+                    to_number INTEGER,
+                    to_sha TEXT,
+                    PRIMARY KEY (repository, from_number, to_ref)
                 );
                 """;
     }
