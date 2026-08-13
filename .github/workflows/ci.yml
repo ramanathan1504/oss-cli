@@ -32,11 +32,11 @@ jobs:
       - name: Build and verify
         run: mvn -B -ntp clean verify
 
-      # There are no unit tests yet, so this is the only thing standing between
-      # a compiling jar and a broken one. Picocli wires subcommands by
-      # annotation at runtime: a duplicated command name or a bad @Option type
-      # compiles cleanly and fails on first launch, which without this would be
-      # discovered by whoever ran brew upgrade.
+      # `verify` runs the unit tests above. This covers what they cannot: picocli
+      # wires subcommands by annotation at runtime, so a duplicated command name
+      # or a bad @Option type compiles cleanly, passes every test, and fails on
+      # first launch -- which without this would be discovered by whoever ran
+      # brew upgrade.
       - name: Smoke test the built jar
         run: |
           JAR=$(ls target/oss-cli-*.jar | head -1)
