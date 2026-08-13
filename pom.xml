@@ -103,13 +103,18 @@
                 <version>3.5.2</version>
                 <configuration>
                     <!--
-                        Tests that touch the database must never find the real one. AppPaths reads
-                        this property, so pointing it at target/ keeps a test run out of ~/.oss-cli.
-                        A suite that damages the thing it tests is worse than no suite.
+                        Tests that touch the database must never find the real one.
+
+                        This MUST be the environment variable. AppPaths.resolveBaseDir reads
+                        OSS_CLI_HOME and nothing else; oss.cli.home is written BY the application
+                        for log4j2.xml to read back, and setting it here redirects nothing at all.
+                        That mistake was made once, and SchemaTest deleted a real 496 MB database
+                        with it. A redirection that silently does nothing is worse than none,
+                        because the test then passes while destroying the thing it was protecting.
                     -->
-                    <systemPropertyVariables>
-                        <oss.cli.home>${project.build.directory}/test-home</oss.cli.home>
-                    </systemPropertyVariables>
+                    <environmentVariables>
+                        <OSS_CLI_HOME>${project.build.directory}/test-home</OSS_CLI_HOME>
+                    </environmentVariables>
                 </configuration>
             </plugin>
             <plugin>
