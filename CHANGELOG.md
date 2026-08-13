@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.10.0
+
+_2026-08-13_
+
+- Document what four changes actually did (#61)
+- There were no tests. Now there are eighty-four (#62)
+- Keep the live line inside the terminal (#60)
+- Tell what you worked out apart from what you collected (#59)
+- Say what is happening while it happens (#58)
+- Follow what people wrote down, not only what resembles what (#57)
+- MACOS_AUTOMATION.md was missed by every earlier pass (#56)
+- Describe the roles, not the one project that fills them (#55)
+- Examples name a placeholder, not somebody else's project (#54)
+
+
 ## 1.9.1
 
 _2026-08-13_
