@@ -420,6 +420,29 @@ public class DatabaseManager {
         }
     };
 
+    /** The schema version this build knows how to run. Read by {@code doctor} and the release guard. */
+    public static int currentSchemaVersion() {
+        return CURRENT_SCHEMA_VERSION;
+    }
+
+    /**
+     * The version stamped in the store, or 0 when there is nothing stamped yet.
+     *
+     * <p>Reads only {@code schema_version}, and never migrates. It has to be answerable on a
+     * database this build has already refused to open, which is exactly when it is asked.
+     */
+    public static int storedSchemaVersion() throws SQLException {
+        try (Connection conn = getConnection();
+                Statement stmt = conn.createStatement()) {
+            if (!tableExists(conn, "schema_version")) {
+                return 0;
+            }
+            try (ResultSet rs = stmt.executeQuery("SELECT MAX(version) AS version FROM schema_version;")) {
+                return rs.next() ? rs.getInt("version") : 0;
+            }
+        }
+    }
+
     public static Connection getConnection() throws SQLException {
         try {
             Files.createDirectories(AppPaths.DATA_DIR);
@@ -608,6 +631,15 @@ public class DatabaseManager {
                 }
             }
 
+            // Migrations only run forwards, so a store stamped higher than this build knows about
+            // cannot be understood -- and until this check existed, nothing said so. The loop below
+            // matched no migration, fell through in silence, and the command carried on reading
+            // tables whose meaning may have changed, then writing rows in the shape it believed in.
+            // Refusing costs one command; carrying on costs the store.
+            if (currentVersion > CURRENT_SCHEMA_VERSION) {
+                throw new SchemaTooNewException(currentVersion, CURRENT_SCHEMA_VERSION);
+            }
+
             // Sequentially execute any remaining migrations registered in the array
             for (Migration migration : MIGRATIONS) {
                 if (migration.getTargetVersion() > currentVersion
@@ -619,7 +651,12 @@ public class DatabaseManager {
             }
 
         } catch (SQLException e) {
-            LOGGER.error("Database schema initialization failed critically: {}", e.getMessage(), e);
+            // This used to log and return, so a database that had failed to initialise let the
+            // command run anyway -- every subsequent query failing against a schema that was never
+            // built, under a heading that had already said what it was about to do. A warning that
+            // scrolls past inside a command which then continues is worse than no warning.
+            LOGGER.error("Database schema initialization failed: {}", e.getMessage(), e);
+            throw new IllegalStateException("could not initialise the database at " + AppPaths.DB_PATH, e);
         }
     }
 

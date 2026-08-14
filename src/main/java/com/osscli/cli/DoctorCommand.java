@@ -159,6 +159,37 @@ public class DoctorCommand implements Callable<Integer> {
         } catch (Exception e) {
             warn("database", "present but unreadable: " + e.getMessage(), "Check file permissions.");
         }
+        checkSchemaVersion();
+    }
+
+    /**
+     * Whether this build can open the store at all.
+     *
+     * <p>{@code doctor} deliberately still runs when the schema is too new — it is the command that
+     * explains why everything else stopped — so it has to be the one that says so plainly rather
+     * than reporting a healthy database and leaving the user to guess.
+     */
+    private void checkSchemaVersion() {
+        try {
+            int store = com.osscli.storage.DatabaseManager.storedSchemaVersion();
+            int understood = com.osscli.storage.DatabaseManager.currentSchemaVersion();
+            if (store > understood) {
+                fail(
+                        "schema",
+                        "database is at " + store + ", this build understands " + understood,
+                        "It was written by a newer oss. Upgrade with 'brew upgrade oss', "
+                                + "or point OSS_CLI_HOME at a different directory.");
+            } else if (store < understood) {
+                warn(
+                        "schema",
+                        "database is at " + store + ", this build is at " + understood,
+                        "The next command migrates it forwards automatically.");
+            } else {
+                ok("schema", "version " + store);
+            }
+        } catch (Exception e) {
+            warn("schema", "could not be read: " + e.getMessage(), "Run 'oss setup' to create the database.");
+        }
     }
 
     // ── models ──────────────────────────────────────────────────────────────

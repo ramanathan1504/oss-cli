@@ -77,6 +77,14 @@ belongs in `chat_turn` instead. A resumed session rewrites *the note it already
 has* (`chat_session.note_path`) rather than filing a second overlapping copy for
 retrieval to fight over.
 
+**An older build must refuse a store a newer one migrated.** The migration loop
+only runs forwards, so when the stamped version exceeds `CURRENT_SCHEMA_VERSION`
+it used to match nothing and fall through in silence -- the command then read,
+and wrote, a schema it did not understand. `initializeSchema` now throws
+`SchemaTooNewException`; `Main` prints what happened and exits 1, letting only
+`doctor`, `--version` and `--help` past, because taking away the command that
+explains the refusal is not a fix.
+
 **Vectors from different models are never comparable.** Every vector is stored
 with the model that produced it and every read filters on it. All models used
 here emit 384 dimensions, so nothing catches a mix by shape — it produces
@@ -121,6 +129,10 @@ copies of a web page have each caused a real bug here.
 ## Before you finish
 
 - `mvn verify` — compiles, formats, runs the tests
+- Added or removed a command or flag? `release-surface.json` has to follow:
+  `mvn test -Dtest=ReleaseSurfaceTest -Dsurface.update=true`, then commit it.
+  `ReleaseSurfaceTest` fails the pull request otherwise, which is the point --
+  the record is updated by the person making the change, not months later
 - Examples use `owner/name`
 - No new required prerequisite
 - Anything slower than a second reports what it is doing
@@ -130,3 +142,19 @@ copies of a web page have each caused a real bug here.
 `./release.sh <version>` from a clean `main`. It bumps the version, writes the
 changelog from commit subjects, opens a PR, waits for CI, merges, and tags. CI
 publishes the release and the archives; the Homebrew tap follows.
+
+**The version number is checked before anything is written.** `release.sh` runs
+`ReleaseGuardTest` against `release-surface.json` as it stood at the previous
+tag and refuses a bump smaller than the change requires:
+
+| Change | Required |
+| --- | --- |
+| command or flag removed (aliases count) | major |
+| schema version raised, or command or flag added | minor |
+| neither | patch |
+
+This is bnd's rule with the schema added, and the schema is the half that
+matters: nothing imports `com.osscli.*`, so what actually breaks for a user is
+an older binary meeting a newer store. **Do not add bnd or OSGi headers** —
+`maven-shade-plugin` rewrites packages and would invalidate them, and no
+container resolves this jar.

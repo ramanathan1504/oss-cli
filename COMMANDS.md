@@ -355,6 +355,49 @@ oss restore /path/to/sa_brain_backup_20260627_104000.zip
 
 ---
 
+## 🩺 Health
+
+### `doctor`
+Checks every prerequisite in turn and names what to fix. It is the first thing to run when something is not behaving, and it works when nothing else does — including when the database itself has been refused.
+
+What it reports:
+
+*   **token** — whether a GitHub token is present and usable
+*   **data directory** — where `~/.oss-cli` resolved to, and whether `OSS_CLI_HOME` moved it
+*   **database** — that the file exists and its size
+*   **schema** — the store's schema version against the one this build understands
+*   **models** — whether the built-in embedder's weights are on disk, and whether a generation model is reachable
+*   **vector provenance** — that stored vectors were produced by the embedder currently in use
+
+```bash
+oss doctor
+```
+
+#### The schema check, and why it can fail
+
+Migrations only ever run forwards. If a **newer** `oss` has already migrated your store, an older build cannot understand it — so it refuses rather than reading tables whose meaning may have changed and then writing rows in the shape it believes in:
+
+```
+This database was written by a newer oss than this one.
+  database:    schema 15
+  this build:  schema 14  (oss 1.11.0)
+Nothing has been read or changed.
+```
+
+Before this refusal existed, that case fell through in **silence**: the migration loop matched nothing and the command carried on regardless.
+
+Every other command exits `1` in this state. `doctor`, `--version` and `--help` keep working on purpose — taking away the command that explains the problem is a poor way to report it.
+
+```bash
+brew upgrade oss                       # the usual fix
+OSS_CLI_HOME=~/other-store oss ...     # work elsewhere meanwhile
+oss doctor                             # reports both versions
+```
+
+A store **older** than this build is not a problem: the next command migrates it forwards, and `doctor` says so.
+
+---
+
 ## Quick Reference
 
 | Command           | Mode           | AI Required             | Description                                  |
@@ -386,5 +429,6 @@ oss restore /path/to/sa_brain_backup_20260627_104000.zip
 | `hidden-critical` | Offline        | No                      | Underestimated security threat detection     |
 | `backup`          | Offline        | No                      | Export AI memory to zip archive              |
 | `restore`         | Offline        | No                      | Restore AI memory from zip archive           |
+| `doctor`          | Offline        | No                      | Checks every prerequisite and names the fix  |
 
 **Embedder** means the built-in all-MiniLM-L6-v2 that runs in this process — `oss model --fetch`, once, and nothing is running afterwards. **Ollama** means local text generation, and nothing in this table indexes or searches through it.

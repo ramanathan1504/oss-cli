@@ -415,6 +415,31 @@ healthy-looking but empty install is otherwise indistinguishable from data loss.
 
 ---
 
+### If oss says the database was written by a newer version
+
+```
+This database was written by a newer oss than this one.
+  database:    schema 15
+  this build:  schema 14  (oss 1.11.0)
+```
+
+Two builds of `oss` are pointed at one store and the newer one has already
+migrated it. Migrations only run forwards, so the older build cannot understand
+it — and it refuses rather than reading tables whose meaning may have changed
+and then writing rows in the shape it believes in. **Nothing has been read or
+changed** when you see this.
+
+Three ways out:
+
+```bash
+brew upgrade oss                       # the usual one
+OSS_CLI_HOME=~/other-store oss ...     # work somewhere else meanwhile
+oss doctor                             # still works, and reports both versions
+```
+
+`doctor` stays available deliberately: taking away the command that explains the
+problem would be a poor way to report it.
+
 ## 8. Troubleshooting
 
 | Symptom                             | Likely cause                                                                                              |
