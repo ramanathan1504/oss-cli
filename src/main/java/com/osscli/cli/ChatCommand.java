@@ -19,6 +19,7 @@ package com.osscli.cli;
 import com.osscli.knowledge.SessionDigest;
 import com.osscli.llm.ClaudeClient;
 import com.osscli.llm.GeminiClient;
+import com.osscli.llm.ModelFit;
 import com.osscli.llm.OllamaClient;
 import com.osscli.llm.OpenAiClient;
 import com.osscli.model.ChatSession;
@@ -256,7 +257,24 @@ public class ChatCommand implements Callable<Integer> {
         // pointing the other way, and it breaks the rule the whole tool is built on: a capability
         // may degrade, but it may not be gated on one particular provider.
         OllamaClient localClient = new OllamaClient(modelName);
-        Backends backends = Backends.of(localClient.isModelAvailable(), cloud.available());
+        boolean localUsable = localClient.isModelAvailable();
+
+        // Installed is not the same as runnable. A model larger than the free memory is loaded
+        // rather than refused, the machine swaps, and it stops responding for minutes -- which
+        // cannot be cancelled or read. Treated as "not available", so the conversation falls back
+        // to whatever else is connected instead of taking the laptop down.
+        if (localUsable) {
+            ModelFit.Verdict fit = ModelFit.check(localClient, modelName);
+            if (fit.shouldRefuse()) {
+                LOGGER.warn("  ⚠ Not using '{}' — it does not fit in memory right now.", modelName);
+                for (String line : fit.explain()) {
+                    LOGGER.warn("    {}", line);
+                }
+                localUsable = false;
+            }
+        }
+
+        Backends backends = Backends.of(localUsable, cloud.available());
         if (!backends.staysLocal()) {
             localClient = null;
         }
