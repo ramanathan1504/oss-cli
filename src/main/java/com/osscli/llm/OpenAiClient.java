@@ -33,6 +33,10 @@ public class OpenAiClient {
     private static final String API_URL = "https://api.openai.com/v1/chat/completions";
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final int MAX_RETRIES = 3;
+
+    /** Backoff base, multiplied by the attempt number. */
+    private static final long BACKOFF_MS = 1_500L;
+
     private final HttpClient httpClient;
     private final String apiKey;
     private final String model;
@@ -84,14 +88,21 @@ public class OpenAiClient {
                 }
 
                 if (response.statusCode() != 200) {
-                    throw new ApiFailure.Permanent(
+                    String explained = ApiFailure.explain(
                             response.statusCode(),
-                            ApiFailure.explain(
-                                    response.statusCode(),
-                                    "OpenAI",
-                                    response.body(),
-                                    "OPENAI_API_KEY or the openai_api_key keychain entry",
-                                    "platform.openai.com/api-keys"));
+                            "OpenAI",
+                            response.body(),
+                            "OPENAI_API_KEY or the openai_api_key keychain entry",
+                            "platform.openai.com/api-keys");
+                    // See GeminiClient: the retryable set lives in ApiFailure so the three clients
+                    // cannot disagree about it, which they did -- each in a different way.
+                    if (ApiFailure.retryable(response.statusCode()) && attempt < MAX_RETRIES) {
+                        LOGGER.warn(
+                                "OpenAI returned {}; retrying ({}/{})...", response.statusCode(), attempt, MAX_RETRIES);
+                        Thread.sleep(BACKOFF_MS * attempt);
+                        continue;
+                    }
+                    throw new ApiFailure.Permanent(response.statusCode(), explained);
                 }
 
                 Map<?, ?> responseMap = MAPPER.readValue(response.body(), Map.class);

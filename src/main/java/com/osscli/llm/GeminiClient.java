@@ -58,6 +58,9 @@ public class GeminiClient {
 
     private static final int MAX_RETRIES = 3;
 
+    /** Backoff base, multiplied by the attempt number. */
+    private static final long BACKOFF_MS = 1_500L;
+
     public GeminiClient(String apiKey, String model) {
         this.apiKey = apiKey;
         this.model = model == null || model.isEmpty() ? DEFAULT_MODEL : model;
@@ -109,16 +112,24 @@ public class GeminiClient {
                 }
 
                 if (response.statusCode() != 200) {
-                    // The raw body used to be printed here and then the request retried twice more,
-                    // so a retired model produced three screens of JSON and a six-second wait.
-                    throw new ApiFailure.Permanent(
+                    String explained = ApiFailure.explain(
                             response.statusCode(),
-                            ApiFailure.explain(
-                                    response.statusCode(),
-                                    "Gemini",
-                                    response.body(),
-                                    "GEMINI_API_KEY or the gemini_api_key keychain entry",
-                                    "aistudio.google.com/apikey"));
+                            "Gemini",
+                            response.body(),
+                            "GEMINI_API_KEY or the gemini_api_key keychain entry",
+                            "aistudio.google.com/apikey");
+                    // Retryable is ApiFailure's judgement, not a second list kept here. This
+                    // treated every non-200 except 429 as permanent, so a 503 -- "this model is
+                    // experiencing high demand", the most temporary failure there is -- was
+                    // reported as fatal on attempt 1 of 3, and a busy model was indistinguishable
+                    // from a retired one.
+                    if (ApiFailure.retryable(response.statusCode()) && attempt < MAX_RETRIES) {
+                        LOGGER.warn(
+                                "Gemini returned {}; retrying ({}/{})...", response.statusCode(), attempt, MAX_RETRIES);
+                        Thread.sleep(BACKOFF_MS * attempt);
+                        continue;
+                    }
+                    throw new ApiFailure.Permanent(response.statusCode(), explained);
                 }
 
                 return parseGeminiResponse(response.body());
