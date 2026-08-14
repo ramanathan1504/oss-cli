@@ -110,6 +110,17 @@ two copies of itself. `ApiFailure` decides this in one place now, and
 `ApiFailure.Permanent` is caught **before** the generic `IOException` in each
 client. Three copies is how the bug happened; do not make a fourth.
 
+**A prompt built from the corpus must be budgeted, not concatenated.** `chat`
+and `guide` each grew their own context builder that appended the *entire text*
+of every note scoring above 0.35, uncapped. On a real store — 592 notes, 34 MB,
+332 matching — that is a ~19 MB prompt for a 6,000-token model, about eight
+hundred times what it can take. It timed out, which reads as a slow machine
+rather than a prompt that was never going to work. `ContextRetriever` had solved
+this for `prompt` all along; both now go through `MemoryContext`, which ranks,
+fills the budget and **says what it dropped** — "25 of 67 included" is a
+different answer from "67 included" and the user must not have to guess which
+they got.
+
 **Vectors from different models are never comparable.** Every vector is stored
 with the model that produced it and every read filters on it. All models used
 here emit 384 dimensions, so nothing catches a mix by shape — it produces

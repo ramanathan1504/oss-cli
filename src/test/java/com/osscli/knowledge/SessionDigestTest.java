@@ -104,9 +104,15 @@ class SessionDigestTest {
     @Test
     @DisplayName("a conversation past the context budget is compacted")
     void longConversationsAreCompacted() {
+        // Sized from the budget rather than from a number typed here. This test previously assumed
+        // the 16,000-character constant that the budget replaced, and so began passing vacuously
+        // the moment the constant moved -- the failure mode a fixed fixture always eventually has.
+        int turnSize = 1_000;
+        int enough = SessionDigest.budgetChars(0) / turnSize + 2;
+
         List<ChatTurn> turns = new ArrayList<>();
-        for (int i = 0; i < 20; i++) {
-            turns.add(turn(i + 1, i % 2 == 0 ? ChatTurn.Role.USER : ChatTurn.Role.LOCAL, "x".repeat(1_000)));
+        for (int i = 0; i < enough; i++) {
+            turns.add(turn(i + 1, i % 2 == 0 ? ChatTurn.Role.USER : ChatTurn.Role.LOCAL, "x".repeat(turnSize)));
         }
 
         assertTrue(SessionDigest.needsCompaction(session(null), turns));
@@ -121,7 +127,7 @@ class SessionDigestTest {
                 42,
                 null,
                 "local",
-                "s".repeat(20_000),
+                "s".repeat(SessionDigest.budgetChars(0) + 1),
                 null,
                 stamp(),
                 stamp(),

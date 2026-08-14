@@ -154,9 +154,20 @@ public class HistoryCommand implements Callable<Integer> {
     /** One session as one line: enough to recognise it, short enough for a narrow terminal. */
     static String row(ChatSession s) {
         String live = s.heldElsewhere(ChatSessionStore.myPid(), ChatSessionStore.myHost()) ? " ●" : "";
+        // '+' means older turns were folded into a summary, so the turn count is what is still
+        // verbatim rather than everything that was said. Without the mark the count quietly
+        // understates the conversation, which is the wrong thing for a list you choose from.
+        String folded = s.summary() == null || s.summary().isBlank() ? " " : "+";
         return String.format(
-                "%-5s %-24s #%-7d %3d turns  %-9s %s%s",
-                s.id(), clip(s.repository(), 24), s.issueNumber(), s.turnCount(), s.ageLabel(), overviewOf(s), live);
+                "%-5s %-24s #%-7d %3d turns%s %-9s %s%s",
+                s.id(),
+                clip(s.repository(), 24),
+                s.issueNumber(),
+                s.turnCount(),
+                folded,
+                s.ageLabel(),
+                overviewOf(s),
+                live);
     }
 
     /**

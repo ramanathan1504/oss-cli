@@ -219,7 +219,7 @@ oss inspect 1666 -r owner/name
 An interactive conversation about one issue, which survives the terminal it was started in.
 
 *   **Saved as you go.** Every turn is written to SQLite the moment it is said. Ctrl-C, a closed lid or a dropped connection loses nothing — the conversation is state on disk that a process is attached to, not state in a process.
-*   **Context aware.** Loads your personal memory (past PR stories, assistant exports, notes) and the issue itself.
+*   **Context aware, and budgeted.** Retrieves your personal memory (past PR stories, assistant exports, notes) ranked by relevance, and fills the model's token budget in that order — the same retrieval `prompt` uses. It reports what it used: `25 of 67 matching passages included (~5943 tokens; the rest did not fit)`.
 *   **Either model will do.** Ollama, a cloud key, or both. It refuses only when you have neither, and then it names both ways to fix it.
 
 | You have | What happens |
@@ -243,6 +243,19 @@ oss chat 4129 --openai         # escalate to OpenAI instead of Gemini
 ```
 
 **Long conversations are folded, not silently truncated.** Once the transcript outgrows the model's context, the older turns are summarised into a running summary and the recent ones kept verbatim. With no generation model attached the oldest turns are dropped instead — and that is printed, because quietly forgetting the first half of a conversation while continuing to answer confidently is the failure worth shouting about. The full transcript stays readable in `oss history --show` either way.
+
+**Two things you can type that are not questions.** Compaction is lossy however carefully it is done, so the moment it happens should never be the first you hear of it.
+
+| Typed at the prompt | What it does |
+| --- | --- |
+| `/context` | Draws how full the conversation is: characters used against the budget, how many turns, how much the retrieved notes are taking, and whether anything has been folded already. |
+| `/compact` | Folds the older turns now, rather than waiting for the automatic threshold mid-answer. Says what it reclaimed, or that there was nothing to fold. |
+
+Neither becomes a turn, so neither shows up in the transcript or goes to the model.
+
+**The budget covers the whole prompt, not just the transcript.** The retrieved notes beside it are charged against the same window — they used to be budgeted separately, which meant two limits that could each be satisfied and still overflow together. The ceiling is `chat.context.chars` in `system_config`, defaulting to 32,000 (≈ an 8k-token window, which is what small local models commonly run). Raise it if your model has more room; a value that is missing, zero or not a number falls back to the default rather than failing.
+
+A conversation that has folded older turns is marked with a `+` after its turn count in `oss history`, so the number you see is honestly "still verbatim" rather than "everything ever said".
 
 ### `history`
 Every conversation you have saved, and the way back into any of it.
@@ -273,6 +286,7 @@ The conversations live in one SQLite database shared by every `oss` process, so 
 ### `guide`
 Generates a structured, step-by-step resolution blueprint for a specific issue using local RAG (Retrieval-Augmented Generation).
 
+*   **Context is budgeted**, the same way `chat` and `prompt` budget theirs, and it says how much of what matched was used.
 *   **Either model will do**, like `chat`. With a local model it drafts locally and offers to refine with a cloud expert; with `--gemini`, `--openai` or `--claude` it goes straight to the cloud — including when no local model is installed at all.
 *   `--gemini` / `--openai` / `--claude` : Bypass the local model and route immediately to that API.
 *   **Verification needs a local model.** A cloud blueprint is normally read back against your own past work before you see it. Without a local model that step is skipped and says so, because an unverified blueprint looks exactly like a verified one.
