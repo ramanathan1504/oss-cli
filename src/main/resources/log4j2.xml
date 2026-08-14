@@ -1,4 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Two appenders doing two unrelated jobs, and only one of them may be made
+    asynchronous.
+
+    The console appender is the USER INTERFACE. Its layout is bare `%msg%n` to
+    stdout, so every LOGGER.info in this program is a line the user reads: the
+    doctor report, the chat banner, a review verdict. It must stay synchronous
+    for two reasons that are not about performance at all.
+
+      * Ordering. The chat loop writes its prompt with System.err.print("\n> ")
+        and then blocks on stdin. If the answer above it were queued rather than
+        written, the prompt would appear first and the reply would land after
+        the user had begun typing into it.
+      * Delivery. A queued message is a message that has not been written yet.
+        The picker takes the terminal into raw mode and an alternate screen; a
+        line arriving late lands on a display that no longer expects it, and a
+        line still in the queue at exit is simply never seen.
+
+    The file appender is diagnostics, at DEBUG, rolling at 10 MB. Nobody is
+    watching it in real time, it is the larger volume by far, and until now
+    every console line the user read also waited on a synchronous write to it.
+    That is the I/O worth taking off the critical path, and it is the one that
+    can be taken off safely.
+-->
 <Configuration status="WARN">
     <Appenders>
         <!-- 1. Console Appender for clean interactive CLI outputs -->
@@ -16,13 +40,32 @@
             </Policies>
             <DefaultRolloverStrategy max="10" />
         </RollingFile>
+
+        <!--
+            The file appender, off the caller's thread.
+
+            DisruptorBlockingQueue is a lock-free ring buffer; the default
+            ArrayBlockingQueue takes a lock per message, which is most of what
+            there was to avoid here.
+
+            blocking="true" on purpose. The alternative discards messages when
+            the buffer fills, and a diagnostic log that silently drops the
+            entries written during the incident is worse than a slow one: the
+            moment the buffer overflows is exactly the moment worth reading
+            about. 8192 slots is far more than a CLI run produces, so the
+            blocking path should never be reached in practice.
+        -->
+        <Async name="AsyncFile" bufferSize="8192" blocking="true">
+            <AppenderRef ref="File" />
+            <DisruptorBlockingQueue />
+        </Async>
     </Appenders>
 
     <Loggers>
         <!-- Route background details to the file while printing CLI relevant logs to the console -->
         <Root level="INFO">
             <AppenderRef ref="Console" level="INFO" />
-            <AppenderRef ref="File" level="DEBUG" />
+            <AppenderRef ref="AsyncFile" level="DEBUG" />
         </Root>
     </Loggers>
 </Configuration>
