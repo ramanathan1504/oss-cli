@@ -431,4 +431,7 @@ A store **older** than this build is not a problem: the next command migrates it
 | `restore`         | Offline        | No                      | Restore AI memory from zip archive           |
 | `doctor`          | Offline        | No                      | Checks every prerequisite and names the fix  |
 
+**Offline** and **Online** in the Mode column are exact: see
+[OFFLINE.md](OFFLINE.md) for the full list of what opens a socket and what does not.
+
 **Embedder** means the built-in all-MiniLM-L6-v2 that runs in this process — `oss model --fetch`, once, and nothing is running afterwards. **Ollama** means local text generation, and nothing in this table indexes or searches through it.
