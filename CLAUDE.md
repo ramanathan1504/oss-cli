@@ -101,6 +101,15 @@ that has not been checked looks exactly like one that has.
 `analyze` is deliberately local-only: it loops over the whole backlog, and doing
 that against a metered API would spend money nobody agreed to. It says so.
 
+**Retry what can recover; fail once on what cannot.** All three cloud clients
+grew the same bug independently: each singled out 429 as retryable, threw
+`IOException` for every other non-200, then caught `IOException` in a loop that
+slept and tried again. A rejected key was therefore sent three times, printing
+the same raw JSON three times — burying the one line that said what to fix under
+two copies of itself. `ApiFailure` decides this in one place now, and
+`ApiFailure.Permanent` is caught **before** the generic `IOException` in each
+client. Three copies is how the bug happened; do not make a fourth.
+
 **Vectors from different models are never comparable.** Every vector is stored
 with the model that produced it and every read filters on it. All models used
 here emit 384 dimensions, so nothing catches a mix by shape — it produces

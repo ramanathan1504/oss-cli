@@ -84,7 +84,14 @@ public class OpenAiClient {
                 }
 
                 if (response.statusCode() != 200) {
-                    throw new IOException("OpenAI API failed: " + response.body());
+                    throw new ApiFailure.Permanent(
+                            response.statusCode(),
+                            ApiFailure.explain(
+                                    response.statusCode(),
+                                    "OpenAI",
+                                    response.body(),
+                                    "OPENAI_API_KEY or the openai_api_key keychain entry",
+                                    "platform.openai.com/api-keys"));
                 }
 
                 Map<?, ?> responseMap = MAPPER.readValue(response.body(), Map.class);
@@ -93,6 +100,9 @@ public class OpenAiClient {
                 Map<?, ?> msg = (Map<?, ?>) firstChoice.get("message");
                 return (String) msg.get("content");
 
+            } catch (ApiFailure.Permanent e) {
+                LOGGER.error("{}", e.getMessage());
+                throw e;
             } catch (IOException e) {
                 lastException = e;
                 LOGGER.error("Failed to communicate with OpenAI API: {}", e.getMessage());
