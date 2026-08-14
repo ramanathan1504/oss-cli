@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.11.3
+
+_2026-08-14_
+
+- A rejected key was sent three times before anyone was told why (#77)
+
+
 ## 1.11.2
 
 _2026-08-14_
