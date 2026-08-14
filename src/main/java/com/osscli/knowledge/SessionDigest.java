@@ -42,13 +42,15 @@ public final class SessionDigest {
     private static final int OVERVIEW_MAX = 72;
 
     /**
-     * When a transcript is folded.
+     * The whole prompt, not the transcript alone.
      *
      * <p>Small local models commonly run an 8k-token window, which is roughly this many characters
-     * of English. Folding at half of it leaves room for the issue body, the retrieved notes and the
-     * answer being generated -- the transcript is never the only thing in the prompt.
+     * of English. Overridable with {@code chat.context.chars} for a model with more room.
      */
-    private static final int COMPACT_ABOVE_CHARS = 16_000;
+    private static final int PROMPT_BUDGET_CHARS = 32_000;
+
+    /** Left unspent so the model has somewhere to write its answer. */
+    private static final int RESERVED_FOR_ANSWER_CHARS = 4_000;
 
     /** How much of the tail is kept verbatim when folding. The recent turns are the ones being worked on. */
     private static final int KEEP_TAIL_CHARS = 6_000;
@@ -134,9 +136,60 @@ public final class SessionDigest {
     // Compaction
     // ==========================================
 
-    /** True once the transcript is long enough that the older half should be folded away. */
+    /** How many characters the transcript itself occupies, summary included. */
+    public static int used(ChatSession session, List<ChatTurn> turns) {
+        return ChatSessionStore.transcript(session, turns).length();
+    }
+
+    /**
+     * How much room the transcript actually has, given what else is in the prompt.
+     *
+     * <p>This used to be a bare constant, and that was the defect: the transcript folded at 16,000
+     * characters while the retrieved notes independently spent up to 6,000 tokens beside it. Two
+     * budgets that do not know about each other are not a budget, and together they could still
+     * overflow the window neither of them had exceeded alone.
+     *
+     * <p>Never returns less than {@link #KEEP_TAIL_CHARS}: the tail is kept verbatim whatever
+     * happens, so a floor below it would only promise a fold that cannot be performed.
+     */
+    public static int budgetChars(int otherPromptChars) {
+        int whole = configuredInt("chat.context.chars", PROMPT_BUDGET_CHARS);
+        return Math.max(KEEP_TAIL_CHARS, whole - RESERVED_FOR_ANSWER_CHARS - Math.max(0, otherPromptChars));
+    }
+
+    /**
+     * True once the transcript no longer fits beside the rest of the prompt.
+     *
+     * @param otherPromptChars everything else being sent -- the issue, the retrieved notes, the
+     *     instructions. Pass 0 when the transcript is genuinely all there is.
+     */
+    public static boolean needsCompaction(ChatSession session, List<ChatTurn> turns, int otherPromptChars) {
+        return used(session, turns) > budgetChars(otherPromptChars);
+    }
+
+    /** As above, for callers with nothing else in the prompt to declare. */
     public static boolean needsCompaction(ChatSession session, List<ChatTurn> turns) {
-        return ChatSessionStore.transcript(session, turns).length() > COMPACT_ABOVE_CHARS;
+        return needsCompaction(session, turns, 0);
+    }
+
+    /** A config integer, falling back to the default for anything missing or unreadable. */
+    private static int configuredInt(String key, int fallback) {
+        String raw;
+        try {
+            raw = SqliteStorage.loadConfig(key);
+        } catch (java.sql.SQLException e) {
+            return fallback;
+        }
+        if (raw == null || raw.isBlank()) {
+            return fallback;
+        }
+        try {
+            int value = Integer.parseInt(raw.strip());
+            return value > 0 ? value : fallback;
+        } catch (NumberFormatException e) {
+            LOGGER.warn("  ⚠ {} is set to '{}', which is not a number. Using {}.", key, raw, fallback);
+            return fallback;
+        }
     }
 
     /**
@@ -154,6 +207,15 @@ public final class SessionDigest {
         List<ChatTurn> tail = tail(turns);
         List<ChatTurn> older = turns.subList(0, turns.size() - tail.size());
         if (older.isEmpty()) {
+            // Everything is already inside the tail. Either the conversation is short -- in which
+            // case there is simply nothing to do -- or one single turn is larger than the whole
+            // budget, which folding cannot fix and which the user should hear about rather than
+            // watch fail as a timeout.
+            if (turns.size() == 1 && used(session, turns) > budgetChars(0)) {
+                LOGGER.warn("  ⚠ A single turn is larger than the whole context budget.");
+                LOGGER.warn("    Folding cannot shrink it. Raise chat.context.chars, or start a");
+                LOGGER.warn("    fresh conversation for this part of the work.");
+            }
             return turns;
         }
 

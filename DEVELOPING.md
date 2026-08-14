@@ -285,8 +285,11 @@ quality answer and escalates every time. `isAvailable()` does a literal substrin
 match on the model name, so a name that does not appear verbatim in the tag list
 is reported unavailable. And generation time scales with context, model and
 hardware over a range of *minutes*: the request timeout is
-`ollama.timeout_seconds` (default 300) and a fixed low value silently fails every
-full-context request.
+`ollama.timeout_seconds` (default 900) and a fixed low value silently fails every
+full-context request. It was 300, and 300 was measured to be wrong: a 7B guidance
+model on an M2 Air took **482 seconds** end to end for a realistic prompt, 194 of
+them in prompt evaluation alone. The default cut off a request that was working,
+late enough to look like a hang rather than a limit.
 
 **Report the real failure.** A timeout was once reported as `parse_error`, which
 pointed diagnosis at the model's output when the cause was the clock. Escalation

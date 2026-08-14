@@ -20,10 +20,7 @@ import com.osscli.llm.ClaudeClient;
 import com.osscli.llm.GeminiClient;
 import com.osscli.llm.OllamaClient;
 import com.osscli.llm.OpenAiClient;
-import com.osscli.model.ChatMemory;
 import com.osscli.model.Issue;
-import com.osscli.model.IssueEmbedding;
-import com.osscli.model.PrMemory;
 import com.osscli.storage.SqliteStorage;
 import java.util.List;
 import java.util.Scanner;
@@ -106,65 +103,19 @@ public class GuideCommand implements Callable<Integer> {
             return 1;
         }
 
-        // 3. Load target issue vector and extract memory contexts
-        List<IssueEmbedding> embeddings = SqliteStorage.loadEmbeddings(repository);
-        double[] targetVector = null;
-        for (IssueEmbedding emb : embeddings) {
-            if (emb.issueNumber() == issueNumber) {
-                targetVector = emb.vector();
-                break;
-            }
-        }
-
-        StringBuilder contextBlock = new StringBuilder();
-        int matchedCount = 0;
-
-        if (targetVector != null) {
-            LOGGER.info("Retrieving memory contexts from SQLite...");
-            for (PrMemory prMem : SqliteStorage.loadAllPersonalPrMemories()) {
-                if (prMem.vector() != null) {
-                    double similarity = cosineSimilarity(targetVector, prMem.vector());
-                    if (similarity >= 0.35) {
-                        matchedCount++;
-                        contextBlock
-                                .append("--- REFERENCE DEVELOPMENT NOTE (PR #")
-                                .append(prMem.prNumber())
-                                .append(") ---\n");
-                        contextBlock
-                                .append("Files Changed: ")
-                                .append(prMem.filesChanged())
-                                .append("\n");
-                        contextBlock
-                                .append("Story:\n")
-                                .append(prMem.generatedStory())
-                                .append("\n\n");
-                    }
-                }
-            }
-
-            for (ChatMemory chatMem : SqliteStorage.loadAllPersonalChatMemories()) {
-                if (chatMem.vector() != null) {
-                    double similarity = cosineSimilarity(targetVector, chatMem.vector());
-                    if (similarity >= 0.35) {
-                        matchedCount++;
-                        contextBlock
-                                .append("--- REFERENCE DISCUSSION NOTE (File: ")
-                                .append(chatMem.fileName())
-                                .append(") ---\n");
-                        contextBlock
-                                .append("Content:\n")
-                                .append(chatMem.content())
-                                .append("\n\n");
-                    }
-                }
-            }
-            LOGGER.info("  ↳ Retrieved {} semantic memory contexts.", matchedCount);
-        }
-
-        String memorySection = matchedCount > 0
-                ? contextBlock.toString()
-                : "No specific personal past experience found. Provide expert generic resolution for " + repository
-                        + ".";
+        // 3. The user's own past work, budgeted to fit the prompt.
+        //
+        // This used to append the whole text of every note scoring above 0.35, with no cap. On a
+        // corpus of 592 notes totalling 34 MB it matched 332 of them and built a prompt of roughly
+        // 19 MB -- for a model configured with a 6,000-token window, about eight hundred times what
+        // it could take. The request timed out, which looks like a slow machine rather than a prompt
+        // that was never going to work. ContextRetriever already ranks and fills a token budget for
+        // `prompt`; this is that same code rather than a third copy of the idea.
+        String retrieved = com.osscli.retrieval.MemoryContext.forIssue(issueNumber, repository);
+        String memorySection = retrieved.isEmpty()
+                ? "No specific personal past experience found. Provide expert generic resolution for " + repository
+                        + "."
+                : retrieved;
 
         // --- TIER 1: Local generation, when there is a local model ---
         //
@@ -191,16 +142,33 @@ public class GuideCommand implements Callable<Integer> {
         }
 
         String localOutput;
+        try {
+            localOutput = draft(localOllama, modelName, repository, memorySection, target);
+        } catch (java.io.IOException e) {
+            // OllamaClient has already said what went wrong and what to try. Letting this out of
+            // call() would add picocli's stack trace underneath that explanation, which is how a
+            // clear message gets buried -- and a stack trace is not a message.
+            LOGGER.error("  No blueprint was produced.");
+            return 1;
+        }
+        return escalate(forceCloud, localOllama, localOutput, memorySection, issueNumber);
+    }
+
+    /** The local first pass, or a placeholder when there is no local model to make one. */
+    private String draft(
+            OllamaClient localOllama,
+            String modelName,
+            String repository,
+            String memorySection,
+            com.osscli.model.Issue target)
+            throws Exception {
         if (localOllama == null) {
             // No draft to refine, so the cloud is asked for the blueprint itself rather than an
             // improvement on something that does not exist.
             LOGGER.info("No local model — going straight to the cloud for the blueprint.");
-            localOutput = "(no local draft: no local model was available)";
-        } else {
-            localOutput = localDraft(localOllama, modelName, repository, memorySection, target);
+            return "(no local draft: no local model was available)";
         }
-
-        return escalate(forceCloud, localOllama, localOutput, memorySection, issueNumber);
+        return localDraft(localOllama, modelName, repository, memorySection, target);
     }
 
     /** The local first pass, when a local model is present. */
@@ -311,16 +279,5 @@ public class GuideCommand implements Callable<Integer> {
         }
 
         return 0;
-    }
-
-    private double cosineSimilarity(double[] vecA, double[] vecB) {
-        if (vecA == null || vecB == null || vecA.length != vecB.length) return 0.0;
-        double dotProduct = 0, normA = 0, normB = 0;
-        for (int i = 0; i < vecA.length; i++) {
-            dotProduct += vecA[i] * vecB[i];
-            normA += Math.pow(vecA[i], 2);
-            normB += Math.pow(vecB[i], 2);
-        }
-        return (normA == 0 || normB == 0) ? 0 : dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 }

@@ -24,7 +24,7 @@ public class CredentialManager {
 
     private static String getKey(String envVar, String keychainName) {
         String key = System.getenv(envVar);
-        if (key != null && !key.trim().isEmpty()) return key.trim();
+        if (key != null && !clean(key).isEmpty()) return clean(key);
 
         try {
             if (System.getProperty("os.name").toLowerCase().contains("mac")) {
@@ -34,12 +34,38 @@ public class CredentialManager {
                 try (java.io.BufferedReader reader =
                         new java.io.BufferedReader(new java.io.InputStreamReader(process.getInputStream()))) {
                     String line = reader.readLine();
-                    if (line != null && !line.trim().isEmpty()) return line.trim();
+                    if (line != null && !clean(line).isEmpty()) return clean(line);
                 }
             }
         } catch (Exception ignored) {
         }
         return null;
+    }
+
+    /**
+     * Strips the punctuation a key picks up on its way in.
+     *
+     * <p>Documentation writes keys as {@code <your-key-here>} and shells quote them, so a key
+     * arrives wrapped in angle brackets or quotes often enough to be worth expecting. Sending one
+     * verbatim produces a 401, and a 401 says "your key is wrong" -- which is how a perfectly good
+     * key with a leading {@code <} costs somebody an afternoon re-issuing credentials that were
+     * never the problem. Found exactly that way: a stored Anthropic key beginning {@code <sk-ant-}.
+     *
+     * <p>Only wrapping characters go. Anything inside the key is left alone, because a key this
+     * method has quietly rewritten is worse than one it rejected.
+     */
+    private static String clean(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String out = raw.strip();
+        while (!out.isEmpty() && "<>\"'`".indexOf(out.charAt(0)) >= 0) {
+            out = out.substring(1);
+        }
+        while (!out.isEmpty() && "<>\"'`".indexOf(out.charAt(out.length() - 1)) >= 0) {
+            out = out.substring(0, out.length() - 1);
+        }
+        return out.strip();
     }
 
     public static String getGitHubToken() {

@@ -42,8 +42,20 @@ public class GeminiClient {
         this(com.osscli.util.CredentialManager.getGeminiKey(), model);
     }
 
-    // Default model: gemini-2.0-flash has 1M tokens/min free tier (4x more than gemini-2.5-flash's 250K)
-    private static final String DEFAULT_MODEL = "gemini-2.0-flash";
+    /**
+     * The moving alias, deliberately, rather than a version pinned here.
+     *
+     * <p>This was {@code gemini-2.0-flash}, chosen for its free-tier quota. Google retired it, and
+     * because the name was compiled in, every {@code --gemini} call began failing on a key that was
+     * perfectly valid -- the error said the model was gone, which reads as an account problem rather
+     * than as a constant in this file having expired.
+     *
+     * <p>A pinned version is a dated fact in a program that is not redeployed when the fact changes.
+     * The alias is resolved by Google at call time, so the class of failure does not recur. Anyone
+     * who wants a specific version still passes one to the constructor.
+     */
+    private static final String DEFAULT_MODEL = "gemini-flash-latest";
+
     private static final int MAX_RETRIES = 3;
 
     public GeminiClient(String apiKey, String model) {

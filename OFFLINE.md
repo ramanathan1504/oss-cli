@@ -1,11 +1,12 @@
 # Working offline
 
-**Six commands reach the network. Twenty-five never do.**
+**Of 36 commands, seven can reach the network. Twenty-nine never do.**
 
-And of those six, only one is part of ordinary use: `sync`. The rest fetch one
-specific thing you asked for by number. (`model --fetch` downloads once in the
-life of the install; `run`, `bench`, `memory` and `kb` hand off to whatever
-extension you attached, so they are as offline as it is.)
+And of those seven, only one is part of ordinary use: `sync`. The rest fetch one
+specific thing you asked for by number, and `model --fetch` downloads once in the
+life of the install. (`run`, `bench`, `memory` and `kb` hand off to whatever
+extension you attached, so they are as offline as it is — they are counted below
+among the twenty-nine.)
 
 This page is the long version: what actually goes over the network, what a single
 sync buys you, and why searching by *meaning* keeps working with the wifi off.
@@ -14,8 +15,8 @@ sync buys you, and why searching by *meaning* keeps working with the wifi off.
 
 ## 1. What needs the network
 
-Six, and you can tell which by what they are for — they are the ones that fetch
-something from GitHub. Plus one download that happens once in the life of the
+Seven, and you can tell which by what they are for — six fetch something from
+GitHub, and the seventh is a download that happens once in the life of the
 install.
 
 | Needs the network | Why |
@@ -28,14 +29,14 @@ install.
 | `review <pr>` | Asks GitHub for the pull request's head commit. If it has not changed, the answer comes from cache — but the check itself is a call. |
 | `model --fetch` | Downloads the embedding model. **Once, ever.** 22 MB. |
 
-The other twenty-five need no network to do their job:
+The other twenty-nine need no network to do their job:
 
 ```
 search    prompt    inspect    history    chat      critical
 duplicates          triage     guide      profile   onboard
 report    trend     analyze    backlog    pick      hidden-critical
 prs       serve     backup     restore    doctor    alias
-ext       setup
+ext       setup     run        memory     bench     kb
 ```
 
 Three of those deserve a word:

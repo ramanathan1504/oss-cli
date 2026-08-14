@@ -41,7 +41,17 @@ public class OllamaClient {
      * output, it was reported as a parse error, pointing diagnosis at the model instead of the
      * clock. Configurable via {@code ollama.timeout_seconds}.
      */
-    private static final int DEFAULT_TIMEOUT_SECONDS = 300;
+    /**
+     * Long enough for a 7B model on a laptop, which is the machine this runs on.
+     *
+     * <p>It was 300. A 7B guidance model answering a realistic prompt on an M2 Air was measured at
+     * <b>482 seconds</b> end to end, 194 of them in prompt evaluation alone -- so the default cut
+     * off a request that was working, and did it late enough to look like a hang. Waiting is a
+     * choice the user can make; being told at 300 seconds that a correct setup has failed is not.
+     *
+     * <p>Anyone who would rather fail fast sets {@code ollama.timeout_seconds} lower.
+     */
+    private static final int DEFAULT_TIMEOUT_SECONDS = 900;
 
     private final HttpClient httpClient;
     private final String model;
@@ -91,6 +101,16 @@ public class OllamaClient {
         return baseUrl;
     }
 
+    /**
+     * The built-in timeout, so nothing else has to repeat the number.
+     *
+     * <p>{@code doctor} carried its own copy of {@code 300} as both the fallback and the advice,
+     * which meant it went on reporting a stored 300 as healthy after the default moved past it.
+     */
+    public static int defaultTimeoutSeconds() {
+        return DEFAULT_TIMEOUT_SECONDS;
+    }
+
     private static Duration resolveTimeout() {
         try {
             String configured = com.osscli.storage.SqliteStorage.loadConfig("ollama.timeout_seconds");
@@ -130,6 +150,8 @@ public class OllamaClient {
             Map<?, ?> responseMap = MAPPER.readValue(response.body(), Map.class);
             return (String) responseMap.get("response");
 
+        } catch (java.net.http.HttpTimeoutException e) {
+            throw explainTimeout(e);
         } catch (IOException e) {
             LOGGER.error("Failed to connect or communicate with Ollama service: {}", e.getMessage());
             throw e;
@@ -178,6 +200,30 @@ public class OllamaClient {
         return response.statusCode() == 200 ? response.body() : null;
     }
 
+    /**
+     * Says what a timeout actually means, because "request timed out" tells nobody anything.
+     *
+     * <p>It is almost never a slow machine. It is a prompt the model was never going to finish -- an
+     * oversized context, or weights still loading on the first call. A real run of {@code guide}
+     * produced exactly this, and what reached the user was that sentence followed by sixteen lines
+     * of Java stack trace, which is not a message.
+     *
+     * <p>One method, called from both request paths. The first attempt at this patched only one of
+     * them, and the other went on printing the useless version -- which is what two copies of a fix
+     * reliably produce.
+     */
+    private IOException explainTimeout(java.net.http.HttpTimeoutException cause) {
+        long seconds = requestTimeout.toSeconds();
+        LOGGER.error("{} did not answer within {}s.", model, seconds);
+        LOGGER.error("  Usually one of:");
+        LOGGER.error("    · the prompt is larger than the model's context — lower ollama.context_limit,");
+        LOGGER.error("      or see what was retrieved with: oss inspect <issue>");
+        LOGGER.error("    · the model is loading for the first time — warm it once: ollama run {}", model);
+        LOGGER.error("    · a larger model than this machine is comfortable with");
+        LOGGER.error("  Or raise the ceiling: ollama.timeout_seconds (currently {}s)", seconds);
+        return new IOException(model + " did not answer within " + seconds + "s", cause);
+    }
+
     public String generateText(String prompt) throws IOException, InterruptedException {
         // Standard payload without the "format": "json" constraint
         Map<String, Object> requestBody = Map.of(
@@ -206,6 +252,8 @@ public class OllamaClient {
             Map<?, ?> responseMap = MAPPER.readValue(response.body(), Map.class);
             return (String) responseMap.get("response");
 
+        } catch (java.net.http.HttpTimeoutException e) {
+            throw explainTimeout(e);
         } catch (IOException e) {
             LOGGER.error("Failed to connect or communicate with Ollama service: {}", e.getMessage());
             throw e;

@@ -21,12 +21,9 @@ import com.osscli.llm.ClaudeClient;
 import com.osscli.llm.GeminiClient;
 import com.osscli.llm.OllamaClient;
 import com.osscli.llm.OpenAiClient;
-import com.osscli.model.ChatMemory;
 import com.osscli.model.ChatSession;
 import com.osscli.model.ChatTurn;
 import com.osscli.model.Issue;
-import com.osscli.model.IssueEmbedding;
-import com.osscli.model.PrMemory;
 import com.osscli.storage.ChatSessionStore;
 import com.osscli.storage.SqliteStorage;
 import java.nio.file.Path;
@@ -309,6 +306,29 @@ public class ChatCommand implements Callable<Integer> {
             // decide this session was abandoned while somebody was composing a paragraph.
             ChatSessionStore.touch(session.id());
 
+            // Two meta-commands, and neither becomes a turn: asking how full the conversation is,
+            // and folding it now rather than waiting for the fold to happen mid-answer. A long
+            // conversation is a thing the user can feel going wrong before the tool notices, and
+            // having to wait for an automatic threshold is the difference between a tool you steer
+            // and one that steers you.
+            if (userInput.equalsIgnoreCase("/context")) {
+                reportContext(session, turns, memoryContext);
+                continue;
+            }
+            if (userInput.equalsIgnoreCase("/compact")) {
+                int before = SessionDigest.used(session, turns);
+                turns = SessionDigest.compact(session, turns);
+                session = ChatSessionStore.byId(session.id());
+                int after = SessionDigest.used(session, turns);
+                if (after < before) {
+                    LOGGER.info("  ↳ {} → {} characters. Nothing left `oss history`.", before, after);
+                } else {
+                    LOGGER.info("  ↳ Nothing to fold yet — this conversation still fits in full.");
+                }
+                reportContext(session, turns, memoryContext);
+                continue;
+            }
+
             boolean escalating = userInput.equalsIgnoreCase("y") && !lastUserPrompt.isEmpty();
             if (!escalating) {
                 lastUserPrompt = userInput;
@@ -317,7 +337,9 @@ public class ChatCommand implements Callable<Integer> {
             }
 
             session = ChatSessionStore.byId(session.id());
-            if (SessionDigest.needsCompaction(session, turns)) {
+            // The retrieved notes are charged against the same window, so they are declared here.
+            // Budgeting the transcript alone was how a folded conversation could still overflow.
+            if (SessionDigest.needsCompaction(session, turns, memoryContext.length())) {
                 turns = SessionDigest.compact(session, turns);
                 session = ChatSessionStore.byId(session.id());
             }
@@ -381,7 +403,37 @@ public class ChatCommand implements Callable<Integer> {
         } else {
             LOGGER.info(" 'exit' saves and stops");
         }
+        LOGGER.info(" '/context' shows how full this conversation is · '/compact' folds it now");
         LOGGER.info(" ctrl-c is safe: every turn is already saved.");
+    }
+
+    /**
+     * How much of the window this conversation is using.
+     *
+     * <p>Compaction is lossy however well it is done, so the moment it happens should never be the
+     * first the user hears of it. A bar they can ask for at any time turns "why did it suddenly
+     * forget the start of this?" into something they saw coming and could have acted on.
+     */
+    private void reportContext(ChatSession session, List<ChatTurn> turns, String memoryContext) {
+        int used = SessionDigest.used(session, turns);
+        int budget = SessionDigest.budgetChars(memoryContext.length());
+        int percent = budget == 0 ? 100 : Math.min(999, (int) Math.round(100.0 * used / budget));
+
+        int filled = Math.min(20, percent / 5);
+        String bar = "█".repeat(filled) + "░".repeat(20 - filled);
+
+        LOGGER.info("");
+        LOGGER.info("  {} {}%  ({} of {} characters)", bar, percent, used, budget);
+        LOGGER.info("  conversation: {} turns · retrieved notes: {} characters", turns.size(), memoryContext.length());
+        if (session.summary() != null && !session.summary().isBlank()) {
+            LOGGER.info("  earlier turns are already folded into a summary — `oss history --show {}`", session.id());
+        }
+        if (percent >= 100) {
+            LOGGER.info("  the next turn will fold the older half automatically.");
+        } else {
+            LOGGER.info("  `/compact` folds it now; otherwise it happens on its own at 100%.");
+        }
+        LOGGER.info("");
     }
 
     private void answerLocally(
@@ -594,35 +646,16 @@ public class ChatCommand implements Callable<Integer> {
         return null;
     }
 
-    private static String buildMemoryContext(String repository, long issueNumber) throws Exception {
-        double[] targetVector = null;
-        for (IssueEmbedding emb : SqliteStorage.loadEmbeddings(repository)) {
-            if (emb.issueNumber() == issueNumber) {
-                targetVector = emb.vector();
-                break;
-            }
-        }
-        if (targetVector == null) {
-            return "";
-        }
-
-        StringBuilder memoryContext = new StringBuilder();
-        for (PrMemory prMem : SqliteStorage.loadAllPersonalPrMemories()) {
-            if (prMem.vector() != null && cosineSimilarity(targetVector, prMem.vector()) >= 0.35) {
-                memoryContext
-                        .append("PR #")
-                        .append(prMem.prNumber())
-                        .append(" Story:\n")
-                        .append(prMem.generatedStory())
-                        .append("\n");
-            }
-        }
-        for (ChatMemory chatMem : SqliteStorage.loadAllPersonalChatMemories()) {
-            if (chatMem.vector() != null && cosineSimilarity(targetVector, chatMem.vector()) >= 0.35) {
-                memoryContext.append("Past Chat: ").append(chatMem.content()).append("\n");
-            }
-        }
-        return memoryContext.toString();
+    /**
+     * The user's own past work, budgeted to fit the prompt.
+     *
+     * <p>This used to walk every stored note and append the whole of any that scored above 0.35,
+     * with no cap at all. On a corpus of 592 notes totalling 34 MB that produced a prompt of roughly
+     * 19 MB for a model with a 6,000-token window, and the request simply timed out -- which reads
+     * as a slow machine rather than a prompt that could never have worked.
+     */
+    private static String buildMemoryContext(String repository, long issueNumber) {
+        return com.osscli.retrieval.MemoryContext.forIssue(issueNumber, repository);
     }
 
     private static String lastUserPrompt(List<ChatTurn> turns) {
@@ -647,24 +680,6 @@ public class ChatCommand implements Callable<Integer> {
             return "claude";
         }
         return useGemini ? "gemini" : "local";
-    }
-
-    private static double cosineSimilarity(double[] vecA, double[] vecB) {
-        if (vecA.length != vecB.length) {
-            return 0.0;
-        }
-        double dotProduct = 0.0;
-        double normA = 0.0;
-        double normB = 0.0;
-        for (int i = 0; i < vecA.length; i++) {
-            dotProduct += vecA[i] * vecB[i];
-            normA += vecA[i] * vecA[i];
-            normB += vecB[i] * vecB[i];
-        }
-        if (normA == 0.0 || normB == 0.0) {
-            return 0.0;
-        }
-        return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 
     // ==========================================
