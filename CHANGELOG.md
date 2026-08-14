@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.11.7
+
+_2026-08-14_
+
+- Stop reporting an extension's own flags as files it could not file (#87)
+
+
 ## 1.11.6
 
 _2026-08-14_
