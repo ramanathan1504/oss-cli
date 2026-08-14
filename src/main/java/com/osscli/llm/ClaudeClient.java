@@ -33,6 +33,10 @@ public class ClaudeClient {
     private static final String API_URL = "https://api.anthropic.com/v1/messages";
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final int MAX_RETRIES = 3;
+
+    /** Backoff base, multiplied by the attempt number. */
+    private static final long BACKOFF_MS = 1_500L;
+
     private final HttpClient httpClient;
     private final String apiKey;
     private final String model;
@@ -91,16 +95,22 @@ public class ClaudeClient {
                 }
 
                 if (response.statusCode() != 200) {
-                    // Anything not already handled above as retryable is permanent: a rejected key
-                    // or a retired model fails identically however many times it is sent.
-                    throw new ApiFailure.Permanent(
+                    String explained = ApiFailure.explain(
                             response.statusCode(),
-                            ApiFailure.explain(
-                                    response.statusCode(),
-                                    "Claude",
-                                    response.body(),
-                                    "ANTHROPIC_API_KEY or the anthropic_api_key keychain entry",
-                                    "console.anthropic.com"));
+                            "Claude",
+                            response.body(),
+                            "ANTHROPIC_API_KEY or the anthropic_api_key keychain entry",
+                            "console.anthropic.com");
+                    // "Anything not already handled above" was 429 and 529 only, so a 500 or a 503
+                    // -- both temporary -- failed like a rejected key. The judgement belongs in one
+                    // place, and ApiFailure is it.
+                    if (ApiFailure.retryable(response.statusCode()) && attempt < MAX_RETRIES) {
+                        LOGGER.warn(
+                                "Claude returned {}; retrying ({}/{})...", response.statusCode(), attempt, MAX_RETRIES);
+                        Thread.sleep(BACKOFF_MS * attempt);
+                        continue;
+                    }
+                    throw new ApiFailure.Permanent(response.statusCode(), explained);
                 }
 
                 Map<?, ?> responseMap = MAPPER.readValue(response.body(), Map.class);
