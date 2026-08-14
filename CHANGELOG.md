@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.11.2
+
+_2026-08-14_
+
+- Chat was gated on Ollama, on a tool whose rule is that nothing is (#75)
+- Nobody could answer "does this work on a plane?" (#74)
+
+
 ## 1.11.1
 
 _2026-08-14_
