@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.11.5
+
+_2026-08-14_
+
+- A busy provider is not a broken one: retry what is retryable (#83)
+- Stop publishing the page from here; ubuos.com serves it (#82)
+- The Docs link went to a page that is not the docs (#81)
+
+
 ## 1.11.4
 
 _2026-08-14_
