@@ -16,7 +16,9 @@
  */
 package com.osscli;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -71,6 +73,52 @@ class LoggingConfigTest {
         throw new AssertionError("no <" + tag + " name=\"" + name + "\"> in log4j2.xml");
     }
 
+    // ==========================================
+    // The configuration as log4j actually loaded it
+    // ==========================================
+
+    private static org.apache.logging.log4j.core.config.Configuration loaded() {
+        return ((org.apache.logging.log4j.core.LoggerContext) org.apache.logging.log4j.LogManager.getContext(false))
+                .getConfiguration();
+    }
+
+    @Test
+    @DisplayName("at runtime, the console appender is not an async one")
+    void runtimeConsoleIsDirect() {
+        // The XML is what was written; this is what log4j built from it. A plugin that failed to
+        // load, a typo in a ref, an override from a system property -- none of those show up in a
+        // file read, and all of them change what actually reaches the screen.
+        var appenders = loaded().getAppenders();
+
+        assertTrue(appenders.containsKey("Console"), "the console appender must exist: " + appenders.keySet());
+        assertFalse(
+                appenders.get("Console") instanceof org.apache.logging.log4j.core.appender.AsyncAppender,
+                "the console must not have become asynchronous");
+    }
+
+    @Test
+    @DisplayName("at runtime, the file appender IS an async one")
+    void runtimeFileIsAsync() {
+        var async = loaded().getAppenders().get("AsyncFile");
+
+        assertNotNull(async, "AsyncFile must be built");
+        assertTrue(
+                async instanceof org.apache.logging.log4j.core.appender.AsyncAppender,
+                "AsyncFile resolved to " + async.getClass().getName() + ", not an AsyncAppender");
+    }
+
+    @Test
+    @DisplayName("at runtime, the root logger reaches the console directly and the file through the queue")
+    void runtimeRootWiring() {
+        var refs = loaded().getRootLogger().getAppenderRefs().stream()
+                .map(r -> r.getRef())
+                .toList();
+
+        assertTrue(refs.contains("Console"), "root should reference Console directly: " + refs);
+        assertTrue(refs.contains("AsyncFile"), "root should reach the file through AsyncFile: " + refs);
+        assertFalse(refs.contains("File"), "root should NOT also write the file synchronously: " + refs);
+    }
+
     @Test
     @DisplayName("the console is written directly, never through a queue")
     void consoleIsSynchronous() throws IOException {
@@ -117,13 +165,18 @@ class LoggingConfigTest {
     }
 
     @Test
-    @DisplayName("the queue is declared, so it cannot silently fall back")
-    void theDependencyIsDeclared() throws IOException {
-        // DisruptorBlockingQueue is a plugin: if the jar is absent log4j reports it in the status
-        // logger and carries on with the default queue, which is a downgrade nobody would notice.
-        String pom = Files.readString(Path.of("pom.xml"));
-        assertTrue(
-                pom.contains("<groupId>com.conversantmedia</groupId>"),
-                "log4j2.xml asks for DisruptorBlockingQueue; the pom must provide it");
+    @DisplayName("the disruptor queue is on the classpath, so it cannot silently fall back")
+    void theQueueClassIsActuallyPresent() {
+        // This is the failure the pom grep could not see. DisruptorBlockingQueue is a log4j
+        // plugin: when the jar is absent, log4j notes it in the status logger and carries on
+        // with the default ArrayBlockingQueue. Nothing fails, nothing is logged at WARN, and
+        // the lock-free queue that was the entire reason for this is quietly not there.
+        //
+        // Shading is where that would happen -- a relocation rule or a minimizeJar that drops
+        // an apparently unreferenced class. A declaration in the pom says what was asked for;
+        // this says what arrived.
+        assertDoesNotThrow(
+                () -> Class.forName("com.conversantmedia.util.concurrent.DisruptorBlockingQueue"),
+                "the disruptor jar is missing, so the async appender is silently using ArrayBlockingQueue");
     }
 }

@@ -353,6 +353,23 @@ public class ExtCommand implements Callable<Integer> {
          * <p>The archive is still where the note LIVES: classified, linked, searchable in a year.
          * This is a working copy for the corpus, and it costs a few kilobytes.
          */
+        /**
+         * The arguments that are actually files.
+         *
+         * <p>Named and package-private so a test can call THIS, rather than restate the rule and
+         * then agree with itself. A test that owns its own copy of a rule passes whatever the
+         * program does.
+         */
+        static List<String> pathsAmong(List<String> args) {
+            List<String> paths = new java.util.ArrayList<>();
+            for (String a : args) {
+                if (!a.startsWith("-") && java.nio.file.Files.isRegularFile(java.nio.file.Path.of(a))) {
+                    paths.add(a);
+                }
+            }
+            return paths;
+        }
+
         @Override
         void alsoLocally(String verb, List<String> args) {
             if (!"file".equals(verb) || args.isEmpty()) {
@@ -366,12 +383,7 @@ public class ExtCommand implements Callable<Integer> {
             //
             // Which options take a value is the extension's business and cannot be known here, so
             // this does not try to parse them: an argument is a path if it is one.
-            List<String> paths = new java.util.ArrayList<>();
-            for (String a : args) {
-                if (!a.startsWith("-") && java.nio.file.Files.isRegularFile(java.nio.file.Path.of(a))) {
-                    paths.add(a);
-                }
-            }
+            List<String> paths = pathsAmong(args);
             if (!paths.isEmpty()) {
                 BuiltinMemory.run("file", paths);
             }

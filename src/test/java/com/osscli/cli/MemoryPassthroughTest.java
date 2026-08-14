@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,15 +43,15 @@ import org.junit.jupiter.api.io.TempDir;
  */
 class MemoryPassthroughTest {
 
-    /** The rule under test, kept identical to {@code ExtCommand.alsoLocally}. */
+    /**
+     * The real thing, called — not a copy of it.
+     *
+     * <p>This test used to restate the rule and then agree with itself, which is a test that
+     * passes whatever the program does. If the two ever drifted, the copy here would keep
+     * reporting success while the noise came back on screen.
+     */
     private static List<String> pathsOnly(List<String> args) {
-        List<String> paths = new ArrayList<>();
-        for (String a : args) {
-            if (!a.startsWith("-") && Files.isRegularFile(Path.of(a))) {
-                paths.add(a);
-            }
-        }
-        return paths;
+        return ExtCommand.KbDispatch.pathsAmong(args);
     }
 
     @Test
