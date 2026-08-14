@@ -90,6 +90,31 @@ public final class ResolutionWriter {
             String answer,
             String provenanceDir,
             String label) {
+        return record(repository, issueNumber, issueTitle, source, question, answer, provenanceDir, label, null);
+    }
+
+    /**
+     * As {@link #record}, but rewriting {@code reuse} when a note for this material already exists.
+     *
+     * <p>A resumable chat is written out every time it ends, and it can end several times: talk for
+     * ten minutes, stop, resume the next morning, stop again. Filing a fresh timestamped note each
+     * time would leave three overlapping copies of one conversation, each a superset of the last,
+     * all of them embedded and all of them competing to answer the same question. Retrieval already
+     * has to work around duplicate notes; it should not be handed more on purpose.
+     *
+     * <p>So the caller keeps the path it was given and passes it back, and the same file is
+     * rewritten in place with the fuller transcript.
+     */
+    public static Path record(
+            String repository,
+            long issueNumber,
+            String issueTitle,
+            String source,
+            String question,
+            String answer,
+            String provenanceDir,
+            String label,
+            Path reuse) {
 
         if (answer == null || answer.isBlank()) {
             return null;
@@ -99,9 +124,18 @@ public final class ResolutionWriter {
             Path dir = resolveTopicDir(repository).resolveSibling(provenanceDir);
             Files.createDirectories(dir);
 
-            String fileName = String.format(
-                    "Issue-%d-%s-%s.md", issueNumber, label, LocalDateTime.now().format(STAMP));
-            Path file = dir.resolve(fileName);
+            // Reuse only a file still sitting where this writer would put it. A note the user moved
+            // or deleted is their decision, and rewriting a path outside the archive on the strength
+            // of a stored string is how a tool ends up writing somewhere nobody expected.
+            Path file;
+            if (reuse != null && reuse.getParent() != null && reuse.getParent().equals(dir) && Files.exists(reuse)) {
+                file = reuse;
+            } else {
+                String fileName = String.format(
+                        "Issue-%d-%s-%s.md",
+                        issueNumber, label, LocalDateTime.now().format(STAMP));
+                file = dir.resolve(fileName);
+            }
 
             String body = buildNote(repository, issueNumber, issueTitle, source, question, answer);
 

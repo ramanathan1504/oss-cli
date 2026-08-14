@@ -43,6 +43,7 @@ import picocli.CommandLine.Command;
             SetupCommand.class,
             GuideCommand.class,
             ChatCommand.class,
+            HistoryCommand.class,
             PromptCommand.class,
             InspectCommand.class,
             BackupCommand.class,

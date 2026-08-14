@@ -55,6 +55,28 @@ the one here.
 reads everything under those folders, so it would ingest the archives as notes
 and back up what it ingested. `BackupCommand` refuses; keep it that way.
 
+**Several `oss` processes share one database, and the pragmas are what make
+that work.** `getConnection()` sets WAL, `busy_timeout` and `synchronous=NORMAL`
+on every connection. Without them SQLite is in rollback-journal mode, where one
+writer locks the whole file and readers are refused outright — a `sync` in one
+window made `chat` in the next fail mid-sentence. The retry loop around
+`getConnection` never helped, because connecting is not the step that fails; the
+lock is taken when a statement runs, which is what `busy_timeout` covers.
+
+**Pick the sequence number inside the insert, never read-then-write.**
+`ChatSessionStore.append` chooses `seq` in a subquery of the INSERT. As two
+statements it is a race between any two writers, and — worse — reading in one
+transaction and writing in the next asks SQLite to upgrade a read lock, which it
+refuses immediately rather than waiting, so `busy_timeout` would not have saved
+it either.
+
+**A chat turn is durable the moment it is said.** Chat used to hold the whole
+conversation in a `StringBuilder` and write it out only on a clean `exit`;
+ctrl-c discarded everything. Anything that accumulates a user's words in memory
+belongs in `chat_turn` instead. A resumed session rewrites *the note it already
+has* (`chat_session.note_path`) rather than filing a second overlapping copy for
+retrieval to fight over.
+
 **Vectors from different models are never comparable.** Every vector is stored
 with the model that produced it and every read filters on it. All models used
 here emit 384 dimensions, so nothing catches a mix by shape — it produces
@@ -69,6 +91,7 @@ model/       records, plus References and Tier (pure, tested)
 storage/     SQLite and the migration chain
 llm/         Ollama and cloud clients — generation only, never embedding
 ui/          Live: the status line for anything slower than a second
+             Picker: the keyboard list, with a numbered fallback that always works
 ext/         extensions, attached by path
 runner/      the matrix engine; a pack supplies what to run
 ```
@@ -78,7 +101,7 @@ Embedding runs **in this process** via ONNX. It is not one of the providers in
 
 ## Database
 
-`CURRENT_SCHEMA_VERSION` in `DatabaseManager`. A fresh database runs the real
+`CURRENT_SCHEMA_VERSION` in `DatabaseManager` (14). A fresh database runs the real
 migrations rather than being stamped at the current version — it used to be
 stamped, drifted, and shipped new installs missing three tables. `SchemaTest`
 names every expected table in a list so adding one without updating it fails.

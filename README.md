@@ -200,13 +200,32 @@ oss prompt 1666 --out ~/Desktop/issue-1666-prompt.md
 oss prompt 1666 --send-gemini
 ```
 
-### Interactive Chat (Legacy Omni-Cloud)
+### Conversations you can come back to
+
+`oss chat` talks an issue through with you. Every turn is written the moment it
+is said, so ctrl-c, a closed lid or a dropped connection loses nothing — and
+tomorrow you carry on rather than starting again.
 
 ```bash
-oss chat 1666            # Escalates to Gemini (Default)
-oss chat 1666 --openai   # Escalates to OpenAI GPT-4o
-oss chat 1666 --claude   # Escalates to Anthropic Claude 3.5
+oss chat 4129            # start on an issue
+oss chat --continue      # carry on with the most recent conversation
+oss chat --resume 7      # resume a specific one
+oss history              # browse them all, arrow keys and a preview, enter to resume
 ```
+
+`oss history --search "the flaky test one"` finds a conversation by what it was
+about, using the built-in embedder — no server, no account. Without the model it
+matches shared terms instead and says so.
+
+Running three terminals is fine. They share one database in WAL mode, so a long
+`sync` in one window never blocks a chat in another. A conversation already open
+elsewhere is spotted and offered as a fork rather than letting two terminals
+interleave one transcript, and a killed terminal releases its conversation by
+itself — there is no lock file to clean up.
+
+On `exit` the transcript is filed into your archive and embedded, which is when
+it becomes part of what every other command can retrieve. Resuming rewrites that
+same note rather than leaving three overlapping copies of one conversation.
 
 ---
 

@@ -216,16 +216,50 @@ oss inspect 1666 -r owner/name
 ## 🤖 The Personal Copilot
 
 ### `chat`
-Opens a live, interactive REPL (Read-Eval-Print Loop) to act as your pair-programmer.
-*   **Context Aware:** Loads your personal SQLite memory (past PR stories, AI Studio chats, and ChatGPT/Claude JSON exports) automatically.
-*   **Omni-Cloud Escalation:** Evaluates locally via Ollama. Type `y` to seamlessly escalate a prompt to Google Gemini, OpenAI GPT-4o, or Anthropic Claude for expert cloud resolution.
-*   **Real-Time Memory:** Upon typing `exit`, the chat transcript is automatically saved to your Google Drive as a Markdown file and instantly embedded back into SQLite memory.
+An interactive conversation about one issue, which survives the terminal it was started in.
+
+*   **Saved as you go.** Every turn is written to SQLite the moment it is said. Ctrl-C, a closed lid or a dropped connection loses nothing — the conversation is state on disk that a process is attached to, not state in a process.
+*   **Context aware.** Loads your personal memory (past PR stories, assistant exports, notes) and the issue itself.
+*   **Escalation is optional.** The local model answers; typing `y` sends the last question to Gemini, OpenAI or Claude if you have a key for one. Without a key the chat still runs, local only, and says so.
+*   **Filed once.** On `exit` the transcript is written to your archive and embedded. Resuming rewrites *that same note* rather than filing a second overlapping copy.
 
 ```bash
-oss chat 1666            # Escalates to Gemini (Default)
-oss chat 1666 --openai   # Escalates to OpenAI GPT-4o
-oss chat 1666 --claude   # Escalates to Anthropic Claude 3.5
+oss chat 4129                  # start on an issue
+oss chat --continue            # carry on with the most recent conversation
+oss chat -c                    # the same thing
+oss chat --resume 7            # resume a specific one
+oss chat --resume              # pick one from the list
+oss chat 4129 --resume         # the latest conversation about #4129
+oss chat 4129 --openai         # escalate to OpenAI instead of Gemini
 ```
+
+**Long conversations are folded, not silently truncated.** Once the transcript outgrows the model's context, the older turns are summarised into a running summary and the recent ones kept verbatim. With no generation model attached the oldest turns are dropped instead — and that is printed, because quietly forgetting the first half of a conversation while continuing to answer confidently is the failure worth shouting about. The full transcript stays readable in `oss history --show` either way.
+
+### `history`
+Every conversation you have saved, and the way back into any of it.
+
+Plain `oss history` is interactive: arrow keys (or `j`/`k`) move through the list, a preview shows what each conversation was about and where it got to, and `enter` resumes the highlighted one.
+
+```bash
+oss history                        # browse and resume
+oss history --list                 # print the list, open nothing
+oss history --show 7               # print one conversation in full
+oss history --search "the flaky test one"
+oss history -r owner/name -i 4129  # narrow to one repository or issue
+oss history -n 200                 # look further back than the default 50
+```
+
+`--search` matches by **meaning** using the built-in embedder, so "the flaky test one" finds a conversation that never used the word flaky. With no model on disk it matches shared terms instead, and says which it did.
+
+**Without a terminal it still works.** Raw keyboard input needs a real TTY and, on unix, `stty` — not available under cron, in CI, over some remote shells, or on Windows. There the same list is numbered and picked by typing a number, and `oss chat --resume <id>` needs no list at all.
+
+### Several terminals at once
+The conversations live in one SQLite database shared by every `oss` process, so what you say in one terminal is visible to `oss history` in the next as soon as it is written.
+
+*   **Reading never blocks.** The database runs in WAL mode, so a long `sync` in one window does not stop a chat in another. Writers take turns and wait rather than failing.
+*   **Two terminals cannot interleave one conversation.** Each session records the process holding it and a heartbeat. Resuming one that is live elsewhere offers to **fork** it — a new conversation carrying the same history — so neither transcript ends up a mix of two people's thinking.
+*   **A dead terminal does not lock you out.** The heartbeat goes stale on its own after two minutes; there is no lock file to clean up after a crash.
+*   **The knowledge base is shared once a conversation ends.** Turns are private to their conversation while it is open. On `exit` the transcript is filed and embedded, and from then on every terminal's `search`, `prompt` and `review` can retrieve it.
 
 ### `guide`
 Generates a structured, step-by-step resolution blueprint for a specific issue using local RAG (Retrieval-Augmented Generation).
@@ -345,7 +379,8 @@ oss restore /path/to/sa_brain_backup_20260627_104000.zip
 | `search`          | Offline        | Optional embedder       | Semantic vector search, else shared terms    |
 | `triage`          | Offline        | Ollama                  | Full triage audit for one issue              |
 | `guide`           | Offline        | Ollama                  | Step-by-step resolution blueprint            |
-| `chat`            | Online         | Ollama + Cloud          | Live interactive REPL                        |
+| `chat`            | Offline        | Ollama, cloud optional  | Resumable conversation, saved as you go      |
+| `history`         | Offline        | Optional embedder       | Browse and resume saved conversations        |
 | `report`          | Offline        | No                      | Weekly health report                         |
 | `trend`           | Offline        | No                      | Historical metric snapshots                  |
 | `hidden-critical` | Offline        | No                      | Underestimated security threat detection     |
