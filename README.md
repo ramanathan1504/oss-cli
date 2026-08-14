@@ -132,7 +132,7 @@ Retrieval prefers knowledge without discarding reference: reference passages sti
 3. **Install Global Command (macOS/Linux):**
    ```bash
    sudo nano /usr/local/bin/oss
-   # Paste: java -jar /absolute/path/to/target/oss-cli-1.10.1.jar "$@"
+   # Paste: java -jar /absolute/path/to/target/oss-cli-1.11.0.jar "$@"
    sudo chmod +x /usr/local/bin/oss
    ```
 

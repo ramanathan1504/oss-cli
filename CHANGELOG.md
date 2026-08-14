@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.11.0
+
+_2026-08-14_
+
+- A conversation that lived in one terminal's memory (#70)
+- Write down what only gets learned by getting it wrong (#69)
+
+
 ## 1.10.1
 
 _2026-08-13_
