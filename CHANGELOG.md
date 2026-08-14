@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.11.8
+
+_2026-08-14_
+
+- Take file logging off the caller's thread, and only file logging (#89)
+
+
 ## 1.11.7
 
 _2026-08-14_
