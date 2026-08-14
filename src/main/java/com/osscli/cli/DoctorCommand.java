@@ -242,9 +242,20 @@ public class DoctorCommand implements Callable<Integer> {
     }
 
     private void checkOneModel(String label, String model, boolean fatal) {
-        boolean present = new OllamaClient(model).isModelAvailable();
+        OllamaClient client = new OllamaClient(model);
+        boolean present = client.isModelAvailable();
         if (present) {
-            ok(label, model);
+            // Pulled is not the same as runnable. Reported here because the alternative is
+            // finding out by watching the machine stop responding for ten minutes, which is
+            // exactly the sort of thing doctor exists to say in advance.
+            com.osscli.llm.ModelFit.Verdict fit = com.osscli.llm.ModelFit.check(client, model);
+            if (fit.shouldRefuse()) {
+                warn(label, model + " does not fit in memory right now", String.join(" ", fit.explain()));
+            } else if (fit.known()) {
+                ok(label, model + " — fits (" + fit.memory() + ")");
+            } else {
+                ok(label, model);
+            }
         } else if (fatal) {
             fail(label, "'" + model + "' is not pulled", "ollama pull " + model);
         } else {

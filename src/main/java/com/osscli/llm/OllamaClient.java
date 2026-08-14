@@ -189,6 +189,24 @@ public class OllamaClient {
     }
 
     /** Returns the raw /api/tags body, or null if the daemon responded with a non-200. */
+    /**
+     * The raw tag list, for callers that need more than "is it there".
+     *
+     * <p>{@link ModelFit} needs the size of each model, not just its name, so it reads the same
+     * response rather than making a second call with its own client.
+     */
+    public String tags() {
+        try {
+            return tagList();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        } catch (Exception e) {
+            LOGGER.debug("Could not read the tag list: {}", e.getMessage());
+            return null;
+        }
+    }
+
     private String tagList() throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/api/tags"))

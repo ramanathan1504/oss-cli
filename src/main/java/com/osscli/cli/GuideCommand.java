@@ -18,6 +18,7 @@ package com.osscli.cli;
 
 import com.osscli.llm.ClaudeClient;
 import com.osscli.llm.GeminiClient;
+import com.osscli.llm.ModelFit;
 import com.osscli.llm.OllamaClient;
 import com.osscli.llm.OpenAiClient;
 import com.osscli.model.Issue;
@@ -139,6 +140,26 @@ public class GuideCommand implements Callable<Integer> {
                 return 1;
             }
             localOllama = null;
+        }
+
+        // Installed is not the same as runnable. Ollama loads a model too large for the machine
+        // rather than refusing it, the operating system swaps, and everything stops responding for
+        // minutes -- which cannot even be cancelled, let alone read. Checked here, before anything
+        // is loaded.
+        if (localOllama != null) {
+            ModelFit.Verdict fit = ModelFit.check(localOllama, modelName);
+            if (fit.shouldRefuse()) {
+                LOGGER.warn("  ⚠ Not running '{}' locally — it does not fit in memory right now.", modelName);
+                for (String line : fit.explain()) {
+                    LOGGER.warn("    {}", line);
+                }
+                if (!forceCloud) {
+                    LOGGER.warn("    Pass --gemini, --openai or --claude to answer without a local model.");
+                    return 1;
+                }
+                LOGGER.warn("    Continuing with the cloud model alone; the local passes are skipped.");
+                localOllama = null;
+            }
         }
 
         String localOutput;

@@ -244,6 +244,17 @@ oss chat 4129 --openai         # escalate to OpenAI instead of Gemini
 
 **Long conversations are folded, not silently truncated.** Once the transcript outgrows the model's context, the older turns are summarised into a running summary and the recent ones kept verbatim. With no generation model attached the oldest turns are dropped instead — and that is printed, because quietly forgetting the first half of a conversation while continuing to answer confidently is the failure worth shouting about. The full transcript stays readable in `oss history --show` either way.
 
+**A model that does not fit is not loaded.** Ollama does not refuse a model larger than the free memory — it loads it, the machine swaps, and everything stops responding for minutes. That cannot be read like an error or cancelled like a command; it has to be waited out. Measured at ten minutes for a 7B model on an 8 GB laptop with a browser open.
+
+So the size is checked first, against what is actually free:
+
+- at most **half the free memory** is offered to a model, and the other half is left for everything else you are running — fitting the model in and making the desktop unusable is the same freeze from where you sit
+- when it does not fit, the largest installed model that *would* is named, because "too big" is a complaint and "too big, use this one" is an instruction
+- `chat` falls back to whatever else is connected; `guide` says to pass `--gemini`, `--openai` or `--claude`
+- `oss doctor` reports it in advance: `guidance model — qwen2.5-coder:7b does not fit in memory right now`
+
+A machine whose memory cannot be read is never refused on. The check exists to prevent a freeze, and refusing on no evidence would be its own kind of broken.
+
 **Two things you can type that are not questions.** Compaction is lossy however carefully it is done, so the moment it happens should never be the first you hear of it.
 
 | Typed at the prompt | What it does |

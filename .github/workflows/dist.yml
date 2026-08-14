@@ -188,7 +188,27 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # nullglob, because the job above says one unavailable platform must not
+          # withhold the archives that DID build -- and without it the opposite
+          # happened. An unmatched `oss-*.zip` is passed through literally, gh
+          # cannot open it, and the step dies taking the macOS and Linux archives
+          # with it. Seen for real: a Windows runner lost its TLS handshake to
+          # Maven Central, and a release that had two good archives shipped none.
+          shopt -s nullglob
+          files=(oss-*.tar.gz oss-*.zip)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::no archives were produced by any platform"
+            exit 1
+          fi
+          echo "attaching ${#files[@]} archive(s): ${files[*]}"
           # --clobber so re-running a release replaces its archives rather than
           # failing on an asset that already exists.
-          gh release upload "${GITHUB_REF_NAME}" oss-*.tar.gz oss-*.zip \
+          gh release upload "${GITHUB_REF_NAME}" "${files[@]}" \
             --repo "${GITHUB_REPOSITORY}" --clobber
+
+          # A partial release must not read as a complete one. The upload above
+          # succeeds either way, so absence is reported here rather than inferred
+          # later by somebody whose platform is the missing one.
+          for want in oss-macos-arm64.tar.gz oss-linux-x64.tar.gz oss-windows-x64.zip; do
+            [ -f "$want" ] || echo "::warning::$want is missing from this release"
+          done
