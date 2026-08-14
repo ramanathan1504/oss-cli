@@ -339,7 +339,7 @@ kbd{
    The page therefore alternates temperature as you scroll instead of holding
    one flat grey the whole way down, which was the reason it read as a template. */
 .band-dark{
-  --bg:#061219;
+  --bg:#08181F;
   --bg-raised:#0B1E27;
   --bg-sunken:#030C11;
   --ink:#E6EFF0; --ink-soft:#A9BEC5; --ink-faint:#7B949C;
@@ -488,8 +488,18 @@ kbd{
 .ladder{margin-top:2.5rem;display:grid;gap:0;border-top:1px solid var(--rule)}
 .rung{
   display:grid;grid-template-columns:auto minmax(0,1fr);gap:1rem 1.1rem;
-  padding:1.15rem .25rem;border-bottom:1px solid var(--rule);align-items:start;
+  padding:1.15rem .25rem 1.15rem .9rem;border-bottom:1px solid var(--rule);
+  align-items:start;position:relative;
+  transition:background .16s ease;
 }
+/* A rail rather than a second glyph: required and optional are the only thing
+   this section is saying, and it was carried by one small character. */
+.rung::before{
+  content:"";position:absolute;inset:0 auto 0 0;width:2px;
+  background:var(--patina);
+}
+.rung.opt::before{background:var(--rule)}
+.rung:hover{background:var(--bg-raised)}
 @media (min-width:820px){
   .rung{grid-template-columns:1.6rem minmax(0,18rem) minmax(0,1fr);align-items:baseline}
 }
@@ -523,7 +533,7 @@ kbd{
 pre.block{
   margin:0;background:var(--term-bg);color:var(--term-ink);border-radius:10px;
   padding:.9rem 1rem;overflow-x:auto;font-size:.83rem;line-height:1.65;
-  border:1px solid var(--petrol-600);
+  border:1px solid var(--petrol-600);box-shadow:var(--lift-1);
 }
 pre.block .c{color:var(--term-dim)}
 .note{
@@ -976,7 +986,7 @@ oss prompt 812</pre>
 </section>
 
 <!-- ══════════════ install ══════════════ -->
-<section class="band band-sunken" id="install">
+<section class="band band-dark" id="install">
   <div class="shell">
     <p class="eyebrow">Install</p>
     <h2>Java 17 and a GitHub token. That's the whole requirement.</h2>
@@ -1141,7 +1151,7 @@ oss review 4234 -r owner/name</pre>
 </main>
 
 <hr class="rule">
-<footer class="foot">
+<footer class="foot band-dark">
   <div class="shell foot-in">
     <span>OSS-CLI — Apache-2.0</span>
     <a href="https://github.com/ramanathan1504/oss-cli">Source</a>
