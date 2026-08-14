@@ -41,7 +41,17 @@ public class OllamaClient {
      * output, it was reported as a parse error, pointing diagnosis at the model instead of the
      * clock. Configurable via {@code ollama.timeout_seconds}.
      */
-    private static final int DEFAULT_TIMEOUT_SECONDS = 300;
+    /**
+     * Long enough for a 7B model on a laptop, which is the machine this runs on.
+     *
+     * <p>It was 300. A 7B guidance model answering a realistic prompt on an M2 Air was measured at
+     * <b>482 seconds</b> end to end, 194 of them in prompt evaluation alone -- so the default cut
+     * off a request that was working, and did it late enough to look like a hang. Waiting is a
+     * choice the user can make; being told at 300 seconds that a correct setup has failed is not.
+     *
+     * <p>Anyone who would rather fail fast sets {@code ollama.timeout_seconds} lower.
+     */
+    private static final int DEFAULT_TIMEOUT_SECONDS = 900;
 
     private final HttpClient httpClient;
     private final String model;
