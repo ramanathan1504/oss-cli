@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.11.4
+
+_2026-08-14_
+
+- Compaction you can ask for, a page that shows its own numbers, and three gaps that stopped it working (#79)
+
+
 ## 1.11.3
 
 _2026-08-14_
