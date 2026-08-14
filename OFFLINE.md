@@ -28,7 +28,7 @@ install.
 | `review <pr>` | Asks GitHub for the pull request's head commit. If it has not changed, the answer comes from cache — but the check itself is a call. |
 | `model --fetch` | Downloads the embedding model. **Once, ever.** 22 MB. |
 
-The other twenty-five open no socket at all:
+The other twenty-five need no network to do their job:
 
 ```
 search    prompt    inspect    history    chat      critical
@@ -38,12 +38,16 @@ prs       serve     backup     restore    doctor    alias
 ext       setup
 ```
 
-Two of those deserve a word:
+Three of those deserve a word:
 
 - **`doctor`** *pings* GitHub and Ollama to tell you whether they are reachable.
   That is the check, not a dependency — it reports "not reachable" and carries on.
 - **`serve`** starts a web interface on `http://localhost:1504`. Local means local:
   it binds to your own machine and serves the corpus already on your disk.
+- **`chat` and `guide` can reach out, but only if you ask.** Both run on a local
+  model with no network at all. Both also accept `--gemini`, `--openai` or
+  `--claude`, and then the turn you are on goes to that API. Nothing is sent
+  unasked; the flag, or pressing `y`, is the asking.
 
 **The dispatchers are as offline as what you attached.** `run` and `bench` hand
 everything after the verb to a bench extension; `memory` and `kb` to a knowledge
