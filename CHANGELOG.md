@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.11.1
+
+_2026-08-14_
+
+- An older build read a store it could not understand, in silence (#72)
+
+
 ## 1.11.0
 
 _2026-08-14_
