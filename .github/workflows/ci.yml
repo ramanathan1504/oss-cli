@@ -147,26 +147,14 @@ jobs:
           sys.exit(1 if fail else 0)
           PY
 
-  deploy-site:
-    needs: site
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v7
-
-      # Published only after the markup check passes, and only from main. A
-      # pull request must never reach the live domain, and a fork cannot hold
-      # the credentials, so an absent token skips rather than fails.
-      - name: Publish osscli.ubuos.com
-        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx --yes wrangler@latest pages deploy site --project-name=osscli --branch=main
-
-      - name: Say why nothing was published
-        if: ${{ env.CLOUDFLARE_API_TOKEN == '' }}
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: echo "::warning::CLOUDFLARE_API_TOKEN is not set — the site was checked but not published."
+  # The page is no longer published from here. It is folded into ubuos.com/osscli
+  # by ubuos-site's Deploy workflow, which checks this repository out and copies
+  # site/index.html into its own build -- one project, one domain, the same move
+  # the manual made when docs.ubuos.com was retired.
+  #
+  # The markup gate above still runs on every change, because it is this
+  # repository's page and a malformed tag should fail here rather than in the
+  # repository that merely serves it.
+  #
+  # Nothing is deleted: the osscli Pages project still exists and still holds the
+  # last deployment made from here. Retiring it is a separate, deliberate act.
