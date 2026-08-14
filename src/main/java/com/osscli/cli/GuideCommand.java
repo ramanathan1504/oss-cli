@@ -166,13 +166,51 @@ public class GuideCommand implements Callable<Integer> {
                 : "No specific personal past experience found. Provide expert generic resolution for " + repository
                         + ".";
 
-        // --- TIER 1: Local Ollama Generation ---
+        // --- TIER 1: Local generation, when there is a local model ---
+        //
+        // This used to return here the moment Ollama was unreachable -- before it had even read
+        // --gemini, a flag that exists precisely to bypass the local model. So the one command-line
+        // option documented as "route immediately to the cloud" could not be used by anybody who had
+        // taken the documentation at its word and not installed Ollama.
+        boolean forceCloud = useGemini || useOpenAi || useClaude;
+
         OllamaClient localOllama = new OllamaClient(modelName);
         if (!localOllama.isModelAvailable()) {
-            LOGGER.error("Ollama model '{}' is not available. Please start Ollama.", modelName);
-            return 1;
+            if (!forceCloud) {
+                LOGGER.error("guide needs a model that writes, and none is connected.");
+                LOGGER.error("");
+                LOGGER.error("  Local:  '{}' is not available at {}", modelName, localOllama.endpoint());
+                LOGGER.error("          ollama serve, then: ollama pull {}", modelName);
+                LOGGER.error("  Cloud:  pass --gemini, --openai or --claude with the matching key set");
+                LOGGER.error("");
+                LOGGER.error("  Either one is enough.");
+                LOGGER.error("  oss prompt {} assembles the same context with no model at all.", issueNumber);
+                return 1;
+            }
+            localOllama = null;
         }
 
+        String localOutput;
+        if (localOllama == null) {
+            // No draft to refine, so the cloud is asked for the blueprint itself rather than an
+            // improvement on something that does not exist.
+            LOGGER.info("No local model — going straight to the cloud for the blueprint.");
+            localOutput = "(no local draft: no local model was available)";
+        } else {
+            localOutput = localDraft(localOllama, modelName, repository, memorySection, target);
+        }
+
+        return escalate(forceCloud, localOllama, localOutput, memorySection, issueNumber);
+    }
+
+    /** The local first pass, when a local model is present. */
+    private String localDraft(
+            OllamaClient localOllama,
+            String modelName,
+            String repository,
+            String memorySection,
+            com.osscli.model.Issue target)
+            throws Exception {
         LOGGER.info("Synthesizing initial blueprint using local model '{}'...", modelName);
         String localPrompt = String.format("""
                 You are an expert maintainer for the '%s' repository.
@@ -195,9 +233,14 @@ public class GuideCommand implements Callable<Integer> {
         LOGGER.info(
                 "\n================ LOCAL AI DRAFT ================\n{}\n================================================",
                 localOutput);
+        return localOutput;
+    }
 
-        // --- TIER 2: Interactive Escalation ---
-        boolean forceCloud = useGemini || useOpenAi || useClaude;
+    /** Tier 2: refine with a cloud model, and align the result when a local model can do it. */
+    private Integer escalate(
+            boolean forceCloud, OllamaClient localOllama, String localOutput, String memorySection, long issueNumber)
+            throws Exception {
+
         Scanner scanner = new Scanner(System.in);
         String tweak = "";
 
@@ -227,6 +270,21 @@ public class GuideCommand implements Callable<Integer> {
                 } else {
                     provider = "Google Gemini";
                     cloudOutput = new GeminiClient(SqliteStorage.loadConfig("gemini.model")).generateText(cloudPrompt);
+                }
+
+                // Alignment reads the cloud's plan back against the user's own past work, and only a
+                // local model can: sending that history to the same API that produced the plan would
+                // undo the reason the two steps are separate. Without one the plan stands unchecked,
+                // and that is said rather than absorbed -- an unverified blueprint looks exactly like
+                // a verified one.
+                if (localOllama == null) {
+                    LOGGER.info(
+                            "\n================ CLOUD BLUEPRINT ({}) ================\n{}\n============================================================",
+                            provider,
+                            cloudOutput);
+                    LOGGER.info("  Not verified against your own past work — that step needs a local model.");
+                    LOGGER.info("  Attach one and the blueprint comes back checked: ollama serve");
+                    return 0;
                 }
 
                 LOGGER.info("Received {} response. Aligning with your local memory profile...", provider);

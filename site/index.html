@@ -709,11 +709,12 @@ td .need,td.need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)
           <li>restore</li><li>doctor</li><li>alias</li><li>ext</li><li>setup</li>
         </ul>
         <p class="offline-note">
-          These open no socket at all. <code>doctor</code> pings GitHub and Ollama to tell you
+          These need no network to do their job. <code>doctor</code> pings GitHub and Ollama to tell you
           whether they are reachable — that is the check, not a dependency — and
           <code>serve</code> binds a web interface to localhost, over the corpus already on
           your disk. <code>run</code> and <code>memory</code> hand off to whichever extension
-          you attached, so they are as offline as it is.
+          you attached, so they are as offline as it is. <code>chat</code> and <code>guide</code>
+          reach a cloud API only if you pass <code>--gemini</code> and friends — never unasked.
         </p>
       </div>
     </div>
@@ -1020,7 +1021,7 @@ oss review 4234 -r owner/name</pre>
           <tr><td><code>prompt &lt;issue&gt;</code></td><td class="need">token</td><td>Answers locally, or assembles a complete expert prompt when it cannot</td></tr>
           <tr><td><code>search &lt;query&gt;</code></td><td class="need">—</td><td>Searches everything you have indexed — by meaning with the built-in model, by shared terms without it</td></tr>
           <tr><td><code>triage &lt;issue&gt;</code></td><td class="need">Ollama</td><td>Full triage audit for a single issue</td></tr>
-          <tr><td><code>chat &lt;issue&gt;</code></td><td class="need">Ollama</td><td>Talks an issue through, writing every turn as it is said</td></tr>
+          <tr><td><code>chat &lt;issue&gt;</code></td><td class="need">Ollama or a key</td><td>Talks an issue through, writing every turn as it is said</td></tr>
           <tr><td><code>history</code></td><td class="need">—</td><td>Browses saved conversations and resumes one where it stopped</td></tr>
           <tr><td><code>doctor</code></td><td class="need">—</td><td>Checks every prerequisite and says exactly what to fix</td></tr>
         </tbody>

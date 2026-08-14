@@ -84,7 +84,16 @@ public class AnalyzeCommand implements Callable<Integer> {
 
         OllamaClient client = new OllamaClient(modelName);
         if (!client.isModelAvailable()) {
-            LOGGER.error("Ollama model '{}' is not available. Please start Ollama or pull the model.", modelName);
+            // Ollama-only by design: this scores a whole backlog in a loop, and doing that against a
+            // paid API would run up a bill nobody asked for. But refusing without naming the offline
+            // alternative reads as "you cannot do this", when in fact `critical` ranks the same
+            // backlog by community signal with no model at all.
+            LOGGER.error("analyze needs a local model, and '{}' is not available at {}.", modelName, client.endpoint());
+            LOGGER.error("  ollama serve, then: ollama pull {}", modelName);
+            LOGGER.error("");
+            LOGGER.error("  It is local-only on purpose — this scores the whole backlog in a loop,");
+            LOGGER.error("  which against a metered API would cost real money without asking first.");
+            LOGGER.error("  oss critical ranks the same backlog offline, with no model at all.");
             return 1;
         }
 
