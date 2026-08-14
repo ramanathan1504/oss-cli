@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.11.6
+
+_2026-08-14_
+
+- Do not load a model the machine cannot hold (#85)
+
+
 ## 1.11.5
 
 _2026-08-14_
