@@ -272,7 +272,11 @@ The conversations live in one SQLite database shared by every `oss` process, so 
 
 ### `guide`
 Generates a structured, step-by-step resolution blueprint for a specific issue using local RAG (Retrieval-Augmented Generation).
-*   `--gemini` : Bypass the local model and route immediately to the Gemini API.
+
+*   **Either model will do**, like `chat`. With a local model it drafts locally and offers to refine with a cloud expert; with `--gemini`, `--openai` or `--claude` it goes straight to the cloud — including when no local model is installed at all.
+*   `--gemini` / `--openai` / `--claude` : Bypass the local model and route immediately to that API.
+*   **Verification needs a local model.** A cloud blueprint is normally read back against your own past work before you see it. Without a local model that step is skipped and says so, because an unverified blueprint looks exactly like a verified one.
+*   It refuses only when you have neither, and then names both ways to fix it.
 ```bash
 oss guide 1666
 ```
@@ -424,13 +428,13 @@ A store **older** than this build is not a problem: the next command migrates it
 | `review`          | Online         | Optional Ollama         | **Review a PR from every connected source**  |
 | `onboard`         | Online         | Optional Ollama         | What a project expects before you contribute |
 | `critical`        | Offline        | No                      | Fast keyword-score severity ranking          |
-| `analyze`         | Offline        | Ollama                  | AI batch severity scoring                    |
+| `analyze`         | Offline        | Ollama (local only)     | AI batch severity scoring                    |
 | `duplicates`      | Offline        | Embedder                | Vector-based duplicate detection             |
 | `prompt`          | Offline/Online | Ollama + Optional cloud | **Generate expert prompt from full context** |
 | `inspect`         | Offline        | No                      | Show retrieved context for an issue          |
 | `search`          | Offline        | Optional embedder       | Semantic vector search, else shared terms    |
 | `triage`          | Offline        | Ollama                  | Full triage audit for one issue              |
-| `guide`           | Offline        | Ollama                  | Step-by-step resolution blueprint            |
+| `guide`           | Offline/Online | Ollama **or** cloud key | Step-by-step resolution blueprint            |
 | `chat`            | Offline/Online | Ollama **or** cloud key | Resumable conversation, saved as you go      |
 | `history`         | Offline        | Optional embedder       | Browse and resume saved conversations        |
 | `report`          | Offline        | No                      | Weekly health report                         |

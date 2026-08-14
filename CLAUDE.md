@@ -85,6 +85,22 @@ and wrote, a schema it did not understand. `initializeSchema` now throws
 `doctor`, `--version` and `--help` past, because taking away the command that
 explains the refusal is not a fix.
 
+**A capability may degrade; it may not be gated on one provider.** This has been
+got wrong in both directions and cost a release each time. `chat` refused without
+a Gemini key, so a local-only user could not chat. Fixed — and it then refused
+without Ollama, so a cloud-key user could not either, and the escalation path ran
+its alignment step through Ollama as well. `guide` was the same: it returned
+before it had read `--gemini`, the flag documented as bypassing the local model.
+
+When adding anything that needs a model that writes, resolve **both** backends
+first, refuse only when both are missing, and name both fixes. Where a step
+genuinely needs a local model — aligning an answer against the user's own history,
+which must not be posted to the API that wrote it — skip it out loud. An answer
+that has not been checked looks exactly like one that has.
+
+`analyze` is deliberately local-only: it loops over the whole backlog, and doing
+that against a metered API would spend money nobody agreed to. It says so.
+
 **Vectors from different models are never comparable.** Every vector is stored
 with the model that produced it and every read filters on it. All models used
 here emit 384 dimensions, so nothing catches a mix by shape — it produces
