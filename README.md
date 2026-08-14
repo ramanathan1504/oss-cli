@@ -218,6 +218,10 @@ oss chat --resume 7      # resume a specific one
 oss history              # browse them all, arrow keys and a preview, enter to resume
 ```
 
+Chat runs on **Ollama, a cloud API key, or both** — it refuses only when you have
+neither, and then names both ways to fix it. With only a key, every turn leaves
+your machine and the banner says so on its first line.
+
 `oss history --search "the flaky test one"` finds a conversation by what it was
 about, using the built-in embedder — no server, no account. Without the model it
 matches shared terms instead and says so.

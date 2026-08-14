@@ -192,7 +192,7 @@ Nothing here is mandatory. Each row is something you can add later, and the
 | --- | --- | --- |
 | **GitHub token** | `sync` can fetch | Everything already synced still works. `sync` says what is missing. |
 | **Embedding model** (22 MB) | Search and rank by meaning | Search by shared terms. Says which mode it used. |
-| **Ollama** (or a cloud key) | Local answers, review verdicts, chat | `prompt` assembles the expert prompt instead of answering. `chat` needs it; nothing else does. |
+| **A model that writes** — Ollama *or* a cloud key | Local answers, review verdicts, chat | `prompt` assembles the expert prompt instead of answering. `chat` needs one of the two; nothing else does. |
 | **Your note folders** | Your own past work ranks in every answer | Answers come from the repository alone. |
 
 The refusals are loud and specific. A command that cannot do the better thing
@@ -205,9 +205,11 @@ claiming success.
 
 Being straight about the edges:
 
-- **`chat` needs a model that writes**, which means Ollama installed locally. That
-  is offline in the sense of "no internet", not in the sense of "nothing
-  installed".
+- **`chat` needs a model that writes** — either Ollama installed locally, or a
+  cloud API key. Either one is enough; it refuses only when you have neither. With
+  Ollama it is offline in the sense of "no internet", though not in the sense of
+  "nothing installed". With only a key, every turn leaves your machine, and the
+  banner says so on the first line.
 - **Cloud escalation obviously needs a connection.** Pressing `y` in `chat`, or
   `prompt --send-gemini`, sends your assembled prompt to somebody's API. That is
   the one moment anything leaves your machine, and it never happens unasked.

@@ -249,19 +249,39 @@ public class ChatCommand implements Callable<Integer> {
         if (modelName == null) {
             modelName = com.osscli.Defaults.GUIDANCE_MODEL;
         }
+        Cloud cloud = Cloud.forFlags(useOpenAi, useClaude);
+
+        // Chat needs a model that writes. It does not need a *particular* one.
+        //
+        // This used to exit here the moment Ollama was unreachable, whatever else was configured --
+        // so somebody with an API key and no wish to keep four gigabytes of weights on their laptop
+        // could not open a chat at all. That is the same failure as requiring a cloud key was, just
+        // pointing the other way, and it breaks the rule the whole tool is built on: a capability
+        // may degrade, but it may not be gated on one particular provider.
         OllamaClient localClient = new OllamaClient(modelName);
-        if (!localClient.isModelAvailable()) {
-            LOGGER.error("No local model to talk to: '{}' is not available at {}.", modelName, localClient.endpoint());
-            LOGGER.error("  Chat is the one capability here that needs a generation model attached.");
-            LOGGER.error("  oss setup connects one; everything else works without it.");
+        Backends backends = Backends.of(localClient.isModelAvailable(), cloud.available());
+        if (!backends.staysLocal()) {
+            localClient = null;
+        }
+        if (!backends.canAnswer()) {
+            LOGGER.error("Chat needs a model that writes, and neither is connected.");
+            LOGGER.error("");
+            LOGGER.error("  Local:  '{}' is not available at {}", modelName, new OllamaClient(modelName).endpoint());
+            LOGGER.error("          ollama serve, then: ollama pull {}", modelName);
+            LOGGER.error("  Cloud:  {}", cloud.why().isEmpty() ? "no API key found" : cloud.why());
+            LOGGER.error("          export GEMINI_API_KEY=…   (or --openai, or --claude)");
+            LOGGER.error("");
+            LOGGER.error("  Either one is enough. Everything else in oss works without both:");
+            LOGGER.error(
+                    "    oss prompt {} assembles the same context as a prompt you can paste anywhere.",
+                    session.issueNumber());
             return 1;
         }
 
         String memoryContext = buildMemoryContext(session.repository(), session.issueNumber());
-        Cloud cloud = Cloud.forFlags(useOpenAi, useClaude);
 
         List<ChatTurn> turns = ChatSessionStore.turns(session.id());
-        banner(session, target, modelName, cloud, turns);
+        banner(session, target, backends.staysLocal() ? modelName : null, cloud, turns, backends);
 
         Scanner scanner = new Scanner(System.in);
         String lastUserPrompt = lastUserPrompt(turns);
@@ -311,18 +331,31 @@ public class ChatCommand implements Callable<Integer> {
                     continue;
                 }
                 escalate(session, target, cloud, localClient, memoryContext, history, lastUserPrompt);
-            } else {
+            } else if (localClient != null) {
                 answerLocally(session, target, localClient, memoryContext, history);
+            } else {
+                // No local model, so the cloud is not an escalation here -- it is the only thing
+                // that writes. Answering with it directly is the point; making the user press 'y'
+                // every turn to reach the one model they have would be ceremony.
+                escalate(session, target, cloud, null, memoryContext, history, lastUserPrompt);
             }
             turns = ChatSessionStore.turns(session.id());
         }
     }
 
-    private void banner(ChatSession session, Issue target, String modelName, Cloud cloud, List<ChatTurn> turns) {
+    private void banner(
+            ChatSession session, Issue target, String modelName, Cloud cloud, List<ChatTurn> turns, Backends backends) {
         LOGGER.info("==================================================");
         LOGGER.info(" Issue #{} — {}", session.issueNumber(), target.title());
         LOGGER.info(" {} · conversation {}", session.repository(), session.id());
-        LOGGER.info(" Local: {} · escalation: {}", modelName, cloud.name());
+        // Names what is actually answering. "Local: null" would be worse than useless, and a user
+        // running on a cloud key needs to know every turn is leaving the machine.
+        if (modelName != null) {
+            LOGGER.info(" Local: {} · escalation: {}", modelName, cloud.name());
+        } else {
+            LOGGER.info(" Local: none · answering with: {}", cloud.name());
+            LOGGER.info(" Every turn goes to {}. Attach a local model to keep them here.", cloud.name());
+        }
         LOGGER.info("==================================================");
 
         if (!turns.isEmpty()) {
@@ -343,7 +376,11 @@ public class ChatCommand implements Callable<Integer> {
             }
         }
         LOGGER.info("");
-        LOGGER.info(" 'y' escalates the last question · 'exit' saves and stops");
+        if (backends.escalates()) {
+            LOGGER.info(" 'y' escalates the last question · 'exit' saves and stops");
+        } else {
+            LOGGER.info(" 'exit' saves and stops");
+        }
         LOGGER.info(" ctrl-c is safe: every turn is already saved.");
     }
 
@@ -379,6 +416,8 @@ public class ChatCommand implements Callable<Integer> {
         } catch (Exception e) {
             LOGGER.error("Local generation failed: {}", e.getMessage());
             LOGGER.error("  Your question is saved; try again or type 'y' to escalate.");
+            // Saved, so nothing is lost by retrying -- that is the whole point of storing the turn
+            // before the model call rather than after it.
         }
     }
 
@@ -409,6 +448,21 @@ public class ChatCommand implements Callable<Integer> {
 
         try (com.osscli.ui.Live live = com.osscli.ui.Live.start("asking " + cloud.name())) {
             String cloudOutput = cloud.generate(cloudPrompt);
+
+            // Alignment reads the cloud's answer back against the user's own past work, and only a
+            // local model can do it -- sending their PR history to the same API would undo the
+            // reason for splitting the two steps in the first place. Without one, the cloud answer
+            // stands on its own and the loss is stated rather than quietly absorbed: an answer that
+            // has NOT been checked against your history looks exactly like one that has.
+            if (localClient == null) {
+                live.done("answered");
+                print(cloud.name().toUpperCase(java.util.Locale.ROOT) + " RESPONSE", cloudOutput);
+                LOGGER.info("  Not checked against your own past work — that step needs a local model.");
+                LOGGER.info("  Attach one and answers get an alignment section: ollama serve");
+                store(session, ChatTurn.Role.CLOUD, cloudOutput);
+                return;
+            }
+
             live.step("aligning with your own history");
 
             String alignmentPrompt = String.format(
@@ -616,6 +670,66 @@ public class ChatCommand implements Callable<Integer> {
     // ==========================================
     // Cloud escalation
     // ==========================================
+
+    /**
+     * Which model, if any, is going to write the answers.
+     *
+     * <p>Four states, and the whole point of naming them is that three of them work. Chat needs a
+     * model that writes; it does not need a <em>particular</em> one, and every decision downstream
+     * -- what the banner says, whether {@code y} means anything, whether an answer can be checked
+     * against the user's own history -- falls out of which of these four it is.
+     */
+    enum Backends {
+        /** Ollama and a cloud key. Local answers, {@code y} escalates, escalations get aligned. */
+        BOTH,
+        /** Ollama only. Local answers, nothing to escalate to. */
+        LOCAL_ONLY,
+        /** A cloud key only. The cloud answers directly, and cannot be aligned against local history. */
+        CLOUD_ONLY,
+        /** Neither. The one state that refuses. */
+        NONE;
+
+        static Backends of(boolean local, boolean cloud) {
+            if (local && cloud) {
+                return BOTH;
+            }
+            if (local) {
+                return LOCAL_ONLY;
+            }
+            return cloud ? CLOUD_ONLY : NONE;
+        }
+
+        /** Whether a conversation can happen at all. */
+        boolean canAnswer() {
+            return this != NONE;
+        }
+
+        /** Whether answers stay on this machine. */
+        boolean staysLocal() {
+            return this == BOTH || this == LOCAL_ONLY;
+        }
+
+        /**
+         * Whether {@code y} does anything.
+         *
+         * <p>False for {@link #CLOUD_ONLY} because there is nothing to escalate <em>from</em>: the
+         * cloud is already answering every turn, so offering the key would promise a second opinion
+         * that is the same opinion.
+         */
+        boolean escalates() {
+            return this == BOTH;
+        }
+
+        /**
+         * Whether a cloud answer can be read back against the user's own past work.
+         *
+         * <p>Only a local model can do it. Sending a PR history to the same API that produced the
+         * answer would undo the reason the two steps are separate.
+         */
+        boolean canAlign() {
+            return this == BOTH;
+        }
+    }
 
     /**
      * The optional second opinion.

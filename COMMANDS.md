@@ -220,7 +220,16 @@ An interactive conversation about one issue, which survives the terminal it was 
 
 *   **Saved as you go.** Every turn is written to SQLite the moment it is said. Ctrl-C, a closed lid or a dropped connection loses nothing — the conversation is state on disk that a process is attached to, not state in a process.
 *   **Context aware.** Loads your personal memory (past PR stories, assistant exports, notes) and the issue itself.
-*   **Escalation is optional.** The local model answers; typing `y` sends the last question to Gemini, OpenAI or Claude if you have a key for one. Without a key the chat still runs, local only, and says so.
+*   **Either model will do.** Ollama, a cloud key, or both. It refuses only when you have neither, and then it names both ways to fix it.
+
+| You have | What happens |
+| --- | --- |
+| Ollama and a key | The local model answers. `y` escalates the last question, and the cloud's answer is read back against your own past work. |
+| Ollama only | The local model answers. Nothing to escalate to, so `y` is not offered. |
+| A cloud key only | The cloud answers every turn directly — no `y` needed, since there is nothing to escalate *from*. Answers cannot be aligned against your history, and it says so each time. |
+| Neither | Refuses, naming both ways to fix it, and points at `oss prompt` which assembles the same context as a prompt you can paste anywhere. |
+
+*   **Alignment needs a local model.** When both are connected, an escalated answer is read back against your past PRs and notes before you see it. Sending that history to the same API that wrote the answer would undo the reason the two steps are separate, so with only a key the step is skipped — visibly, because an answer that has *not* been checked looks exactly like one that has.
 *   **Filed once.** On `exit` the transcript is written to your archive and embedded. Resuming rewrites *that same note* rather than filing a second overlapping copy.
 
 ```bash
@@ -422,7 +431,7 @@ A store **older** than this build is not a problem: the next command migrates it
 | `search`          | Offline        | Optional embedder       | Semantic vector search, else shared terms    |
 | `triage`          | Offline        | Ollama                  | Full triage audit for one issue              |
 | `guide`           | Offline        | Ollama                  | Step-by-step resolution blueprint            |
-| `chat`            | Offline        | Ollama, cloud optional  | Resumable conversation, saved as you go      |
+| `chat`            | Offline/Online | Ollama **or** cloud key | Resumable conversation, saved as you go      |
 | `history`         | Offline        | Optional embedder       | Browse and resume saved conversations        |
 | `report`          | Offline        | No                      | Weekly health report                         |
 | `trend`           | Offline        | No                      | Historical metric snapshots                  |
