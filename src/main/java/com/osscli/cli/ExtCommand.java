@@ -355,8 +355,25 @@ public class ExtCommand implements Callable<Integer> {
          */
         @Override
         void alsoLocally(String verb, List<String> args) {
-            if ("file".equals(verb) && !args.isEmpty()) {
-                BuiltinMemory.run("file", args);
+            if (!"file".equals(verb) || args.isEmpty()) {
+                return;
+            }
+            // Only the paths. The argument list on the way through carries the extension's own
+            // options -- `--topic Tooling --apply` and whatever else it defines -- and the built-in
+            // store reads every argument as a path, so each one came back as
+            // "skipped (not a file)  --topic". Three lines of apparent failure printed after a
+            // filing that had entirely succeeded, on every invocation that used a flag.
+            //
+            // Which options take a value is the extension's business and cannot be known here, so
+            // this does not try to parse them: an argument is a path if it is one.
+            List<String> paths = new java.util.ArrayList<>();
+            for (String a : args) {
+                if (!a.startsWith("-") && java.nio.file.Files.isRegularFile(java.nio.file.Path.of(a))) {
+                    paths.add(a);
+                }
+            }
+            if (!paths.isEmpty()) {
+                BuiltinMemory.run("file", paths);
             }
         }
     }
