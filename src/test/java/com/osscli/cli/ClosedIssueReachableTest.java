@@ -19,6 +19,8 @@ package com.osscli.cli;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.osscli.AppPaths;
 import com.osscli.model.Issue;
 import com.osscli.storage.DatabaseManager;
@@ -110,9 +112,85 @@ class ClosedIssueReachableTest {
     // The advice
     // ==========================================
 
+    // ==========================================
+    // Behaviour, not source text
+    // ==========================================
+
+    /** A real GitHub issues payload, trimmed but not simplified: the shape the API actually sends. */
+    private static final String CLOSED_PAYLOAD = """
+            {
+              "number": 4129,
+              "title": "Log4J pattern layout inconsistencies when locale is specified",
+              "body": "the report as filed",
+              "state": "closed",
+              "comments": 7,
+              "created_at": "2026-05-25T02:59:48Z",
+              "updated_at": "2026-06-01T10:00:00Z",
+              "labels": [{"name": "bug"}, {"name": "layouts"}],
+              "user": {"login": "xzel23"},
+              "author_association": "CONTRIBUTOR",
+              "html_url": "https://github.com/owner/closed-test/issues/4129",
+              "reactions": {"total_count": 3},
+              "locked": false,
+              "node_id": "I_kwDO"
+            }
+            """;
+
+    @Test
+    @DisplayName("running the keep step turns a fetched payload into a row")
+    void keepActuallyPersists() throws Exception {
+        // This is the test the grep-based one could not be. It executes the code: if the call
+        // were ever moved somewhere unreachable, or the parse broke on a field GitHub added,
+        // this fails and a source search for "saveIssues" would not.
+        JsonNode payload = new ObjectMapper().readTree(CLOSED_PAYLOAD);
+
+        assertTrue(IssueCommand.keep(REPO, 4129, payload), "keep() should report success");
+        assertTrue(stored(4129), "and the issue must actually be in local storage afterwards");
+    }
+
+    @Test
+    @DisplayName("what was stored is what was fetched")
+    void theStoredRowIsFaithful() throws Exception {
+        JsonNode payload = new ObjectMapper().readTree(CLOSED_PAYLOAD);
+        IssueCommand.keep(REPO, 4129, payload);
+
+        Issue back = SqliteStorage.loadIssues(REPO).stream()
+                .filter(i -> i.number() == 4129)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("not stored"));
+
+        assertTrue("closed".equals(back.state()), "state was '" + back.state() + "'");
+        assertTrue(back.title().contains("locale is specified"), "title was '" + back.title() + "'");
+        assertTrue(back.body().contains("as filed"), "body was '" + back.body() + "'");
+    }
+
+    @Test
+    @DisplayName("unknown fields from a newer API do not stop it being kept")
+    void unknownFieldsAreTolerated() throws Exception {
+        // GitHub adds fields without warning. A parse that failed on them would reintroduce the
+        // dead end quietly, on some future Tuesday, for reasons unrelated to this code.
+        JsonNode payload = new ObjectMapper()
+                .readTree(CLOSED_PAYLOAD.replace("\"locked\": false", "\"locked\": false, \"invented_field\": 1"));
+
+        assertTrue(IssueCommand.keep(REPO, 4129, payload), "an unrecognised field must not prevent storage");
+    }
+
+    @Test
+    @DisplayName("a payload it cannot use is reported false, never thrown")
+    void badPayloadDoesNotThrow() throws Exception {
+        // The caller has already printed the issue by this point. Throwing here would turn a
+        // successful read into a failed command over a side effect nobody asked for.
+        JsonNode notAnIssue = new ObjectMapper().readTree("{\"number\": \"not-a-number\"}");
+
+        assertFalse(IssueCommand.keep(REPO, 9999, notAnIssue), "an unusable payload is a false, not an exception");
+        assertFalse(stored(9999), "and nothing partial should be left behind");
+    }
+
     @Test
     @DisplayName("chat no longer sends the user to a command that cannot help")
     void chatAdviceIsReachable() throws IOException {
+        // Still a source assertion, deliberately: the thing being pinned IS the sentence, and
+        // the sentence is what cost the user two round trips.
         String src = Files.readString(Path.of("src/main/java/com/osscli/cli/ChatCommand.java"));
 
         assertTrue(
@@ -121,29 +199,5 @@ class ClosedIssueReachableTest {
         assertFalse(
                 src.contains("oss sync -r {} brings it down first."),
                 "the old advice loops: sync reports '0 saved' and leaves the user where they started");
-    }
-
-    @Test
-    @DisplayName("issue keeps what it fetched, rather than printing and discarding it")
-    void issueCommandPersists() throws IOException {
-        String src = Files.readString(Path.of("src/main/java/com/osscli/cli/IssueCommand.java"));
-
-        assertTrue(src.contains("SqliteStorage.saveIssues"), "issue must store the payload it already has");
-        assertTrue(src.contains("kept locally"), "and say so, because the point is that the next command now works");
-    }
-
-    @Test
-    @DisplayName("a storage failure does not turn a successful read into an error")
-    void storingIsABonusNotTheJob() throws IOException {
-        // Reading the issue is what was asked for. If the insert fails, the user should still
-        // get what they came for rather than an error about a side effect they did not request.
-        String src = Files.readString(Path.of("src/main/java/com/osscli/cli/IssueCommand.java"));
-        int save = src.indexOf("SqliteStorage.saveIssues");
-        int catchAfter = src.indexOf("catch", save);
-
-        assertTrue(save > 0 && catchAfter > save, "the save must sit inside its own try/catch");
-        assertTrue(
-                src.substring(save, Math.min(src.length(), catchAfter + 400)).contains("LOGGER.debug"),
-                "a failed save should be a debug note, not a failure");
     }
 }

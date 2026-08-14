@@ -37,7 +37,6 @@ public class IssueCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        boolean saved = false;
         try {
             GitHubClient gh = new GitHubClient();
             JsonNode issue = MAPPER.readTree(gh.getJson("/repos/" + repo + "/issues/" + number));
@@ -46,20 +45,7 @@ public class IssueCommand implements Callable<Integer> {
                 return 1;
             }
 
-            // Keep it. The payload is already here, and discarding it was a dead end: `sync`
-            // saves only OPEN issues on a delta watermark, so a closed one could never reach
-            // local storage by any route. `oss chat 4129` then said "not in the local data,
-            // oss sync brings it down first" -- advice that cannot work, on an issue that is
-            // closed precisely because it is the interesting kind to go back and read.
-            try {
-                com.osscli.model.Issue parsed = MAPPER.treeToValue(issue, com.osscli.model.Issue.class);
-                com.osscli.storage.SqliteStorage.saveIssues(repo, java.util.List.of(parsed));
-                saved = true;
-            } catch (Exception e) {
-                // Reading it is the job; storing it is a bonus. A storage failure must not turn
-                // a successful read into an error the user cannot act on.
-                LOGGER.debug("Could not store issue #{} locally: {}", number, e.getMessage());
-            }
+            boolean saved = keep(repo, number, issue);
 
             // An issue endpoint also answers for pull requests, and the two need reading very
             // differently -- so say which this is rather than letting someone assume.
@@ -110,6 +96,33 @@ public class IssueCommand implements Callable<Integer> {
         } catch (Exception e) {
             System.err.println("error  " + e.getMessage());
             return 1;
+        }
+    }
+
+    /**
+     * Stores what was just fetched, and reports whether it worked.
+     *
+     * <p>Separated from {@link #call()} so it can be exercised without a network: the behaviour
+     * worth pinning is that a real GitHub payload becomes a row, and a test that only greps this
+     * file for the word "saveIssues" would pass just as happily if the call were unreachable.
+     *
+     * <p>Keeping it at all is the point. {@code sync} saves only OPEN issues on a delta watermark,
+     * so a closed one could never reach local storage by any route -- and {@code oss chat 4129}
+     * answered with "oss sync brings it down first", which cannot work, on an issue that is closed
+     * precisely because it is the interesting kind to go back and read.
+     *
+     * @return true when the issue is now in local storage
+     */
+    static boolean keep(String repository, int number, JsonNode issue) {
+        try {
+            com.osscli.model.Issue parsed = MAPPER.treeToValue(issue, com.osscli.model.Issue.class);
+            com.osscli.storage.SqliteStorage.saveIssues(repository, java.util.List.of(parsed));
+            return true;
+        } catch (Exception e) {
+            // Reading it is the job; storing it is a bonus. A storage failure must not turn a
+            // successful read into an error the user cannot act on.
+            LOGGER.debug("Could not store issue #{} locally: {}", number, e.getMessage());
+            return false;
         }
     }
 }
