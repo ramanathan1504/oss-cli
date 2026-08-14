@@ -39,7 +39,7 @@ generate text.
 an `execute(Connection)`. On boot, every migration above the stored version runs
 in order, then the version is bumped.
 
-`CURRENT_SCHEMA_VERSION` is **13**.
+`CURRENT_SCHEMA_VERSION` is **14**.
 
 **Adding a migration:**
 
@@ -49,6 +49,20 @@ in order, then the version is bumped.
    fresh-install path and the upgrade path create the identical table.
 4. Guard everything — `columnExists`, `addColumnIfMissing`, `CREATE TABLE IF NOT
    EXISTS`. Migrations must be re-runnable without error.
+5. Add every new table to `SchemaTest`'s `EXPECTED` list, and regenerate
+   `release-surface.json` (below) — the schema version lives in it, so a
+   migration makes the next release at least a minor.
+
+**Migrations only run forwards, and a build that meets a newer store refuses
+it.** When the stamped version exceeds `CURRENT_SCHEMA_VERSION`,
+`initializeSchema` throws `SchemaTooNewException`, `Main` prints what happened
+and exits `1`. Only `doctor`, `--version` and `--help` are let past, because
+taking away the command that explains the refusal is not a fix.
+
+This case used to pass in silence: the loop matched no migration, fell through,
+and the command read — then wrote — a schema it did not understand. If you are
+ever tempted to make that a warning rather than a refusal, the damage from
+carrying on is quiet and cumulative, and costs the store rather than one command.
 
 Never drop or rewrite a column that holds user data. The engine is
 non-destructive by contract; users trust it to run unattended at startup.
@@ -317,6 +331,7 @@ that touches the outside world happens in CI, triggered by the tag it pushes.
 | `release.sh` (local) | `.github/workflows/release.yml` (on tag `v*`) |
 |---|---|
 | Refuses a dirty tree, a non-`main` branch, a duplicate tag, or a `main` behind origin | Rebuilds the jar from the tagged tree |
+| **Refuses a version smaller than the change requires** | |
 | Sets the pom version | Fails if the jar name and the tag disagree |
 | Rewrites `oss-cli-<version>.jar` in the docs | Copies this version's `CHANGELOG.md` section into the release notes |
 | Prepends a `CHANGELOG.md` entry from every non-merge commit since the last tag | Publishes the GitHub release with the jar |
@@ -351,6 +366,42 @@ git tag -d v1.3.2 && git push --delete origin v1.3.2
 Delete the GitHub release too if one was created — `gh release delete v1.3.2`.
 
 ---
+
+### The version has to match what changed
+
+`release-surface.json` at the repo root records what a user of a release can
+depend on: every command and flag, read out of picocli's own model, plus
+`CURRENT_SCHEMA_VERSION`. It is generated, never hand-edited.
+
+```bash
+mvn test -Dtest=ReleaseSurfaceTest -Dsurface.update=true   # then commit it
+```
+
+`ReleaseSurfaceTest` runs on **every pull request** and fails when the file no
+longer describes the build. That is deliberate: the record is updated by the
+person adding the command, in the change where it makes sense, rather than by
+whoever runs the release weeks later.
+
+`release.sh` then compares against the surface as it stood at the previous tag,
+before it writes anything, and refuses a bump that is too small:
+
+| Change | Required |
+| --- | --- |
+| command or flag removed — **aliases count**, dropping `-c` breaks scripts | major |
+| schema version raised, or command or flag added | minor |
+| neither | patch |
+
+A schema version that went *backwards* is a major, not a patch: it is a mistake,
+not a smaller change.
+
+This is bnd's rule with the schema added, and the schema is the half that
+matters here. Nothing imports `com.osscli.*` — extensions attach by path via
+`oss ext` — so no Java signature is anybody's contract. What actually breaks for
+a user is an older binary meeting a store a newer one migrated.
+
+**Do not add bnd or `maven-bundle-plugin`.** `maven-shade-plugin` rewrites and
+merges packages after bundle metadata would be computed, so the headers would
+ship already wrong, and no container resolves this jar in the first place.
 
 ## Things worth fixing
 

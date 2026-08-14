@@ -66,6 +66,42 @@ fi
 
 PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
+# ---------------------------------------------------------------------------
+# Is this number big enough for what changed?
+#
+# Everything above checks the version's *shape* and that the tag is free.
+# Nothing checked that it was *right*, and the number is a promise: 1.10.2
+# would have been accepted for the release that added `oss history`,
+# `oss chat --resume` and a schema migration, telling every reader "a fix,
+# nothing new to learn".
+#
+# The comparison is against release-surface.json as it stood at the previous
+# tag: commands and flags read out of picocli's own model, plus the schema
+# version -- because what actually breaks for a user is not a Java signature
+# but an older binary meeting a store a newer one migrated.
+#
+# It runs before the version is set or anything is written, so a refusal
+# leaves the tree exactly as it was found.
+# ---------------------------------------------------------------------------
+if [ -n "$PREV_TAG" ]; then
+    echo "→ Checking v$VERSION is a large enough bump since $PREV_TAG..."
+    PREV_SURFACE=$(mktemp)
+    git show "$PREV_TAG:release-surface.json" > "$PREV_SURFACE" 2>/dev/null || true
+
+    if ! mvn -q test -Dtest=ReleaseGuardTest \
+            -Dguard.version="$VERSION" \
+            -Dguard.prevTag="$PREV_TAG" \
+            -Dguard.prev="$PREV_SURFACE"; then
+        rm -f "$PREV_SURFACE"
+        echo ""
+        echo "❌ Refusing to release v$VERSION. See the reason above."
+        echo "   The version number is a promise to whoever reads it."
+        exit 1
+    fi
+    rm -f "$PREV_SURFACE"
+    echo "   ✓ bump is large enough"
+fi
+
 echo "→ Setting the project version to $VERSION..."
 mvn -q versions:set -DnewVersion="$VERSION" -DgenerateBackupPoms=false
 

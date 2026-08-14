@@ -1112,7 +1112,7 @@ oss review 4234 -r owner/name</pre>
       { label: 'reading ~/.oss-cli', ms: 220 },
       { label: 'checking models',    ms: 300 },
       { label: 'checking github',    ms: 380 }
-    ], '8 checks', function () {
+    ], '9 checks', function () {
       var model = state.model
         ? '  [<span class="ok">  ok  </span>] embedding model <span class="c">— all-MiniLM-L6-v2 (built in, in-process)</span>'
         : '  [<span class="b"> warn </span>] embedding model <span class="c">— not on disk; search falls back to shared terms</span>';
@@ -1122,6 +1122,7 @@ oss review 4234 -r owner/name</pre>
         RULE,
         '  [<span class="ok">  ok  </span>] data directory <span class="c">— ~/.oss-cli</span>',
         '  [<span class="ok">  ok  </span>] database <span class="c">— ~/.oss-cli/oss.db (14 MB)</span>',
+        '  [<span class="ok">  ok  </span>] schema <span class="c">— version 14</span>',
         model,
         '  [<span class="ok">  ok  </span>] ollama <span class="c">— not connected — local verdicts off, prompts still build</span>',
         '  [<span class="ok">  ok  </span>] github token <span class="c">— found in the environment</span>',
