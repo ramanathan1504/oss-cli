@@ -101,6 +101,16 @@ public class OllamaClient {
         return baseUrl;
     }
 
+    /**
+     * The built-in timeout, so nothing else has to repeat the number.
+     *
+     * <p>{@code doctor} carried its own copy of {@code 300} as both the fallback and the advice,
+     * which meant it went on reporting a stored 300 as healthy after the default moved past it.
+     */
+    public static int defaultTimeoutSeconds() {
+        return DEFAULT_TIMEOUT_SECONDS;
+    }
+
     private static Duration resolveTimeout() {
         try {
             String configured = com.osscli.storage.SqliteStorage.loadConfig("ollama.timeout_seconds");

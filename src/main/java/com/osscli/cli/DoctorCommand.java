@@ -374,12 +374,23 @@ public class DoctorCommand implements Callable<Integer> {
             ok("ollama.context_limit", String.valueOf(limit));
         }
 
-        int timeout = intCfg("ollama.timeout_seconds", 300);
+        // Read from the client rather than repeated here: a second copy of the number is how a
+        // stored 300 kept reporting healthy after the default moved past it, on the one machine
+        // where 300 had already been measured to be too short.
+        int builtIn = com.osscli.llm.OllamaClient.defaultTimeoutSeconds();
+        int timeout = intCfg("ollama.timeout_seconds", builtIn);
         if (timeout < 120) {
             warn(
                     "ollama.timeout_seconds",
                     timeout + "s is short for a full-context request",
-                    "A 6000-token request can take minutes on CPU. Consider 300.");
+                    "A 6000-token request can take minutes on CPU. Raise it to " + builtIn + ".");
+        } else if (timeout < builtIn) {
+            warn(
+                    "ollama.timeout_seconds",
+                    timeout + "s, below the built-in " + builtIn + "s",
+                    "A 7B model on an Apple-silicon laptop was measured at 482s for a realistic"
+                            + " prompt. A stored value below that cuts off requests that are working."
+                            + " Raise it to " + builtIn + " unless you would rather fail fast.");
         } else {
             ok("ollama.timeout_seconds", timeout + "s");
         }
