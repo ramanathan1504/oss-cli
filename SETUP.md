@@ -329,9 +329,34 @@ oss inspect <number>        # what was retrieved, and will it escalate
 oss prompt <n> --copy       # prompt to clipboard
 oss prompt <n> --out f.md   # prompt to a file
 oss prompt <n> --force-prompt   # skip the local model entirely
+oss chat <number>           # talk it through; every turn is saved as it is said
+oss chat --continue         # carry on with the most recent conversation
+oss history                 # browse saved conversations, enter resumes one
 oss backup                  # timestamped archive (keeps last 5)
 oss restore <archive.zip>   # restore, preserving local API keys
 ```
+
+### Conversations, and several terminals
+
+`oss chat` writes every turn to SQLite the moment it is said, so ctrl-c or a
+closed terminal is a pause rather than a loss. `oss history` lists what you have
+saved — arrow keys, a preview of where each one got to, enter to resume — and
+`oss history --search "the flaky test one"` finds one by meaning using the
+built-in embedder. Without a terminal, the same list is numbered instead, and
+`oss chat --resume <id>` needs no list at all.
+
+Running several terminals at once is expected and supported:
+
+| What you do | What happens |
+| --- | --- |
+| `sync` in one window, `chat` in another | Both work. The database runs in WAL mode, so readers are never blocked by the writer, and writers wait their turn instead of failing. |
+| Resume the same conversation in two terminals | The second one notices and offers to **fork** it — a new conversation carrying the same history — rather than interleaving two people's thinking into one transcript. |
+| A terminal is killed mid-conversation | Its turns are already saved. The session releases itself after two minutes; there is no lock file to clean up. |
+| Ask about it later, from any terminal | Once a conversation is ended with `exit`, the transcript is filed and embedded, and from then on `search`, `prompt` and `review` can all retrieve it. |
+
+The last row is the one that matters most: while a conversation is open it is
+private to itself, and it joins the shared corpus when it ends. That is what
+makes the corpus compound instead of filling up with half-finished thoughts.
 
 ### How `prompt` decides
 

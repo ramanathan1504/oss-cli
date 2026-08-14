@@ -32,7 +32,18 @@ public class DatabaseManager {
 
     private static final Logger LOGGER = LogManager.getLogger(DatabaseManager.class);
     // private static final String DB_URL = "jdbc:sqlite:data/issue_intelligence.db";
-    private static final int CURRENT_SCHEMA_VERSION = 13;
+    private static final int CURRENT_SCHEMA_VERSION = 14;
+
+    /**
+     * How long a statement waits for a lock before giving up.
+     *
+     * <p>Sized for the longest write anybody actually runs into: a {@code sync} pass committing a
+     * batch of issues. Chat turns are single-row inserts measured in milliseconds, so a chat in a
+     * second terminal waits out a sync rather than failing in front of the user mid-sentence.
+     */
+    private static final int BUSY_TIMEOUT_MS = 15_000;
+
+    private static volatile boolean journalModeChecked = false;
 
     /** Tables whose rows carry an embedding vector and therefore need provenance. */
     static final String[] VECTOR_TABLES = {"personal_chat_memory", "personal_pr_memory", "embeddings"};
@@ -350,6 +361,62 @@ public class DatabaseManager {
                     stmt.execute("UPDATE personal_chat_memory SET tier = 'KNOWLEDGE' WHERE tier IS NULL;");
                 }
             }
+        },
+
+        // Migration 14: Resumable chat sessions
+        new Migration() {
+            @Override
+            public int getTargetVersion() {
+                return 14;
+            }
+
+            /**
+             * A chat used to exist only in one process's memory and was written to the archive on a clean
+             * {@code exit}. Ctrl-C, a closed lid or a dropped connection therefore discarded the whole
+             * conversation, and there was no way to come back to one the next morning.
+             *
+             * <p>Two tables rather than a transcript column, because a turn has to be durable the moment it
+             * happens. Appending a row is a single short write; rewriting a growing blob on every turn would
+             * hold the write lock longer and longer, against the other terminals, for the same data.
+             */
+            @Override
+            public void execute(Connection conn) throws SQLException {
+                LOGGER.info("Upgrading database schema to Version 14 (resumable chat sessions)...");
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("""
+                            CREATE TABLE IF NOT EXISTS chat_session (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                repository TEXT NOT NULL,
+                                issue_number INTEGER NOT NULL,
+                                issue_title TEXT,
+                                provider TEXT,
+                                summary TEXT,
+                                overview TEXT,
+                                started_at TEXT NOT NULL,
+                                updated_at TEXT NOT NULL,
+                                ended_at TEXT,
+                                note_path TEXT,
+                                owner_pid INTEGER,
+                                owner_host TEXT,
+                                parent_id INTEGER
+                            );""");
+                    stmt.execute("""
+                            CREATE TABLE IF NOT EXISTS chat_turn (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                session_id INTEGER NOT NULL,
+                                seq INTEGER NOT NULL,
+                                role TEXT NOT NULL,
+                                content TEXT NOT NULL,
+                                created_at TEXT NOT NULL,
+                                UNIQUE (session_id, seq)
+                            );""");
+                    // Both list orders the picker uses: newest overall, and newest for one issue.
+                    stmt.execute("CREATE INDEX IF NOT EXISTS idx_chat_session_updated ON chat_session (updated_at);");
+                    stmt.execute(
+                            "CREATE INDEX IF NOT EXISTS idx_chat_session_issue ON chat_session (repository, issue_number);");
+                    stmt.execute("CREATE INDEX IF NOT EXISTS idx_chat_turn_session ON chat_turn (session_id, seq);");
+                }
+            }
         }
     };
 
@@ -366,7 +433,9 @@ public class DatabaseManager {
         int attempts = 0;
         while (true) {
             try {
-                return DriverManager.getConnection(AppPaths.DB_URL);
+                Connection conn = DriverManager.getConnection(AppPaths.DB_URL);
+                applyConcurrencyPragmas(conn);
+                return conn;
             } catch (SQLException e) {
                 attempts++;
                 if (attempts >= MAX_RETRY_ATTEMPTS) {
@@ -380,6 +449,55 @@ public class DatabaseManager {
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     throw new SQLException("Database connection attempt interrupted", ie);
+                }
+            }
+        }
+    }
+
+    /**
+     * Makes this connection survive the other {@code oss} processes the user has open.
+     *
+     * <p>Nothing set these before, which left SQLite in its default rollback-journal mode: a writer
+     * takes an exclusive lock on the whole file and every reader is turned away immediately with
+     * {@code SQLITE_BUSY}. That is fine for one terminal and wrong for the way this is actually
+     * used -- a sync running in one window made {@code chat} in the next window fail outright,
+     * mid-sentence, with a database error the user could do nothing about.
+     *
+     * <p>The retry loop around {@link #getConnection()} did not help, because connecting is not the
+     * step that fails. Opening a SQLite file almost always succeeds; the lock is taken when a
+     * statement runs. So the wait has to live in the connection itself, which is what
+     * {@code busy_timeout} is.
+     *
+     * <ul>
+     *   <li><b>WAL</b> lets readers carry on while one writer works, so the three terminals only
+     *       ever contend writer-against-writer, never reader-against-writer.
+     *   <li><b>busy_timeout</b> turns that remaining contention into a wait instead of an error.
+     *   <li><b>synchronous=NORMAL</b> is the documented safe pairing with WAL: durable across a
+     *       process being killed, which is the case that matters here, since losing a chat turn to
+     *       a ctrl-c is the exact failure sessions exist to prevent.
+     * </ul>
+     */
+    private static void applyConcurrencyPragmas(Connection conn) throws SQLException {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("PRAGMA busy_timeout = " + BUSY_TIMEOUT_MS + ";");
+            stmt.execute("PRAGMA synchronous = NORMAL;");
+            stmt.execute("PRAGMA foreign_keys = ON;");
+
+            // journal_mode is a property of the file, not the connection, so this only does work
+            // once per database. The result is read back rather than assumed: WAL needs shared
+            // memory, which a network filesystem may not provide, and SQLite reports that by
+            // quietly returning the mode it kept. Silently staying in rollback mode would restore
+            // exactly the failure above with nothing on screen to explain it.
+            try (ResultSet rs = stmt.executeQuery("PRAGMA journal_mode = WAL;")) {
+                String mode = rs.next() ? rs.getString(1) : "unknown";
+                if (!"wal".equalsIgnoreCase(mode) && !journalModeChecked) {
+                    journalModeChecked = true;
+                    LOGGER.warn("  ⚠ This database is in '{}' journal mode, not WAL.", mode);
+                    LOGGER.warn("    Running two oss commands at once will make one of them wait,");
+                    LOGGER.warn("    and a long sync can hold the other off. WAL needs a local disk;");
+                    LOGGER.warn("    a network or cloud-synced OSS_CLI_HOME cannot provide it.");
+                } else if ("wal".equalsIgnoreCase(mode)) {
+                    journalModeChecked = true;
                 }
             }
         }
