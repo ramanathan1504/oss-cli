@@ -255,6 +255,40 @@ kbd{
 .band h2{font-size:clamp(1.5rem,3vw,1.95rem);letter-spacing:-.03em}
 .band .sub{margin-top:.85rem;max-width:var(--measure);color:var(--ink-soft)}
 
+/* ---------- offline: what needs a network, and what does not ----------
+   Two columns that are honestly asymmetric. One command needs the internet and
+   two dozen do not, and a layout that gave each side equal weight would be
+   arguing the opposite of the point. */
+.offline-grid{display:grid;gap:1.25rem;grid-template-columns:1fr;margin-top:2rem}
+@media (min-width:900px){.offline-grid{grid-template-columns:minmax(0,17rem) minmax(0,1fr);gap:1.75rem}}
+.offline-col{
+  border:1px solid var(--rule);border-radius:var(--radius);
+  padding:1.15rem 1.25rem;background:var(--bg-raised);
+}
+.offline-col h3{font-size:.95rem;letter-spacing:-.01em;margin-bottom:.2rem}
+.offline-col .count{
+  display:block;font-family:var(--mono);font-size:.74rem;color:var(--ink-faint);
+  letter-spacing:.05em;text-transform:uppercase;margin-bottom:.75rem;
+}
+.offline-col ul{list-style:none;display:flex;flex-wrap:wrap;gap:.4rem}
+.offline-col li{
+  font-family:var(--mono);font-size:.76rem;padding:.16rem .5rem;
+  border:1px solid var(--rule);border-radius:5px;color:var(--ink-soft);
+}
+.offline-col.net li{border-color:var(--brass);color:var(--brass)}
+.offline-col.net{border-color:var(--brass)}
+.offline-note{margin-top:.85rem;font-size:.82rem;color:var(--ink-faint)}
+.offline-steps{margin-top:2.25rem}
+.offline-steps .step-h{display:block;font-weight:600;margin-bottom:.5rem}
+.offline-cut{
+  display:flex;align-items:center;gap:.8rem;margin:1.5rem 0;
+  font-family:var(--mono);font-size:.8rem;color:var(--patina);
+  letter-spacing:.06em;text-transform:uppercase;
+}
+.offline-cut::before,.offline-cut::after{
+  content:"";flex:1;height:1px;background:var(--rule);
+}
+
 /* ---------- terminal chrome (shared by demo + example) ---------- */
 .term{
   border-radius:var(--radius);overflow:hidden;background:var(--term-bg);
@@ -473,6 +507,7 @@ td .need,td.need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)
     <nav class="nav">
       <a href="#demo" class="nav-keep">Try it</a>
       <a href="#how">How it works</a>
+      <a href="#offline">Offline</a>
       <a href="#install">Install</a>
       <a href="/osscli/docs" class="nav-keep">Docs</a>
       <a href="https://github.com/ramanathan1504/oss-cli" class="nav-keep">GitHub</a>
@@ -635,6 +670,94 @@ td .need,td.need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)
         <span class="gives">When local context or confidence runs out, OSS-CLI assembles a complete expert prompt. Send it automatically, or copy it into whichever model you prefer.</span>
       </div>
     </div>
+  </div>
+</section>
+
+<!-- ══════════════ offline ══════════════ -->
+<section class="band band-sunken" id="offline">
+  <div class="shell">
+    <p class="eyebrow">Offline</p>
+    <h2>Sync once. Then the network is optional.</h2>
+    <p class="sub">
+      One command needs the internet. Everything else reads a file on your disk — including
+      search by meaning, because the model doing the arithmetic is running inside the process,
+      not behind an API.
+    </p>
+
+    <div class="offline-grid">
+      <div class="offline-col net">
+        <h3>Needs a connection</h3>
+        <span class="count">6 commands</span>
+        <ul>
+          <li>sync</li><li>issue</li><li>pr</li>
+          <li>hub</li><li>followup</li><li>review</li>
+        </ul>
+        <p class="offline-note">
+          They fetch from GitHub. <code>review</code> asks only for the pull request's head
+          commit — unchanged, and the answer comes from cache.
+        </p>
+      </div>
+
+      <div class="offline-col">
+        <h3>Needs nothing</h3>
+        <span class="count">the other 25</span>
+        <ul>
+          <li>search</li><li>prompt</li><li>inspect</li><li>history</li><li>chat</li>
+          <li>critical</li><li>duplicates</li><li>triage</li><li>guide</li><li>profile</li>
+          <li>onboard</li><li>report</li><li>trend</li><li>analyze</li><li>backlog</li>
+          <li>pick</li><li>hidden-critical</li><li>prs</li><li>serve</li><li>backup</li>
+          <li>restore</li><li>doctor</li><li>alias</li><li>ext</li><li>setup</li>
+        </ul>
+        <p class="offline-note">
+          These open no socket at all. <code>doctor</code> pings GitHub and Ollama to tell you
+          whether they are reachable — that is the check, not a dependency — and
+          <code>serve</code> binds a web interface to localhost, over the corpus already on
+          your disk. <code>run</code> and <code>memory</code> hand off to whichever extension
+          you attached, so they are as offline as it is.
+        </p>
+      </div>
+    </div>
+
+    <div class="offline-steps">
+      <div class="step">
+        <span class="step-h">While you have a connection</span>
+<pre class="block"><span class="c"># a token — the only thing oss requires of you</span>
+export GITHUB_TOKEN=$(gh auth token)
+
+<span class="c"># the embedding model: 22 MB, once, ever</span>
+oss model --fetch
+
+<span class="c"># register a repository and pull it down</span>
+oss sync --add owner/name
+oss sync --all</pre>
+      </div>
+
+      <p class="offline-cut">now turn the wifi off</p>
+
+      <div class="step">
+        <span class="step-h">Everything below still works</span>
+<pre class="block"><span class="c"># finds "log rotation with zstd" — no shared words, same subject</span>
+oss search "rollover compression"
+
+<span class="c"># rank what is waiting, by community signal</span>
+oss critical
+
+<span class="c"># see what would be retrieved, and whether it escalates</span>
+oss inspect 812
+
+<span class="c"># assemble a complete expert prompt from local context</span>
+oss prompt 812</pre>
+      </div>
+    </div>
+
+    <p class="note">
+      <strong>Why it works:</strong> <code>sync</code> fetches, then a 22 MB ONNX model running
+      <em>in this process</em> turns what it fetched into vectors on your machine. No server, no
+      daemon, no key, nothing listening on a port. Ollama is a separate connector for
+      <em>writing</em> text — nothing that indexes or searches goes near it. Without the model,
+      search still works by shared terms and says which mode it used.
+      <a href="https://github.com/ramanathan1504/oss-cli/blob/main/OFFLINE.md">Read the full guide →</a>
+    </p>
   </div>
 </section>
 
@@ -915,6 +1038,7 @@ oss review 4234 -r owner/name</pre>
     <a href="https://github.com/ramanathan1504/oss-cli">Source</a>
     <a href="https://github.com/ramanathan1504/oss-cli/blob/main/COMMANDS.md">Command reference</a>
     <a href="https://github.com/ramanathan1504/oss-cli/blob/main/SETUP.md">Setup guide</a>
+    <a href="https://github.com/ramanathan1504/oss-cli/blob/main/OFFLINE.md">Offline guide</a>
     <a href="https://github.com/ramanathan1504/oss-cli/issues">Report an issue</a>
     <span class="spacer"></span>
     <span>Runs on your machine.</span>

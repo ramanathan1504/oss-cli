@@ -257,6 +257,9 @@ are treated as unknown, and get re-embedded once.
 
 ---
 
+See [OFFLINE.md](OFFLINE.md) for exactly which commands need a network and which
+do not, with a walkthrough you can follow and then unplug.
+
 ## 5. Connecting a model that writes
 
 The embedder above is the only model that ships with the tool. Anything that

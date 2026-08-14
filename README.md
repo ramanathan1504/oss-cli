@@ -54,6 +54,11 @@ You bring the repositories and the data. OSS-CLI does the mapping, indexing and 
 
 ---
 
+> **Working offline?** One command needs the internet — `sync`. Everything else,
+> including search by meaning, reads a file on your disk. See
+> [OFFLINE.md](OFFLINE.md) for what that means exactly, and a sync-once-then-unplug
+> walkthrough.
+
 ## 🧩 Bring what you have — nothing is mandatory
 
 Every capability is a layer, and each is optional. The tool reports which layers a given answer actually used, so a thin result is never mistaken for a confident one.
