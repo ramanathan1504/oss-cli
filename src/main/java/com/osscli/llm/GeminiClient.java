@@ -97,12 +97,23 @@ public class GeminiClient {
                 }
 
                 if (response.statusCode() != 200) {
-                    LOGGER.error("Gemini API failed with status code {}: {}", response.statusCode(), response.body());
-                    throw new IOException("Gemini returned unexpected HTTP status: " + response.statusCode());
+                    // The raw body used to be printed here and then the request retried twice more,
+                    // so a retired model produced three screens of JSON and a six-second wait.
+                    throw new ApiFailure.Permanent(
+                            response.statusCode(),
+                            ApiFailure.explain(
+                                    response.statusCode(),
+                                    "Gemini",
+                                    response.body(),
+                                    "GEMINI_API_KEY or the gemini_api_key keychain entry",
+                                    "aistudio.google.com/apikey"));
                 }
 
                 return parseGeminiResponse(response.body());
 
+            } catch (ApiFailure.Permanent e) {
+                LOGGER.error("{}", e.getMessage());
+                throw e;
             } catch (IOException e) {
                 lastException = e;
                 LOGGER.error("Failed to connect or communicate with Gemini API: {}", e.getMessage());

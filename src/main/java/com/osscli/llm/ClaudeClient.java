@@ -91,7 +91,16 @@ public class ClaudeClient {
                 }
 
                 if (response.statusCode() != 200) {
-                    throw new IOException("Anthropic API failed: " + response.body());
+                    // Anything not already handled above as retryable is permanent: a rejected key
+                    // or a retired model fails identically however many times it is sent.
+                    throw new ApiFailure.Permanent(
+                            response.statusCode(),
+                            ApiFailure.explain(
+                                    response.statusCode(),
+                                    "Claude",
+                                    response.body(),
+                                    "ANTHROPIC_API_KEY or the anthropic_api_key keychain entry",
+                                    "console.anthropic.com"));
                 }
 
                 Map<?, ?> responseMap = MAPPER.readValue(response.body(), Map.class);
@@ -99,6 +108,11 @@ public class ClaudeClient {
                 Map<?, ?> firstBlock = (Map<?, ?>) content.get(0);
                 return (String) firstBlock.get("text");
 
+            } catch (ApiFailure.Permanent e) {
+                // Straight out. Retrying prints the same message twice more and buries the one line
+                // that says what to fix under two copies of itself.
+                LOGGER.error("{}", e.getMessage());
+                throw e;
             } catch (IOException e) {
                 lastException = e;
                 LOGGER.error("Failed to communicate with Claude API: {}", e.getMessage());
