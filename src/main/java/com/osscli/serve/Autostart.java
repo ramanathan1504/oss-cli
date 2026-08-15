@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
+import java.util.stream.Collectors;
 
 /**
  * Keep the local service running, on whichever operating system this is.
@@ -76,15 +77,63 @@ final class Autostart {
     }
 
     /**
+     * A name for this program that survives an upgrade, or null if there is not one.
+     *
+     * <p>Recording the resolved jar was the obvious thing and it is wrong, because the path it
+     * resolves to is a versioned directory. Installed from Homebrew, the agent came out pinned to
+     * {@code /opt/homebrew/Cellar/oss/1.11.10/libexec/lib/oss.jar} — and the very next
+     * {@code brew upgrade} deletes that directory. The service then fails at every login into a log
+     * nobody reads, which is precisely how a sibling launch agent stayed dead for four days.
+     *
+     * <p>A launcher on {@code PATH} is the stable handle: Homebrew re-points
+     * {@code /opt/homebrew/bin/oss} on every upgrade, and a shim in {@code ~/.local/bin} is chosen
+     * by its owner and stays put. Whatever {@code oss} means when typed is what the service should
+     * run.
+     *
+     * <p>Falls back to the jar when there is no launcher — a jar run directly from a build tree has
+     * no stable name, and a pinned path still beats no service at all.
+     */
+    static Path launcher() {
+        String path = System.getenv("PATH");
+        if (path == null || path.isBlank()) {
+            return null;
+        }
+        boolean windows = Platform.detect() == Platform.WINDOWS;
+        for (String dir : path.split(java.io.File.pathSeparator)) {
+            if (dir.isBlank()) {
+                continue;
+            }
+            for (String name : windows ? new String[] {"oss.bat", "oss.cmd", "oss.exe"} : new String[] {"oss"}) {
+                Path candidate = Path.of(dir, name);
+                if (Files.isExecutable(candidate) && !Files.isDirectory(candidate)) {
+                    return candidate;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** How to start this program, preferring the name that outlives a version. */
+    static List<String> startCommand(Path jvm, Path jar) {
+        Path stable = launcher();
+        return stable != null ? List.of(stable.toString()) : List.of(jvm.toString(), "-jar", jar.toString());
+    }
+
+    /**
      * Install, replacing any previous definition.
      *
      * @return a human sentence describing what happened, or null if the platform is unsupported
      */
-    static String install(Path java, Path jar, int port) throws IOException {
+    static String install(Path jvm, Path jar, int port) throws IOException {
         Platform platform = Platform.detect();
         Path out = AppPaths.BASE_DIR.resolve("logs").resolve("serve.out.log");
         Path err = AppPaths.BASE_DIR.resolve("logs").resolve("serve.err.log");
         Files.createDirectories(out.getParent());
+
+        List<String> start = startCommand(jvm, jar);
+        String plistArgs = start.stream().map(a -> "<string>" + a + "</string>").collect(Collectors.joining());
+        String shellArgs = String.join(" ", start);
+        String quotedArgs = start.stream().map(a -> "\"" + a + "\"").collect(Collectors.joining(" "));
 
         switch (platform) {
             case MAC -> {
@@ -96,7 +145,7 @@ final class Autostart {
                           <key>Label</key><string>%s</string>
                           <key>ProgramArguments</key>
                           <array>
-                            <string>%s</string><string>-jar</string><string>%s</string>
+                            %s
                             <string>serve</string><string>--no-open</string>
                             <string>--port</string><string>%d</string>
                           </array>
@@ -106,7 +155,7 @@ final class Autostart {
                           <key>StandardOutPath</key><string>%s</string>
                           <key>StandardErrorPath</key><string>%s</string>
                         </dict></plist>
-                        """.formatted(LABEL, java, jar, port, out, err);
+                        """.formatted(LABEL, plistArgs, port, out, err);
                 Path p = descriptor();
                 Files.createDirectories(p.getParent());
                 Files.writeString(p, plist);
@@ -123,7 +172,7 @@ final class Autostart {
                         After=network.target
 
                         [Service]
-                        ExecStart=%s -jar %s serve --no-open --port %d
+                        ExecStart=%s serve --no-open --port %d
                         Restart=always
                         RestartSec=60
                         StandardOutput=append:%s
@@ -131,7 +180,7 @@ final class Autostart {
 
                         [Install]
                         WantedBy=default.target
-                        """.formatted(java, jar, port, out, err);
+                        """.formatted(shellArgs, port, out, err);
                 Path p = descriptor();
                 Files.createDirectories(p.getParent());
                 Files.writeString(p, unit);
@@ -150,7 +199,7 @@ final class Autostart {
                 // schtasks rather than a Startup-folder shortcut: it survives a reboot, can be
                 // inspected with the tools an administrator already has, and does not depend on a
                 // shell being launched.
-                String cmd = "\"%s\" -jar \"%s\" serve --no-open --port %d".formatted(java, jar, port);
+                String cmd = "%s serve --no-open --port %d".formatted(quotedArgs, port);
                 exec("schtasks", "/delete", "/tn", TASK, "/f");
                 int rc = exec("schtasks", "/create", "/tn", TASK, "/tr", cmd, "/sc", "onlogon", "/f");
                 if (rc != 0) {
