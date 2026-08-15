@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.11.12
+
+_2026-08-16_
+
+- oss history browsed by resuming a conversation (#97)
+
 ## 1.11.11
 
 _2026-08-16_
