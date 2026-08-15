@@ -31,8 +31,7 @@ import org.apache.logging.log4j.Logger;
 public class GeminiClient {
 
     private static final Logger LOGGER = LogManager.getLogger(GeminiClient.class);
-    private static final String GEMINI_URL =
-            "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s";
+    private static final String GEMINI_PATH = "%s/models/%s:generateContent?key=%s";
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private final HttpClient httpClient;
     private final String apiKey;
@@ -69,7 +68,7 @@ public class GeminiClient {
     }
 
     public String generateText(String prompt) throws IOException, InterruptedException {
-        String url = String.format(GEMINI_URL, model, apiKey);
+        String url = String.format(GEMINI_PATH, Endpoints.gemini(), model, apiKey);
 
         Map<String, Object> part = Map.of("text", prompt);
         Map<String, Object> content = Map.of("parts", List.of(part));

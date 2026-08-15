@@ -30,7 +30,11 @@ import org.apache.logging.log4j.Logger;
 
 public class ClaudeClient {
     private static final Logger LOGGER = LogManager.getLogger(ClaudeClient.class);
-    private static final String API_URL = "https://api.anthropic.com/v1/messages";
+
+    private static String apiUrl() {
+        return Endpoints.anthropic() + "/messages";
+    }
+
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final int MAX_RETRIES = 3;
 
@@ -58,7 +62,7 @@ public class ClaudeClient {
 
         String jsonPayload = MAPPER.writeValueAsString(requestBody);
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(API_URL))
+                .uri(URI.create(apiUrl()))
                 .header("Content-Type", "application/json")
                 .header("x-api-key", apiKey)
                 .header("anthropic-version", "2023-06-01")
