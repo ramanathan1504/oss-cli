@@ -123,8 +123,8 @@ class DocumentedCommandsTest {
         String html = Files.readString(SITE);
         Set<String> all = everyCommand();
 
-        Set<String> networked = listItems(html, "offline-col net");
-        Set<String> offline = listItems(html, "offline-col\"");
+        Set<String> networked = boardChips(html, true);
+        Set<String> offline = boardChips(html, false);
 
         assertOverlapIsEmpty(networked, offline, "the landing page");
 
@@ -138,14 +138,16 @@ class DocumentedCommandsTest {
     void siteCountsMatchItsLists() throws IOException {
         String html = Files.readString(SITE);
         int all = everyCommand().size();
-        int networked = listItems(html, "offline-col net").size();
+        int networked = boardChips(html, true).size();
 
+        // The board counts itself in the browser, so the only figure typed into the
+        // page is the one it starts at -- and that must be the whole command set.
         assertTrue(
-                html.contains(">" + networked + " of " + all + "<"),
-                "the 'needs a connection' count should read '" + networked + " of " + all + "'");
+                html.contains("id=\"cable-num\">" + all + "<"),
+                "the board should start reading '" + all + "', the whole command set");
         assertTrue(
-                html.contains(">the other " + (all - networked) + "<"),
-                "the 'needs nothing' count should read 'the other " + (all - networked) + "'");
+                html.contains("<span class=\"cable-of\">of " + all + " commands still work</span>"),
+                "the board's caption should read 'of " + all + " commands still work'");
         assertTrue(
                 html.contains((all - networked) + " of the " + all + " commands never need it"),
                 "the hero's claim should read '" + (all - networked) + " of the " + all + " commands never need it'");
@@ -183,6 +185,33 @@ class DocumentedCommandsTest {
     }
 
     /** The {@code <li>} contents of the first list whose container carries {@code marker}. */
+    /**
+     * The chips on the cable board, split by whether they reach the network.
+     *
+     * <p>One list, two classes -- {@code <li class="cmd net">} against
+     * {@code <li class="cmd">} -- because the board is a single switchable set rather than two
+     * columns. Reading the class is what lets the page animate one side without the count and the
+     * markup being able to drift apart.
+     */
+    private static Set<String> boardChips(String html, boolean networked) {
+        int open = html.indexOf("<ul class=\"cmd-board\"");
+        assertTrue(open >= 0, "cannot find the cable board on the page");
+        int close = html.indexOf("</ul>", open);
+        assertTrue(close > open, "the cable board has no closing </ul>");
+
+        Set<String> out = new LinkedHashSet<>();
+        Matcher m =
+                Pattern.compile("<li class=\"cmd( net)?\"[^>]*>([^<]+)</li>").matcher(html.substring(open, close));
+        while (m.find()) {
+            boolean isNet = m.group(1) != null;
+            if (isNet == networked) {
+                // `model --fetch` is the verb that reaches the network; the command is `model`.
+                out.add(m.group(2).trim().split("\\s+")[0]);
+            }
+        }
+        return new TreeSet<>(out);
+    }
+
     private static Set<String> listItems(String html, String marker) {
         int at = html.indexOf(marker);
         assertTrue(at >= 0, "cannot find a container matching '" + marker + "' on the page");
