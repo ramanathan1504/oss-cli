@@ -87,9 +87,15 @@ public final class Picker {
         if (items == null || items.isEmpty()) {
             return null;
         }
-        if (items.size() == 1) {
+        if (items.size() == 1 && canAsk()) {
             // Nothing to navigate. Asking someone to press enter to confirm the only option is
             // ceremony, and the caller still prints what was chosen.
+            //
+            // Only in front of a person, though. Ungated, this was the whole of a real bug:
+            // `oss history` with exactly one saved conversation took this shortcut in a pipe, and
+            // the caller resumed it -- a browse command silently opening a chat session on a
+            // decision nobody made. Without a terminal it falls through to the numbered fallback,
+            // which reads stdin and cancels when there is nothing there.
             return items.get(0);
         }
         Picker picker = new Picker();
@@ -97,6 +103,23 @@ public final class Picker {
             return picker.interactive(title, items, row, preview);
         }
         return picker.numbered(title, items, row);
+    }
+
+    /**
+     * Whether there is a person on the other end of stdin.
+     *
+     * <p>Raw mode covers the arrow-key path; a console covers the typed-number fallback. Either one
+     * means a question can be asked and an answer waited for. Neither means this is a pipe, a
+     * script, {@code cron} or CI — where the honest answer to "which one?" is that nobody said.
+     *
+     * <p>{@code OSS_ASSUME_TTY} forces it, for a terminal this cannot detect.
+     */
+    public static boolean canAsk() {
+        String forced = System.getenv("OSS_ASSUME_TTY");
+        if (forced != null && !forced.isBlank()) {
+            return !"0".equals(forced.trim()) && !"false".equalsIgnoreCase(forced.trim());
+        }
+        return RawMode.available() || System.console() != null;
     }
 
     // ==========================================
