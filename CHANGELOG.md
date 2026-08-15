@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.11.13
+
+_2026-08-15_
+
+- The local page on :1504 was a third palette (#100)
+- Make the offline claim something you can flip (#100)
+- Changelog dates are UTC, so the site and the repo agree (#99)
+
 ## 1.11.12
 
 _2026-08-15_
