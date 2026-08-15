@@ -203,6 +203,16 @@ public class ExtCommand implements Callable<Integer> {
          * nothing in the core can execute somebody's project for them. A memory can fall back,
          * because a folder of markdown is a real answer.
          */
+        /**
+         * What to do when an extension is attached but does not declare this verb.
+         *
+         * <p>Distinct from {@link #fallback}, which is for no extension at all. Null means the
+         * built-in cannot help either, and the caller should say so.
+         */
+        Integer whenExtensionCannot(String verb, List<String> args) {
+            return null;
+        }
+
         Integer fallback(String verb, List<String> args) {
             return null;
         }
@@ -258,6 +268,22 @@ public class ExtCommand implements Callable<Integer> {
                         return 2;
                     }
                 }
+                // An attached extension that does not declare this verb should cost the verb's
+                // richer form, not the verb. `oss memory file` prints "oss memory search" as its
+                // own next step, and with devon attached that suggestion was refused -- the tool
+                // advertising a command it then rejects. The built-in still holds the local
+                // working copies, so it can answer; it just answers about less.
+                if (ext.resolveVerb(verb) == null) {
+                    Integer handled = whenExtensionCannot(verb, passthrough);
+                    if (handled != null) {
+                        return handled;
+                    }
+                    System.err.println(
+                            "error  \"" + ext.getName() + "\" does not offer \"" + verb + "\" -- it declares: "
+                                    + String.join(", ", ext.getVerbs().keySet()));
+                    return 1;
+                }
+
                 int code = ExtensionRunner.run(ext, verb, passthrough);
                 if (code == 0) {
                     alsoLocally(verb, passthrough);
@@ -344,6 +370,24 @@ public class ExtCommand implements Callable<Integer> {
         }
 
         /**
+         * The archive does not do this one, but the built-in store might.
+         *
+         * <p>`oss memory file` ends by printing `oss memory search "<terms>"`, and with an archive
+         * attached that suggestion was refused -- the tool advertising a command it then rejects.
+         * The built-in holds the local working copies, so it can answer; it simply answers about
+         * fewer notes, and says which store it searched.
+         */
+        @Override
+        Integer whenExtensionCannot(String verb, List<String> args) {
+            if (!BuiltinMemory.supports(verb)) {
+                return null;
+            }
+            System.out.println(
+                    "  the attached archive does not do \"" + verb + "\" — searching the local working copies instead");
+            return BuiltinMemory.run(verb, args);
+        }
+
+        /**
          * Keep a copy locally even when an archive takes the original.
          *
          * <p>Without this the compounding only half works. Filing a note with an archive attached
@@ -353,6 +397,23 @@ public class ExtCommand implements Callable<Integer> {
          * <p>The archive is still where the note LIVES: classified, linked, searchable in a year.
          * This is a working copy for the corpus, and it costs a few kilobytes.
          */
+        /**
+         * The arguments that are actually files.
+         *
+         * <p>Named and package-private so a test can call THIS, rather than restate the rule and
+         * then agree with itself. A test that owns its own copy of a rule passes whatever the
+         * program does.
+         */
+        static List<String> pathsAmong(List<String> args) {
+            List<String> paths = new java.util.ArrayList<>();
+            for (String a : args) {
+                if (!a.startsWith("-") && java.nio.file.Files.isRegularFile(java.nio.file.Path.of(a))) {
+                    paths.add(a);
+                }
+            }
+            return paths;
+        }
+
         @Override
         void alsoLocally(String verb, List<String> args) {
             if (!"file".equals(verb) || args.isEmpty()) {
@@ -366,12 +427,7 @@ public class ExtCommand implements Callable<Integer> {
             //
             // Which options take a value is the extension's business and cannot be known here, so
             // this does not try to parse them: an argument is a path if it is one.
-            List<String> paths = new java.util.ArrayList<>();
-            for (String a : args) {
-                if (!a.startsWith("-") && java.nio.file.Files.isRegularFile(java.nio.file.Path.of(a))) {
-                    paths.add(a);
-                }
-            }
+            List<String> paths = pathsAmong(args);
             if (!paths.isEmpty()) {
                 BuiltinMemory.run("file", paths);
             }

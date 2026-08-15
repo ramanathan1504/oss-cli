@@ -234,7 +234,7 @@ public class AliasCommand implements Callable<Integer> {
         Path p = BIN.resolve(alias);
         // Only remove what we wrote. Without the marker check this would happily delete an
         // unrelated script of the same name that somebody else put there.
-        if (!Files.isRegularFile(p) || !Files.readString(p).contains(MARKER)) {
+        if (!carriesMarker(p)) {
             System.err.println("error  no alias named \"" + alias + "\" created by oss");
             return 1;
         }
@@ -250,12 +250,36 @@ public class AliasCommand implements Callable<Integer> {
         }
         try (var s = Files.list(BIN)) {
             for (Path p : s.toList()) {
-                if (Files.isRegularFile(p) && Files.readString(p).contains(MARKER)) {
+                if (carriesMarker(p)) {
                     out.add(p.getFileName().toString());
                 }
             }
         }
         return out;
+    }
+
+    /**
+     * Whether this file is a shim we wrote.
+     *
+     * <p>{@code ~/.local/bin} is where people keep binaries, and {@code Files.readString} throws
+     * {@code MalformedInputException} on the first byte that is not UTF-8. That took out the whole
+     * listing: {@code oss alias --list} answered {@code error  Input length = 1} because an
+     * unrelated executable happened to share the directory. Nothing to do with aliases, no way to
+     * tell from the message, and it would happen on almost any machine.
+     *
+     * <p>Read as bytes and decode leniently: a shim is a short shell script, so anything that
+     * cannot be decoded is not one. Any read failure is a no, never an exception -- a directory
+     * this command merely scans must not be able to fail the command.
+     */
+    private static boolean carriesMarker(Path p) {
+        try {
+            if (!Files.isRegularFile(p) || Files.size(p) > 64 * 1024) {
+                return false;
+            }
+            return new String(Files.readAllBytes(p), java.nio.charset.StandardCharsets.UTF_8).contains(MARKER);
+        } catch (IOException | RuntimeException e) {
+            return false;
+        }
     }
 
     /** The installed launcher: a real command on PATH, not this JVM and not the jar. */

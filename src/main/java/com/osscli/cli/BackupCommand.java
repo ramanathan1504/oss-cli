@@ -196,7 +196,12 @@ public class BackupCommand implements Callable<Integer> {
 
         long[] count = {0};
         List<String> unreadable = new ArrayList<>();
-        try (FileOutputStream fos = new FileOutputStream(partial.toFile());
+        // A backup of a 496 MB database plus a synced archive runs for minutes, and this printed
+        // one line and then nothing. Silence is indistinguishable from a hang -- the same reason
+        // `model --fetch` and sync indexing grew a live line. Without it the honest response to a
+        // long backup is to assume it has stopped and kill it, which is how a backup gets skipped.
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("backup");
+                FileOutputStream fos = new FileOutputStream(partial.toFile());
                 ZipOutputStream zos = new ZipOutputStream(fos)) {
 
             for (Path dir : sources) {
@@ -222,11 +227,17 @@ public class BackupCommand implements Callable<Integer> {
                         }
                         zos.closeEntry();
                         count[0]++;
+                        // Every 200 files rather than every file: a redraw per file on a corpus
+                        // this size is more work than the copying.
+                        if (count[0] % 200 == 0) {
+                            live.step(count[0] + " files · " + dir.getFileName());
+                        }
                         return FileVisitResult.CONTINUE;
                     }
                 });
             }
 
+            live.done(count[0] + " file(s) archived");
             LOGGER.info("  {} file(s) archived", count[0]);
             if (!unreadable.isEmpty()) {
                 LOGGER.warn("  {} file(s) could not be read and are NOT in this backup:", unreadable.size());

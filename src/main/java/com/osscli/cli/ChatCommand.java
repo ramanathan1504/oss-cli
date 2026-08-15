@@ -135,7 +135,12 @@ public class ChatCommand implements Callable<Integer> {
             Issue target = findIssue(repository, issueNumber);
             if (target == null) {
                 LOGGER.error("Issue #{} is not in the local data for '{}'.", issueNumber, repository);
-                LOGGER.error("  oss sync -r {} brings it down first.", repository);
+                // NOT `oss sync`. Sync fetches OPEN issues from a delta watermark, so it can
+                // never bring down a closed one -- and a closed issue is exactly the kind
+                // somebody comes back to read. The old advice sent people round a loop that
+                // reported "0 saved" every time and left them no better off.
+                LOGGER.error("  oss issue {} --repo {} fetches it, and keeps it.", issueNumber, repository);
+                LOGGER.error("  oss sync -r {} only covers issues that are still open.", repository);
                 return null;
             }
             long id = ChatSessionStore.open(repository, issueNumber, target.title(), providerName(), null);

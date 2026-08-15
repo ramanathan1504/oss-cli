@@ -61,6 +61,24 @@ Every sync builds the vector index for the repositories it touched, using the bu
 
 Indexing prints the same live status line as `oss model --fetch` — on stderr, with elapsed time and a running count of issues embedded. Thousands of model calls on a first index is otherwise the longest stretch of silence in a sync, and silence is indistinguishable from a hang. The same rules apply: animation only on a terminal, plain one-line-per-step output otherwise, `NO_COLOR` and `OSS_NO_QUIPS` honoured.
 
+**Pointing a provider somewhere else.** The cloud endpoints are overridable, for a corporate gateway, a self-hosted relay or an Azure-style deployment:
+
+| Provider | Environment | Config key |
+|---|---|---|
+| Gemini | `GEMINI_BASE_URL` | `gemini.base_url` |
+| OpenAI | `OPENAI_BASE_URL` | `openai.base_url` |
+| Claude | `ANTHROPIC_BASE_URL` | `claude.base_url` |
+
+A JVM property (`-Doss.claude.base_url=…`) wins over both, for a single run. An override is announced on the first request, because a redirected client that fails looks exactly like a rejected key. A trailing slash is trimmed, so pasting one does not produce a `//` that 404s.
+
+**Sync fetches issues that are still open, and only those changed since its last run.** A closed issue therefore never arrives this way — `sync` reports `Open Issues Saved: 0` and nothing changes, however many times it is run. Reach for it by number instead:
+
+```bash
+oss issue 4129 --repo apache/logging-log4j2
+```
+
+That fetches the issue whatever its state and **keeps it**, so `chat`, `prompt` and the rest can use it afterwards. Which matters more than it sounds: a closed issue is the kind you go back to read, because it is closed on account of having been resolved and the resolution is the interesting part.
+
 Sync also reads the **references** out of every issue and pull request it saves — `fixes #123`, a bare `#123`, `owner/name#123`, and commits — and stores them as edges that retrieval follows. See [`prompt`](#prompt) for what is done with them.
 
 `sync --me` is the exception. Everything it builds is vectors, so it requires the embedder and stops with the fetch hint rather than running to no effect. Its development stories are the one part that still wants Ollama; when Ollama is absent they are skipped with a warning and everything else is indexed as usual. It also records, per note, whether the note is **your own work or material you merely collected** — see [`prompt`](#prompt).

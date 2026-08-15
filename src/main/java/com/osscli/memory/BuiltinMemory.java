@@ -59,6 +59,11 @@ public final class BuiltinMemory {
         }
     }
 
+    /** The verbs the built-in store can answer, so a caller can ask before falling back to it. */
+    public static boolean supports(String verb) {
+        return java.util.Set.of("file", "search", "index").contains(verb);
+    }
+
     // --------------------------------------------------------------------- file ---
 
     private static int file(List<String> args) throws IOException {

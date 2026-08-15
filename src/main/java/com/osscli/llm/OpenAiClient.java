@@ -30,7 +30,11 @@ import org.apache.logging.log4j.Logger;
 
 public class OpenAiClient {
     private static final Logger LOGGER = LogManager.getLogger(OpenAiClient.class);
-    private static final String API_URL = "https://api.openai.com/v1/chat/completions";
+
+    private static String apiUrl() {
+        return Endpoints.openai() + "/chat/completions";
+    }
+
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final int MAX_RETRIES = 3;
 
@@ -58,7 +62,7 @@ public class OpenAiClient {
 
         String jsonPayload = MAPPER.writeValueAsString(requestBody);
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(API_URL))
+                .uri(URI.create(apiUrl()))
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + apiKey)
                 .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))

@@ -107,7 +107,8 @@ public class AnalyzeCommand implements Callable<Integer> {
 
             LOGGER.info("Analyzing Issue #{}: {}", issue.number(), issue.title());
 
-            String prompt = String.format("""
+            String prompt = String.format(
+                    """
                     You are an expert maintainer for the '%s' open-source repository.
                     Classify the severity of the following GitHub issue.
 
@@ -126,7 +127,7 @@ public class AnalyzeCommand implements Callable<Integer> {
                       "confidence": 0.91,
                       "reason": "Potential deadlock affecting production systems."
                     }
-                    """, issue.title(), issue.body());
+                    """, repository, issue.title(), issue.body() == null ? "(no description)" : issue.body());
 
             try {
                 String rawJson = client.generateJson(prompt);
