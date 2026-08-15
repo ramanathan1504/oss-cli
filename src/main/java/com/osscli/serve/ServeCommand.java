@@ -353,10 +353,14 @@ public class ServeCommand implements Callable<Integer> {
             <!doctype html><html><head><meta charset="utf-8">
             <meta name="viewport" content="width=device-width,initial-scale=1">
             <title>oss</title><style>
-            :root{--bg:#fbfaf8;--fg:#1c1b19;--mut:#6b675f;--line:#e2ded6;--card:#fff;
-                  --acc:#8a5a2b;--ok:#2f6f43;--bad:#a33;--code:#f3f0ea}
-            @media(prefers-color-scheme:dark){:root{--bg:#151412;--fg:#e8e4dc;--mut:#9a948a;
-                  --line:#2c2a26;--card:#1c1a17;--acc:#d9a066;--ok:#7fb08c;--bad:#e08585;--code:#232019}}
+            /* The site's palette, not a third one. This page was warm cream with a
+               brown accent while the landing page and the manual are deep teal with
+               brass -- so the local service looked like a different product from the
+               tool that started it. Values are the same as site/index.html. */
+            :root{--bg:#EDF2F3;--fg:#08161D;--mut:#536A74;--line:#CBDADD;--card:#F8FBFB;
+                  --acc:#8A6A0F;--ok:#1B6259;--bad:#8C3A22;--code:#E2EBEC}
+            @media(prefers-color-scheme:dark){:root{--bg:#07141A;--fg:#E6EFF0;--mut:#7B949C;
+                  --line:#1A3540;--card:#0D202A;--acc:#D8B23A;--ok:#5FBFB0;--bad:#E08066;--code:#040E13}}
             *{box-sizing:border-box}
             body{margin:0;background:var(--bg);color:var(--fg);
                  font:15px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}

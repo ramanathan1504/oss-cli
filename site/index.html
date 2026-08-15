@@ -358,24 +358,71 @@ kbd{
    Two columns that are honestly asymmetric. One command needs the internet and
    two dozen do not, and a layout that gave each side equal weight would be
    arguing the opposite of the point. */
-.offline-grid{display:grid;gap:1.25rem;grid-template-columns:1fr;margin-top:2rem}
-@media (min-width:900px){.offline-grid{grid-template-columns:minmax(0,17rem) minmax(0,1fr);gap:1.75rem}}
-.offline-col{
-  border:1px solid var(--rule);border-radius:var(--radius);
-  padding:1.15rem 1.25rem;background:var(--bg-raised);box-shadow:var(--lift-1);
+/* ── the cable board ──────────────────────────────────────────────────────
+   One claim, made switchable. The seven that reach GitHub carry the brass
+   the rest of the page uses for "this costs you something"; pulling the
+   cable drains it out of them and leaves twenty-nine lit.
+
+   Static-first: with no JS the board is connected and every chip is legible,
+   because a page whose content depends on a script is a page that sometimes
+   has no content. */
+.cable{margin-top:2rem}
+.cable-bar{
+  display:flex;flex-wrap:wrap;align-items:center;gap:.9rem 1.4rem;
+  padding-bottom:1rem;border-bottom:1px solid var(--rule-soft);margin-bottom:1.25rem;
 }
-.offline-col h3{font-size:.95rem;letter-spacing:-.01em;margin-bottom:.2rem}
-.offline-col .count{
-  display:block;font-family:var(--mono);font-size:.74rem;color:var(--ink-faint);
-  letter-spacing:.05em;text-transform:uppercase;margin-bottom:.75rem;
+.cable-switch{
+  display:inline-flex;align-items:center;gap:.65rem;cursor:pointer;
+  background:var(--bg-raised);border:1px solid var(--rule);border-radius:999px;
+  padding:.4rem .95rem .4rem .45rem;color:var(--ink);font:inherit;font-size:.86rem;
+  transition:border-color .25s ease,background .25s ease;
 }
-.offline-col ul{list-style:none;display:flex;flex-wrap:wrap;gap:.4rem}
-.offline-col li{
-  font-family:var(--mono);font-size:.76rem;padding:.16rem .5rem;
-  border:1px solid var(--rule);border-radius:5px;color:var(--ink-soft);
+.cable-switch:hover{border-color:var(--brass)}
+.cable-switch:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+.cable-switch .knob{
+  width:2.1rem;height:1.15rem;border-radius:999px;flex:none;position:relative;
+  background:var(--rule);transition:background .3s ease;
 }
-.offline-col.net li{border-color:var(--brass);color:var(--brass)}
-.offline-col.net{border-color:var(--brass)}
+.cable-switch .knob::after{
+  content:"";position:absolute;top:.16rem;left:.16rem;width:.83rem;height:.83rem;
+  border-radius:50%;background:var(--patina);
+  transition:transform .3s cubic-bezier(.22,1,.36,1),background .3s ease;
+}
+.cable-switch[aria-pressed="true"] .knob{background:#2A1A12}
+.cable-switch[aria-pressed="true"] .knob::after{transform:translateX(.95rem);background:var(--rust)}
+.cable-read{display:flex;align-items:baseline;gap:.5rem;margin:0}
+.cable-num{
+  font-family:var(--mono);font-size:1.7rem;font-weight:600;color:var(--patina);
+  font-variant-numeric:tabular-nums;line-height:1;transition:color .3s ease;
+}
+.cable.cut .cable-num{color:var(--brass)}
+.cable-of{font-size:.85rem;color:var(--ink-faint)}
+
+.cmd-board{list-style:none;display:flex;flex-wrap:wrap;gap:.45rem}
+.cmd{
+  font-family:var(--mono);font-size:.78rem;padding:.24rem .6rem;
+  border:1px solid var(--rule);border-radius:6px;color:var(--ink-soft);
+  background:var(--bg-raised);
+  transition:opacity .32s ease,color .32s ease,border-color .32s ease,
+             transform .32s cubic-bezier(.22,1,.36,1),filter .32s ease;
+}
+.cmd.net{border-color:var(--brass);color:var(--brass)}
+/* Cut: the seven slide down a touch, drain and go quiet. Staggered by --i so it
+   reads as a wave crossing the board rather than a single flat flicker. */
+.cable.cut .cmd.net{
+  opacity:.26;color:var(--ink-faint);border-color:var(--rule-soft);
+  transform:translateY(3px);filter:saturate(0);
+  transition-delay:calc(var(--i) * 28ms);
+}
+.cable.cut .cmd:not(.net){
+  border-color:var(--patina);color:var(--ink);
+  transition-delay:calc(var(--i) * 9ms);
+}
+@media (prefers-reduced-motion:reduce){
+  .cmd,.cable-switch .knob,.cable-switch .knob::after,.cable-num{transition:none}
+  .cable.cut .cmd.net{transform:none;transition-delay:0s}
+  .cable.cut .cmd:not(.net){transition-delay:0s}
+}
 .offline-note{margin-top:.85rem;font-size:.82rem;color:var(--ink-faint)}
 .offline-steps{margin-top:2.25rem}
 .offline-steps .step-h{display:block;font-weight:600;margin-bottom:.5rem}
@@ -800,41 +847,69 @@ td .need,td.need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)
       not behind an API.
     </p>
 
-    <div class="offline-grid">
-      <div class="offline-col net">
-        <h3>Needs a connection</h3>
-        <span class="count">7 of 36</span>
-        <ul>
-          <li>sync</li><li>issue</li><li>pr</li>
-          <li>hub</li><li>followup</li><li>review</li><li>model</li>
-        </ul>
-        <p class="offline-note">
-          Six fetch from GitHub. <code>review</code> asks only for the pull request's head
-          commit — unchanged, and the answer comes from cache. <code>model --fetch</code>
-          downloads the embedder once, ever; every other <code>model</code> verb is local.
+    <!-- Pull the cable. The whole claim on this page, made switchable: flipping it
+         dims the seven that reach GitHub and leaves the other twenty-nine lit.
+         Static-first — with no JS the board renders connected and complete, which
+         is the honest default, and the caption still states the split. -->
+    <div class="cable" id="cable">
+      <div class="cable-bar">
+        <button class="cable-switch" id="cable-switch" type="button" aria-pressed="false">
+          <span class="knob" aria-hidden="true"></span>
+          <span class="cable-label">Pull the cable</span>
+        </button>
+        <p class="cable-read">
+          <span class="cable-num" id="cable-num">36</span>
+          <span class="cable-of">of 36 commands still work</span>
         </p>
       </div>
 
-      <div class="offline-col">
-        <h3>Needs nothing</h3>
-        <span class="count">the other 29</span>
-        <ul>
-          <li>search</li><li>prompt</li><li>inspect</li><li>history</li><li>chat</li>
-          <li>critical</li><li>duplicates</li><li>triage</li><li>guide</li><li>profile</li>
-          <li>onboard</li><li>report</li><li>trend</li><li>analyze</li><li>backlog</li>
-          <li>pick</li><li>hidden-critical</li><li>prs</li><li>serve</li><li>backup</li>
-          <li>restore</li><li>doctor</li><li>alias</li><li>ext</li><li>setup</li>
-          <li>run</li><li>memory</li><li>bench</li><li>kb</li>
-        </ul>
-        <p class="offline-note">
-          These need no network to do their job. <code>doctor</code> pings GitHub and Ollama to tell you
-          whether they are reachable — that is the check, not a dependency — and
-          <code>serve</code> binds a web interface to localhost, over the corpus already on
-          your disk. <code>run</code> and <code>memory</code> hand off to whichever extension
-          you attached, so they are as offline as it is. <code>chat</code> and <code>guide</code>
-          reach a cloud API only if you pass <code>--gemini</code> and friends — never unasked.
-        </p>
-      </div>
+      <ul class="cmd-board" id="cmd-board">
+        <li class="cmd net" style="--i:0" title="fetches issues, PRs and comments — the one that matters">sync</li>
+        <li class="cmd net" style="--i:1" title="pulls one issue you have not synced">issue</li>
+        <li class="cmd net" style="--i:2" title="pulls one pull request you have not synced">pr</li>
+        <li class="cmd net" style="--i:3" title="reads across the repositories you follow">hub</li>
+        <li class="cmd net" style="--i:4" title="checks whether a branch moved since you reviewed it">followup</li>
+        <li class="cmd net" style="--i:5" title="asks for the PR's head commit; unchanged, and it answers from cache">review</li>
+        <li class="cmd net" style="--i:6" title="downloads the embedder. Once, ever. 22 MB">model --fetch</li>
+        <li class="cmd" style="--i:7">search</li>
+        <li class="cmd" style="--i:8">prompt</li>
+        <li class="cmd" style="--i:9">inspect</li>
+        <li class="cmd" style="--i:10">history</li>
+        <li class="cmd" style="--i:11">chat</li>
+        <li class="cmd" style="--i:12">critical</li>
+        <li class="cmd" style="--i:13">duplicates</li>
+        <li class="cmd" style="--i:14">triage</li>
+        <li class="cmd" style="--i:15">guide</li>
+        <li class="cmd" style="--i:16">profile</li>
+        <li class="cmd" style="--i:17">onboard</li>
+        <li class="cmd" style="--i:18">report</li>
+        <li class="cmd" style="--i:19">trend</li>
+        <li class="cmd" style="--i:20">analyze</li>
+        <li class="cmd" style="--i:21">backlog</li>
+        <li class="cmd" style="--i:22">pick</li>
+        <li class="cmd" style="--i:23">hidden-critical</li>
+        <li class="cmd" style="--i:24">prs</li>
+        <li class="cmd" style="--i:25">serve</li>
+        <li class="cmd" style="--i:26">backup</li>
+        <li class="cmd" style="--i:27">restore</li>
+        <li class="cmd" style="--i:28">doctor</li>
+        <li class="cmd" style="--i:29">alias</li>
+        <li class="cmd" style="--i:30">ext</li>
+        <li class="cmd" style="--i:31">setup</li>
+        <li class="cmd" style="--i:32">run</li>
+        <li class="cmd" style="--i:33">memory</li>
+        <li class="cmd" style="--i:34">bench</li>
+        <li class="cmd" style="--i:35">kb</li>
+      </ul>
+
+      <p class="offline-note" id="cable-note">
+        Connected, all thirty-six answer. <strong>Pull the cable</strong> and the seven that
+        reach GitHub go dark — six fetch something you asked for by number, and
+        <code>model --fetch</code> downloads the embedder once in the life of the install.
+        The other twenty-nine never needed it: <code>doctor</code> pings and reports rather
+        than depends, <code>serve</code> binds to localhost over the corpus already on disk,
+        and <code>run</code> and <code>memory</code> are as offline as the extension you attached.
+      </p>
     </div>
 
     <div class="offline-steps">
@@ -2081,6 +2156,69 @@ oss review 4234 -r owner/name</pre>
   } else {
     start();
   }
+})();
+</script>
+
+<script>
+/* The cable switch. Everything it changes is a class; the numbers it counts are
+   read off the board rather than typed here, so a command added to the markup
+   is counted without anyone remembering to update a total. That is the same rule
+   the rest of this project follows for prose counts, and the reason the page and
+   the binary last disagreed by five commands. */
+(() => {
+  const board  = document.getElementById('cable');
+  const btn    = document.getElementById('cable-switch');
+  const num    = document.getElementById('cable-num');
+  if (!board || !btn || !num) return;
+
+  const all    = board.querySelectorAll('.cmd').length;
+  const netted = board.querySelectorAll('.cmd.net').length;
+  const calm   = matchMedia('(prefers-reduced-motion: reduce)');
+
+  // Counting down rather than swapping the number: the point being made is how
+  // FEW are lost, and a figure that falls past thirty-five to twenty-nine shows
+  // that better than the answer appearing on its own.
+  let raf = 0;
+  function countTo(target) {
+    cancelAnimationFrame(raf);
+    const from = parseInt(num.textContent, 10) || all;
+    if (calm.matches || from === target) { num.textContent = String(target); return; }
+    const started = performance.now(), ms = 420;
+    (function tick(now) {
+      const t = Math.min(1, (now - started) / ms);
+      const eased = 1 - Math.pow(1 - t, 3);
+      num.textContent = String(Math.round(from + (target - from) * eased));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    })(started);
+  }
+
+  function set(cut) {
+    board.classList.toggle('cut', cut);
+    btn.setAttribute('aria-pressed', String(cut));
+    btn.querySelector('.cable-label').textContent = cut ? 'Plug it back in' : 'Pull the cable';
+    countTo(cut ? all - netted : all);
+  }
+
+  btn.addEventListener('click', () => set(btn.getAttribute('aria-pressed') !== 'true'));
+
+  // Shown once, unasked, when the board first scrolls into view -- the claim is
+  // the point of the section, and a control nobody touches makes it silently.
+  // Only once, and only if the reader has not already flipped it themselves.
+  let demoed = false;
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (!e.isIntersecting || demoed) return;
+      demoed = true;
+      io.disconnect();
+      if (calm.matches) return;
+      setTimeout(() => {
+        if (btn.getAttribute('aria-pressed') === 'true') return;
+        set(true);
+        setTimeout(() => { if (btn.getAttribute('aria-pressed') === 'true') set(false); }, 2400);
+      }, 600);
+    });
+  }, { threshold: 0.35 });
+  io.observe(board);
 })();
 </script>
 </body>
