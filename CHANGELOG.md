@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.11.9
+
+_2026-08-15_
+
+- Run the commands, in the tests (#92)
+- A closed issue could not be reached at all (#91)
+
+
 ## 1.11.8
 
 _2026-08-14_
