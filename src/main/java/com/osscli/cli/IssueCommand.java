@@ -3,6 +3,7 @@ package com.osscli.cli;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.osscli.github.GitHubClient;
+import com.osscli.github.Reachability;
 import com.osscli.ui.NextSteps;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
@@ -100,7 +101,9 @@ public class IssueCommand implements Callable<Integer> {
             NextSteps.suggest(NextSteps.After.TRIAGE, String.valueOf(number));
             return 0;
         } catch (Exception e) {
-            System.err.println("error  " + e.getMessage());
+            // Never e.getMessage() raw: ConnectException carries none, and this printed the literal
+            // word "null" at anyone whose wifi was off.
+            System.err.println("error  " + Reachability.describe(e));
             return 1;
         }
     }

@@ -123,6 +123,13 @@ public class FollowupCommand implements Callable<Integer> {
                 }
                 report(r);
             }
+            if (com.osscli.github.Reachability.seen()) {
+                // Every row printed the bare word "unreachable", which reads as a fact about those
+                // pull requests. Said once here, it is a fact about this machine instead.
+                System.out.println();
+                System.out.println("  none of these could be read: " + com.osscli.github.Reachability.whyUnreadable());
+                System.out.println("  What you already synced still answers: oss search, oss inspect, oss prompt.");
+            }
             if (only == null) {
                 System.out.println();
                 System.out.println("  oss followup <n>          one pull request in full");
@@ -131,7 +138,7 @@ public class FollowupCommand implements Callable<Integer> {
             }
             return 0;
         } catch (Exception e) {
-            System.err.println("error  " + e.getMessage());
+            System.err.println("error  " + com.osscli.github.Reachability.describe(e));
             return 1;
         }
     }

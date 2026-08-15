@@ -224,6 +224,32 @@ Being straight about the edges:
   exact commit it answers from cache, but confirming the commit is unchanged is a
   call.
 
+### What the commands that do need a connection say without one
+
+They are refusals, and they name the cause. This was not true until it was
+tested: with the wifi off, `oss issue` and `oss pr` printed `error  null`, `oss
+review` printed forty lines of `jdk.internal.net.http` stack, and `oss hub`
+reported seventeen pull requests as *"private, deleted, or no token"* — three
+explanations, all wrong, each sending the reader off to check a thing that was
+fine.
+
+```
+$ oss issue 4143 --repo owner/name
+error  no network — api.github.com could not be resolved.
+       Everything already synced still works offline: oss search, oss inspect, oss prompt.
+
+$ oss hub
+  17 unreachable (no network — GitHub was not reachable)
+```
+
+A cause is only named when there is evidence for it. `hub` still says "private,
+deleted, or no token" when the network is up and a pull request genuinely cannot
+be read, because then that is the true list.
+
+`GITHUB_API_URL` (or `-Doss.github.api=`) points the client somewhere else. It is
+there for GitHub Enterprise, and it is how the offline behaviour above is tested:
+aimed at a host that does not resolve, it reproduces a pulled cable exactly.
+
 ---
 
 ## 7. Where it all lives

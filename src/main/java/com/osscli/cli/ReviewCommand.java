@@ -123,6 +123,16 @@ public class ReviewCommand implements Callable<Integer> {
         } catch (IllegalArgumentException e) {
             LOGGER.error("{}", e.getMessage());
             return 1;
+        } catch (java.io.IOException | InterruptedException e) {
+            // This catch used to name IllegalArgumentException alone, so a connect failure -- not
+            // one -- escaped into picocli and reached the user as forty lines of
+            // jdk.internal.net.http stack. A review needs the network and cannot be done without
+            // it; that is a sentence, not a crash.
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            LOGGER.error("{}", com.osscli.github.Reachability.describe(e));
+            return 1;
         }
 
         printFacts(ev);

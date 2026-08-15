@@ -34,7 +34,27 @@ public class GitHubClient {
     private static final Logger LOGGER = LogManager.getLogger(GitHubClient.class);
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final String GITHUB_API = "https://api.github.com";
+
+    /**
+     * Where the API lives. Overridable, so what a disconnected machine does can be tested.
+     *
+     * <p>Not a feature request — the offline behaviour of six commands was wrong at once and nothing
+     * in the suite could have caught it, because every test either had a network or mocked the layer
+     * above the failure. Pointed at a host that does not resolve, this reproduces a pulled cable
+     * exactly: the same exception, from the same place, with the same null message.
+     *
+     * <p>{@code GITHUB_API_URL} is also what GitHub Enterprise installations set, so this is the
+     * name someone would already reach for.
+     */
+    static String apiBase() {
+        for (String candidate : new String[] {System.getProperty("oss.github.api"), System.getenv("GITHUB_API_URL")}) {
+            if (candidate != null && !candidate.isBlank()) {
+                String trimmed = candidate.trim();
+                return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
+            }
+        }
+        return "https://api.github.com";
+    }
 
     private final HttpClient httpClient;
     private final String token;
@@ -53,7 +73,7 @@ public class GitHubClient {
         List<Issue> allIssues = new ArrayList<>();
 
         for (int page = 1; ; page++) {
-            String url = GITHUB_API + "/repos/" + owner + "/" + repo + "/issues?state=open&per_page=100&page=" + page;
+            String url = apiBase() + "/repos/" + owner + "/" + repo + "/issues?state=open&per_page=100&page=" + page;
 
             // Append since parameter to the API URL if present
             if (since != null && !since.trim().isEmpty()) {
@@ -83,7 +103,12 @@ public class GitHubClient {
                 .GET()
                 .build();
 
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response;
+        try {
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException e) {
+            throw Reachability.asFailure(e);
+        }
 
         if (response.statusCode() != 200) {
             throw new IOException(describeApiFailure(response));
@@ -133,7 +158,7 @@ public class GitHubClient {
     }
 
     public List<Issue> searchIssuesAndPrs(String query) throws IOException, InterruptedException {
-        String urlString = "https://api.github.com/search/issues?q="
+        String urlString = apiBase() + "/search/issues?q="
                 + java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8);
 
         java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
@@ -144,8 +169,12 @@ public class GitHubClient {
                 .timeout(java.time.Duration.ofSeconds(20))
                 .build();
 
-        java.net.http.HttpResponse<String> response =
-                httpClient.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+        java.net.http.HttpResponse<String> response;
+        try {
+            response = httpClient.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+        } catch (IOException e) {
+            throw Reachability.asFailure(e);
+        }
 
         if (response.statusCode() != 200) {
             throw new IOException(
@@ -172,8 +201,12 @@ public class GitHubClient {
                 .timeout(java.time.Duration.ofSeconds(10))
                 .build();
 
-        java.net.http.HttpResponse<String> response =
-                httpClient.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+        java.net.http.HttpResponse<String> response;
+        try {
+            response = httpClient.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+        } catch (IOException e) {
+            throw Reachability.asFailure(e);
+        }
 
         if (response.statusCode() != 200) {
             throw new IOException("GitHub Pull Request Files API failed with status code " + response.statusCode());
@@ -198,14 +231,13 @@ public class GitHubClient {
 
     /** Raw JSON body of an arbitrary API path, e.g. {@code /repos/o/r/pulls/1}. Null when the endpoint 404s. */
     public String getJson(String path) throws IOException, InterruptedException {
-        return get(GITHUB_API + path, "application/vnd.github+json");
+        return get(apiBase() + path, "application/vnd.github+json");
     }
 
     /** The unified diff for a pull request, via the {@code .diff} media type. Null when unavailable. */
     public String getPullRequestDiff(String owner, String repo, long prNumber)
             throws IOException, InterruptedException {
-        return get(
-                GITHUB_API + "/repos/" + owner + "/" + repo + "/pulls/" + prNumber, "application/vnd.github.v3.diff");
+        return get(apiBase() + "/repos/" + owner + "/" + repo + "/pulls/" + prNumber, "application/vnd.github.v3.diff");
     }
 
     /**
@@ -220,7 +252,7 @@ public class GitHubClient {
 
         for (int page = 1; page <= maxPages; page++) {
             String body =
-                    get(GITHUB_API + path + separator + "per_page=100&page=" + page, "application/vnd.github+json");
+                    get(apiBase() + path + separator + "per_page=100&page=" + page, "application/vnd.github+json");
             if (body == null) {
                 break;
             }
@@ -242,7 +274,7 @@ public class GitHubClient {
      */
     public String getFileContent(String owner, String repo, String filePath) throws IOException, InterruptedException {
         String body = get(
-                GITHUB_API + "/repos/" + owner + "/" + repo + "/contents/" + filePath, "application/vnd.github.v3.raw");
+                apiBase() + "/repos/" + owner + "/" + repo + "/contents/" + filePath, "application/vnd.github.v3.raw");
         return body;
     }
 
@@ -257,7 +289,16 @@ public class GitHubClient {
                 .timeout(java.time.Duration.ofSeconds(30))
                 .build();
 
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response;
+        try {
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException e) {
+            // Translated here rather than in each caller. A disconnected machine raises
+            // ConnectException with a null message, and six different catch blocks were each
+            // inventing their own wrong explanation for it -- including "private, deleted, or no
+            // token" against seventeen pull requests that were none of those things.
+            throw Reachability.asFailure(e);
+        }
 
         if (response.statusCode() == 404) {
             return null;
