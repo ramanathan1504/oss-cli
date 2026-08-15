@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.11.11
+
+_2026-08-16_
+
+- The serve agent recorded a path brew deletes on the next upgrade (#96)
+
 ## 1.11.10
 
 _2026-08-16_
