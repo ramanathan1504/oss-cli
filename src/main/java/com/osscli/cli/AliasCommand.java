@@ -38,7 +38,25 @@ import picocli.CommandLine.Parameters;
 public class AliasCommand implements Callable<Integer> {
 
     /** Where a personal shim goes. Conventional, per-user, and needs no privileges. */
-    private static final Path BIN = Path.of(System.getProperty("user.home"), ".local", "bin");
+    private static final Path BIN = resolveBin();
+
+    /**
+     * Where a personal shim goes, and where a test can point it instead.
+     *
+     * <p>Fixed at {@code ~/.local/bin}, this could only be exercised against whatever the developer
+     * happened to have installed — so a test of the listing passed or failed by accident. It did
+     * exactly that: a test written to catch the encoding bug passed with the bug reintroduced,
+     * because that machine's copy of the directory no longer held a file that triggered it.
+     *
+     * <p>A test that depends on the machine it runs on is not a test.
+     */
+    private static Path resolveBin() {
+        String override = System.getProperty("oss.alias.bin");
+        if (override != null && !override.isBlank()) {
+            return Path.of(override);
+        }
+        return Path.of(System.getProperty("user.home"), ".local", "bin");
+    }
 
     /** Marks shims we wrote, so --list and --remove cannot touch somebody else's script. */
     private static final String MARKER = "# created by `oss alias` — safe to delete";

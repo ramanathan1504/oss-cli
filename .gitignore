@@ -66,3 +66,8 @@ reports/
 # IDE files
 .idea/
 *.iml
+
+# Reports written into the working directory by `oss backlog`. The script writes
+# beside wherever it was run, so running it inside this checkout leaves an
+# artefact that git will happily offer to commit -- and did, once.
+triage-*.html
