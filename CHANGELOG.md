@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.11.10
+
+_2026-08-16_
+
+- oss setup needs a terminal, and now says so (#94)
+- Let backlog's own flags reach the report (#94)
+- Make a pasted example run, and say which of four problems occurred (#94)
+- Answer offline, and stop presenting noise as a search result (#94)
+
 ## 1.11.9
 
 _2026-08-15_
