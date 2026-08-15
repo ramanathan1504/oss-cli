@@ -271,8 +271,13 @@ public class GuideCommand implements Callable<Integer> {
                             "\n================ CLOUD BLUEPRINT ({}) ================\n{}\n============================================================",
                             provider,
                             cloudOutput);
-                    LOGGER.info("  Not verified against your own past work — that step needs a local model.");
-                    LOGGER.info("  Attach one and the blueprint comes back checked: ollama serve");
+                    com.osscli.retrieval.Sources.report(
+                            repository,
+                            issueNumber,
+                            com.osscli.retrieval.Sources.count(issueNumber, repository),
+                            provider,
+                            false,
+                            "no local model — that step cannot be done by the API that wrote the answer");
                     return 0;
                 }
 

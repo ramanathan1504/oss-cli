@@ -262,6 +262,25 @@ oss chat 4129 --openai         # escalate to OpenAI instead of Gemini
 
 **Long conversations are folded, not silently truncated.** Once the transcript outgrows the model's context, the older turns are summarised into a running summary and the recent ones kept verbatim. With no generation model attached the oldest turns are dropped instead — and that is printed, because quietly forgetting the first half of a conversation while continuing to answer confidently is the failure worth shouting about. The full transcript stays readable in `oss history --show` either way.
 
+**Every answer says what went into it.** `review` has always closed with the layers it used; `chat` and `guide` now do the same. Without it an answer built from your whole corpus and one built from the issue title alone print identically, and you are left guessing which you got.
+
+```
+── What went into this answer ──
+  ✔ The issue as filed              #4129 in apache/logging-log4j2
+  ✔ Your own prior work             22 passages (~5750 tokens) of 32 that matched
+        1 issue · 16 notes · 5 related issues
+  ✔ Answered by                     Gemini
+  ✗ Read back against your history  no local model — the API that wrote the
+                                    answer cannot also check it
+
+── What would make the next one better ──
+  · attach a local model that fits — then a cloud answer is checked against your own work
+```
+
+Three things in order: **what you already had**, **what the model added**, and **what would improve the next one**. `22 of 32` is the honest number — ten of your own passages did not fit the budget, and saying so is the point. Every absence carries its remedy, because an absence without one is a complaint.
+
+Alignment is the line worth watching. A cloud answer read back against your own past work is a different object from one that was not, and only a local model can do that check — sending your history to the same API that wrote the answer would undo the reason the two steps are separate.
+
 **A model that does not fit is not loaded.** Ollama does not refuse a model larger than the free memory — it loads it, the machine swaps, and everything stops responding for minutes. That cannot be read like an error or cancelled like a command; it has to be waited out. Measured at ten minutes for a 7B model on an 8 GB laptop with a browser open.
 
 So the size is checked first, against what is actually free:

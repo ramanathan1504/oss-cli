@@ -505,6 +505,12 @@ public class ChatCommand implements Callable<Integer> {
             String history,
             String lastUserPrompt) {
 
+        // Counted here rather than threaded down from the caller: the retrieval is cached, and a
+        // ledger that reported different numbers from the context actually sent would be worse
+        // than no ledger at all.
+        com.osscli.retrieval.Sources.Retrieved retrieved =
+                com.osscli.retrieval.Sources.count(session.issueNumber(), session.repository());
+
         String cloudPrompt = String.format(
                 """
                 You are an expert maintainer for the '%s' open-source repository.
@@ -532,8 +538,13 @@ public class ChatCommand implements Callable<Integer> {
             if (localClient == null) {
                 live.done("answered");
                 print(cloud.name().toUpperCase(java.util.Locale.ROOT) + " RESPONSE", cloudOutput);
-                LOGGER.info("  Not checked against your own past work — that step needs a local model.");
-                LOGGER.info("  Attach one and answers get an alignment section: ollama serve");
+                com.osscli.retrieval.Sources.report(
+                        session.repository(),
+                        session.issueNumber(),
+                        retrieved,
+                        cloud.name(),
+                        false,
+                        "no local model — the API that wrote the answer cannot also check it");
                 store(session, ChatTurn.Role.CLOUD, cloudOutput);
                 return;
             }
@@ -558,6 +569,8 @@ public class ChatCommand implements Callable<Integer> {
             String aligned = localClient.generateText(alignmentPrompt);
             live.done("answered");
             print("EXPERT ALIGNED RESPONSE", aligned);
+            com.osscli.retrieval.Sources.report(
+                    session.repository(), session.issueNumber(), retrieved, cloud.name(), true, null);
             store(session, ChatTurn.Role.CLOUD, aligned);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

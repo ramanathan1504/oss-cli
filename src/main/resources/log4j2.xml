@@ -26,7 +26,14 @@
 <Configuration status="WARN">
     <Appenders>
         <!-- 1. Console Appender for clean interactive CLI outputs -->
-        <Console name="Console" target="SYSTEM_OUT">
+        <!--
+            follow="true" so the appender resolves System.out on each write rather than
+            capturing whichever stream existed when this configuration was loaded. Without
+            it, anything that replaces System.out afterwards is ignored and the output goes
+            to the original descriptor. That is how the end-to-end tests saw an empty
+            screen for a command which had printed a full report.
+        -->
+        <Console name="Console" target="SYSTEM_OUT" follow="true">
             <PatternLayout pattern="%msg%n" />
         </Console>
 
