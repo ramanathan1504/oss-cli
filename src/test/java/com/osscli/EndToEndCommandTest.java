@@ -243,6 +243,11 @@ class EndToEndCommandTest {
         assertTrue(harness.contains("AppPaths.bootstrap()"), "and the harness must do the same");
         assertTrue(main.contains("DatabaseManager.initializeSchema()"), "Main should still create the schema");
         assertTrue(harness.contains("initializeSchema()"), "and the harness must do the same");
+
+        // Argument rewriting too. Main drops a pasted `#` comment before parsing; a harness that
+        // parses the raw array is testing a program nobody runs.
+        assertTrue(main.contains("withoutPastedComment(args)"), "Main should still strip a pasted comment");
+        assertTrue(harness.contains("withoutPastedComment(args)"), "and the harness must do the same");
     }
 
     @Test

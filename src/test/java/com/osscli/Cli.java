@@ -98,7 +98,10 @@ final class Cli {
                 }
             }
 
-            int code = commandLine.execute(args);
+            // Main strips a pasted `#` comment before parsing. Skipping it here would make this a
+            // different program than the one that ships -- and the first version of this harness
+            // did skip it, so the end-to-end paste test failed against a fix that was working.
+            int code = commandLine.execute(Main.withoutPastedComment(args));
             return new Result(code, out.toString(StandardCharsets.UTF_8), err.toString(StandardCharsets.UTF_8));
         } finally {
             System.setOut(originalOut);
