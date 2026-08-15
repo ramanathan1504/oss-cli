@@ -76,6 +76,17 @@ final class Cli {
             System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
             System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
 
+            // Main does these two before it builds anything, and a command that runs without
+            // them is a different program: the probe that skipped them had eleven commands
+            // leaking `org.sqlite.SQLiteException: no such table` instead of doing their job.
+            AppPaths.bootstrap();
+            try {
+                com.osscli.storage.DatabaseManager.initializeSchema();
+            } catch (RuntimeException e) {
+                // Main tolerates this for the diagnostic commands and refuses otherwise; the
+                // harness lets the command itself decide, which is what is being tested.
+            }
+
             CommandLine commandLine = new CommandLine(new RootCommand());
             // Mirrors Main exactly. Without it `oss run list --apps` is parsed HERE and the
             // extension never sees --apps -- which is a real bug this harness must be able to

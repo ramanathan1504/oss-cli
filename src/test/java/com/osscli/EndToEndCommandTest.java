@@ -235,6 +235,14 @@ class EndToEndCommandTest {
         assertTrue(
                 harness.contains("List.of(\"run\", \"memory\")"),
                 "for the same two dispatchers Main names, or the harness is a different program");
+
+        // Bootstrap too. Skipping it is not a small difference: a probe that did so had eleven
+        // commands leaking `no such table` from SQLite rather than answering, because the schema
+        // Main guarantees had never been created.
+        assertTrue(main.contains("AppPaths.bootstrap()"), "Main should still bootstrap paths first");
+        assertTrue(harness.contains("AppPaths.bootstrap()"), "and the harness must do the same");
+        assertTrue(main.contains("DatabaseManager.initializeSchema()"), "Main should still create the schema");
+        assertTrue(harness.contains("initializeSchema()"), "and the harness must do the same");
     }
 
     @Test
