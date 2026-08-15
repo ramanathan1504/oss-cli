@@ -201,6 +201,18 @@ class EndToEndCommandTest {
     }
 
     @Test
+    @DisplayName("history browses without a terminal, rather than resuming something")
+    void historyListsWhenThereIsNobodyToAsk() {
+        // It printed "Resuming conversation 2" in a pipe. `history` is a browse command; opening a
+        // chat session because there happened to be exactly one saved conversation is a decision
+        // nobody made, and in a script it is one nobody sees either.
+        Cli.Result r = Cli.run("history");
+
+        assertEquals(0, r.exitCode(), "browsing is not a failure:\n" + r.all());
+        assertFalse(r.says("Resuming conversation"), "it resumed instead of listing:\n" + r.all());
+    }
+
+    @Test
     @DisplayName("memory search is answered rather than refused")
     void memorySearchIsAnswered() {
         // `oss memory file` prints `oss memory search` as its own next step. With an archive

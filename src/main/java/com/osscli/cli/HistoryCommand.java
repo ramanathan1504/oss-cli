@@ -98,7 +98,11 @@ public class HistoryCommand implements Callable<Integer> {
             return 0;
         }
 
-        if (listOnly) {
+        // No terminal means no picker, and browsing is what this command is for -- so it lists,
+        // which is the useful thing in a pipe or a script rather than a refusal. Deciding here
+        // rather than inside the picker keeps "there is nobody to ask" separate from "they chose
+        // nothing", which are the same null and mean opposite things.
+        if (listOnly || !com.osscli.ui.Picker.canAsk()) {
             for (ChatSession s : sessions) {
                 // Straight to stdout rather than through the logger, so the rows carry no level or
                 // timestamp prefix. Note that log4j2 here is also configured to SYSTEM_OUT, so a
@@ -125,6 +129,21 @@ public class HistoryCommand implements Callable<Integer> {
         if (sessions.isEmpty()) {
             LOGGER.error("No saved conversations to resume yet.");
             LOGGER.error("  oss chat <number> starts one.");
+            return null;
+        }
+        if (!com.osscli.ui.Picker.canAsk()) {
+            // `oss chat --resume` with no id and no terminal. Naming the ids is the only useful
+            // answer -- picking one on the user's behalf would resume somebody else's conversation
+            // in a script.
+            //
+            // This deliberately declines a piped number too, which the picker would otherwise
+            // accept. That number is a POSITION in a list ordered by recency, so the same script
+            // resumes a different conversation tomorrow. The ids below are stable, and are printed
+            // as the exact command to run.
+            LOGGER.error("oss chat --resume needs either an id or a terminal to choose in.");
+            for (ChatSession s : sessions) {
+                LOGGER.error("  oss chat --resume {}   {}", s.id(), row(s));
+            }
             return null;
         }
         return Picker.choose("Resume which conversation?", sessions, HistoryCommand::row, HistoryCommand::preview);

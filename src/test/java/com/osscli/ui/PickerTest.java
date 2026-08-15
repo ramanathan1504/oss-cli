@@ -44,9 +44,28 @@ class PickerTest {
     }
 
     @Test
-    @DisplayName("a list of one is chosen without asking")
+    @DisplayName("a list of one is chosen without asking — but only in front of a person")
     void singletonNeedsNoPrompt() {
-        assertEquals("only", Picker.choose("pick", List.of("only"), s -> s, s -> List.of()));
+        // The shortcut is right at a terminal and wrong in a pipe. Ungated it was a real bug:
+        // `oss history` with one saved conversation took it, and the caller resumed that
+        // conversation -- a browse command opening a chat session on a decision nobody made.
+        String chosen = withStdin("", () -> Picker.choose("pick", List.of("only"), s -> s, s -> List.of()));
+
+        if (Picker.canAsk()) {
+            assertEquals("only", chosen, "with somebody there, the only option needs no confirming");
+        } else {
+            assertNull(chosen, "with nobody there, nothing was chosen -- the caller must not act");
+        }
+    }
+
+    @Test
+    @DisplayName("but a piped number still picks it, because that is somebody choosing")
+    void singletonStillHonoursAPipedChoice() {
+        // The gate above must not cost the typed-number fallback, which exists precisely for cron,
+        // CI and piped invocations. An answer arriving on stdin IS a person, just an earlier one.
+        String chosen = withStdin("1\n", () -> Picker.choose("pick", List.of("only"), s -> s, s -> List.of()));
+
+        assertEquals("only", chosen);
     }
 
     @Test
