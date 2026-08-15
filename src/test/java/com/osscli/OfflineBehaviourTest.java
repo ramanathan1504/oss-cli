@@ -48,15 +48,25 @@ class OfflineBehaviourTest {
     /** Reserved by RFC 2606 to never resolve, so this is offline everywhere, forever. */
     private static final String NOWHERE = "https://api.invalid";
 
+    private String previousApi;
+
     @BeforeEach
     void unplug() {
+        previousApi = System.getProperty("oss.github.api");
         System.setProperty("oss.github.api", NOWHERE);
         Reachability.reset();
     }
 
     @AfterEach
     void plugBackIn() {
-        System.clearProperty("oss.github.api");
+        // Restored, not cleared. The build sets this property for the whole suite so no test can
+        // reach the real API; clearing it here would quietly hand that reach back to every test
+        // that runs after this class.
+        if (previousApi == null) {
+            System.clearProperty("oss.github.api");
+        } else {
+            System.setProperty("oss.github.api", previousApi);
+        }
         Reachability.reset();
     }
 
