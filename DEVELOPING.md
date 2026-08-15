@@ -348,6 +348,12 @@ from someone's laptop.
 subjects, so a subject that only made sense inside its diff should be reworded.
 Commit that edit, then run the script.
 
+**Dates are UTC.** The website dates each release from GitHub's `published_at`,
+which is UTC, so `release.sh` writes `date -u`. A local date is a day ahead for
+anything cut after midnight local but before midnight UTC — most evening
+releases from IST. `ChangelogDateTest` fails on a date in the future in UTC,
+which is the exact shape of that mistake.
+
 ### One-time setup
 
 - `TAP_TOKEN` — a repo-scoped token with write access to `homebrew-oss-cli`,
