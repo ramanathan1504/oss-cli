@@ -452,6 +452,26 @@ oss doctor
 
 #### The schema check, and why it can fail
 
+### `serve`
+Runs the local page on `http://localhost:1504`, with a palette of whatever extensions are attached.
+*   `--install` : Start it at login and restart it if it dies.
+*   `--uninstall` : Stop starting it at login.
+*   `--port` : Somewhere other than 1504.
+*   `--no-open` : Do not open a browser.
+
+**`oss serve` on its own is foreground.** It runs while that terminal is open and stops when it closes; `--install` is what makes it outlive the terminal. If `localhost:1504` is dead after you were using it, that is almost always why.
+
+`--install` uses the platform's own service manager — launchd, `systemd --user`, or the Task Scheduler — rather than a background thread, a wrapper script or a cron entry. None of those restart after a crash, survive a reboot, or can be inspected and stopped with the tools an administrator already knows.
+
+**What it records matters.** A service stores *how to start itself* at install time, and if that path later moves it dies at every login into a log nobody reads — the symptom is "the page stopped working" with nothing to connect it to. This wrote the resolved jar, which under Homebrew is `…/Cellar/oss/<version>/libexec/lib/oss.jar` — a directory `brew upgrade` deletes. It now records `oss` as found on `PATH`, because Homebrew re-points that name on every upgrade. Re-running the installer rewrites the recorded path, which is the fix for any service that has stopped answering:
+
+```bash
+oss serve --uninstall && oss serve --install
+launchctl list | grep osscli          # second column is the last exit status
+```
+
+Logs are in `~/.oss-cli/logs/serve.{out,err}.log`.
+
 Migrations only ever run forwards. If a **newer** `oss` has already migrated your store, an older build cannot understand it — so it refuses rather than reading tables whose meaning may have changed and then writing rows in the shape it believes in:
 
 ```
