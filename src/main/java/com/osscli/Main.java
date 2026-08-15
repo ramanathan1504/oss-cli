@@ -57,7 +57,12 @@ public class Main {
         // `oss run list --apps` printed picocli's own usage because --apps was unknown HERE
         // and so never reached the bench. Scoped to these two, because every other subcommand does
         // want its arguments parsed.
-        for (String dispatcher : java.util.List.of("run", "memory")) {
+        // `backlog` joined them for the same reason, found the same way: it declares
+        // "Arguments passed to the report, e.g. owner/name" and then picocli claimed
+        // every flag before the report saw it, so `oss backlog owner/name --no-ai`
+        // answered with usage. The script's own --no-ai and --dry-run were
+        // documented and unreachable.
+        for (String dispatcher : java.util.List.of("run", "memory", "backlog")) {
             CommandLine sub = commandLine.getSubcommands().get(dispatcher);
             if (sub != null) {
                 sub.setStopAtPositional(true).setUnmatchedOptionsArePositionalParams(true);

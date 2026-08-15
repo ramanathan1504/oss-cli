@@ -233,8 +233,11 @@ class EndToEndCommandTest {
         assertTrue(main.contains("setStopAtPositional(true)"), "Main should still configure the dispatchers");
         assertTrue(harness.contains("setStopAtPositional(true)"), "and the harness must do the same");
         assertTrue(
-                harness.contains("List.of(\"run\", \"memory\")"),
-                "for the same two dispatchers Main names, or the harness is a different program");
+                harness.contains("List.of(\"run\", \"memory\", \"backlog\")"),
+                "for the same dispatchers Main names, or the harness is a different program");
+        assertTrue(
+                main.contains("List.of(\"run\", \"memory\", \"backlog\")"),
+                "and Main must name that same list -- asserting only one side lets the two drift");
 
         // Bootstrap too. Skipping it is not a small difference: a probe that did so had eleven
         // commands leaking `no such table` from SQLite rather than answering, because the schema

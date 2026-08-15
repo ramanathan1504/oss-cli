@@ -91,7 +91,7 @@ final class Cli {
             // Mirrors Main exactly. Without it `oss run list --apps` is parsed HERE and the
             // extension never sees --apps -- which is a real bug this harness must be able to
             // reproduce, not one it quietly avoids by configuring itself differently.
-            for (String dispatcher : java.util.List.of("run", "memory")) {
+            for (String dispatcher : java.util.List.of("run", "memory", "backlog")) {
                 CommandLine sub = commandLine.getSubcommands().get(dispatcher);
                 if (sub != null) {
                     sub.setStopAtPositional(true).setUnmatchedOptionsArePositionalParams(true);
