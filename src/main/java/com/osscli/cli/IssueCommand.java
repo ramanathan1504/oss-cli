@@ -39,7 +39,13 @@ public class IssueCommand implements Callable<Integer> {
     public Integer call() {
         try {
             GitHubClient gh = new GitHubClient();
-            JsonNode issue = MAPPER.readTree(gh.getJson("/repos/" + repo + "/issues/" + number));
+            // Null is how getJson reports a 404. See PrCommand for the same guard and why.
+            String raw = gh.getJson("/repos/" + repo + "/issues/" + number);
+            if (raw == null) {
+                System.err.println("error  " + repo + " has no issue #" + number + ".");
+                return 1;
+            }
+            JsonNode issue = MAPPER.readTree(raw);
             if (issue.has("message") && !issue.has("number")) {
                 System.err.println("error  " + issue.path("message").asText());
                 return 1;
@@ -72,8 +78,8 @@ public class IssueCommand implements Callable<Integer> {
             System.out.println(body.isBlank() ? "  (no description)" : body);
 
             if (comments) {
-                JsonNode all =
-                        MAPPER.readTree(gh.getJson("/repos/" + repo + "/issues/" + number + "/comments?per_page=100"));
+                JsonNode all = MAPPER.readTree(java.util.Objects.requireNonNullElse(
+                        gh.getJson("/repos/" + repo + "/issues/" + number + "/comments?per_page=100"), "[]"));
                 System.out.printf("%n  ── %d comment(s) ──%n", all.size());
                 all.forEach(c -> {
                     System.out.printf(

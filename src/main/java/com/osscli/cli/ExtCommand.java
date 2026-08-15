@@ -203,6 +203,16 @@ public class ExtCommand implements Callable<Integer> {
          * nothing in the core can execute somebody's project for them. A memory can fall back,
          * because a folder of markdown is a real answer.
          */
+        /**
+         * What to do when an extension is attached but does not declare this verb.
+         *
+         * <p>Distinct from {@link #fallback}, which is for no extension at all. Null means the
+         * built-in cannot help either, and the caller should say so.
+         */
+        Integer whenExtensionCannot(String verb, List<String> args) {
+            return null;
+        }
+
         Integer fallback(String verb, List<String> args) {
             return null;
         }
@@ -258,6 +268,22 @@ public class ExtCommand implements Callable<Integer> {
                         return 2;
                     }
                 }
+                // An attached extension that does not declare this verb should cost the verb's
+                // richer form, not the verb. `oss memory file` prints "oss memory search" as its
+                // own next step, and with devon attached that suggestion was refused -- the tool
+                // advertising a command it then rejects. The built-in still holds the local
+                // working copies, so it can answer; it just answers about less.
+                if (ext.resolveVerb(verb) == null) {
+                    Integer handled = whenExtensionCannot(verb, passthrough);
+                    if (handled != null) {
+                        return handled;
+                    }
+                    System.err.println(
+                            "error  \"" + ext.getName() + "\" does not offer \"" + verb + "\" -- it declares: "
+                                    + String.join(", ", ext.getVerbs().keySet()));
+                    return 1;
+                }
+
                 int code = ExtensionRunner.run(ext, verb, passthrough);
                 if (code == 0) {
                     alsoLocally(verb, passthrough);
@@ -340,6 +366,24 @@ public class ExtCommand implements Callable<Integer> {
         @Override
         Integer fallback(String verb, List<String> args) {
             System.out.println("  built-in memory (no memory extension attached)");
+            return BuiltinMemory.run(verb, args);
+        }
+
+        /**
+         * The archive does not do this one, but the built-in store might.
+         *
+         * <p>`oss memory file` ends by printing `oss memory search "<terms>"`, and with an archive
+         * attached that suggestion was refused -- the tool advertising a command it then rejects.
+         * The built-in holds the local working copies, so it can answer; it simply answers about
+         * fewer notes, and says which store it searched.
+         */
+        @Override
+        Integer whenExtensionCannot(String verb, List<String> args) {
+            if (!BuiltinMemory.supports(verb)) {
+                return null;
+            }
+            System.out.println(
+                    "  the attached archive does not do \"" + verb + "\" — searching the local working copies instead");
             return BuiltinMemory.run(verb, args);
         }
 

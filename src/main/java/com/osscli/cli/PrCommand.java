@@ -40,7 +40,19 @@ public class PrCommand implements Callable<Integer> {
     public Integer call() {
         try {
             GitHubClient gh = new GitHubClient();
-            JsonNode pr = MAPPER.readTree(gh.getJson("/repos/" + repo + "/pulls/" + number));
+            // getJson answers null for a 404, deliberately -- absent is not an error at that
+            // layer. Passing that straight to readTree produced `argument "content" is null`,
+            // which is a Jackson complaint about an argument, not an answer about a pull request.
+            // Reached by asking for any number that is an issue rather than a PR, which is an
+            // ordinary mistake: the two share one numbering sequence on GitHub.
+            String body = gh.getJson("/repos/" + repo + "/pulls/" + number);
+            if (body == null) {
+                System.err.println("error  " + repo + " has no pull request #" + number + ".");
+                System.err.println("       issues and pull requests share one numbering sequence;");
+                System.err.println("       oss issue " + number + " --repo " + repo + " reads it as an issue.");
+                return 1;
+            }
+            JsonNode pr = MAPPER.readTree(body);
             if (pr.has("message")) {
                 System.err.println("error  " + pr.path("message").asText());
                 return 1;
@@ -88,7 +100,8 @@ public class PrCommand implements Callable<Integer> {
             // has no status of its own -- asking it returns nothing and reads like "CI is green".
             String sha = pr.path("head").path("sha").asText("");
             if (!sha.isEmpty()) {
-                JsonNode checks = MAPPER.readTree(gh.getJson("/repos/" + repo + "/commits/" + sha + "/check-runs"));
+                JsonNode checks =
+                        MAPPER.readTree(orEmpty(gh.getJson("/repos/" + repo + "/commits/" + sha + "/check-runs")));
                 int total = checks.path("total_count").asInt();
                 StringBuilder failing = new StringBuilder();
                 checks.path("check_runs").forEach(c -> {
@@ -139,5 +152,10 @@ public class PrCommand implements Callable<Integer> {
 
     private static String shortSha(String s) {
         return s.length() < 8 ? s : s.substring(0, 8);
+    }
+
+    /** An empty object rather than null, for endpoints where 404 simply means "nothing here". */
+    private static String orEmpty(String body) {
+        return body == null ? "{}" : body;
     }
 }
