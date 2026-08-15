@@ -2,19 +2,19 @@
 
 ## 1.11.12
 
-_2026-08-16_
+_2026-08-15_
 
 - oss history browsed by resuming a conversation (#97)
 
 ## 1.11.11
 
-_2026-08-16_
+_2026-08-15_
 
 - The serve agent recorded a path brew deletes on the next upgrade (#96)
 
 ## 1.11.10
 
-_2026-08-16_
+_2026-08-15_
 
 - oss setup needs a terminal, and now says so (#94)
 - Let backlog's own flags reach the report (#94)

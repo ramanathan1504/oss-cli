@@ -134,7 +134,12 @@ TMP=$(mktemp)
     echo
     echo "## $VERSION"
     echo
-    echo "_$(date +%Y-%m-%d)_"
+    # UTC, because the website dates the same release from GitHub's published_at
+    # and that is UTC. A local date is a day ahead for anything cut after
+    # midnight local but before midnight UTC -- which is most evening releases
+    # from this timezone. Three in a row read 2026-08-16 here and 2026-08-15
+    # there: the same release, two dates, and nothing to say which was right.
+    echo "_$(date -u +%Y-%m-%d)_"
     echo
     echo "$ENTRIES"
     echo
