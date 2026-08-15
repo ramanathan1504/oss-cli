@@ -50,20 +50,32 @@ public record Issue(
         return "MEMBER".equals(upper) || "OWNER".equals(upper) || "COLLABORATOR".equals(upper);
     }
 
-    // Helper to dynamically extract the "owner/repo" from the html_url
+    /**
+     * The {@code owner/name} this issue belongs to, read from its own URL, or null when the URL does
+     * not say.
+     *
+     * <p>Both of these returns used to be the literal string {@code apache/logging-log4j2} — the
+     * repository this tool happened to be written against. That is not a default, it is a guess with
+     * one project's name on it, and it did more than look wrong on somebody else's machine:
+     * {@code sync} splits this value and fetches the pull request's changed files from it, then
+     * stores them under it. A pull request whose URL could not be parsed had another project's files
+     * looked up and written into the footprint as though they were the user's own.
+     *
+     * <p>Null is the honest answer, and the caller skips what it cannot place.
+     */
     public String getRepositoryOwnerAndName() {
         if (html_url == null) {
-            return "apache/logging-log4j2"; // Fallback default
+            return null;
         }
         // html_url looks like: https://github.com/owner/name/pull/number
         String prefix = "https://github.com/";
         if (html_url.startsWith(prefix)) {
             String sub = html_url.substring(prefix.length());
             String[] parts = sub.split("/");
-            if (parts.length >= 2) {
+            if (parts.length >= 2 && !parts[0].isBlank() && !parts[1].isBlank()) {
                 return parts[0] + "/" + parts[1];
             }
         }
-        return "apache/logging-log4j2";
+        return null;
     }
 }

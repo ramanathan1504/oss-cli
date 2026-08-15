@@ -3,6 +3,7 @@ package com.osscli.cli;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.osscli.github.GitHubClient;
+import com.osscli.github.Reachability;
 import com.osscli.ui.NextSteps;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
@@ -137,7 +138,8 @@ public class PrCommand implements Callable<Integer> {
             NextSteps.suggest(NextSteps.After.REVIEW, String.valueOf(number));
             return 0;
         } catch (Exception e) {
-            System.err.println("error  " + e.getMessage());
+            // See IssueCommand: the unguarded getMessage() here printed "error  null" offline.
+            System.err.println("error  " + Reachability.describe(e));
             return 1;
         }
     }

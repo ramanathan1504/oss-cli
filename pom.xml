@@ -128,7 +128,31 @@
                     -->
                     <environmentVariables>
                         <OSS_CLI_HOME>${project.build.directory}/test-home</OSS_CLI_HOME>
+                        <!--
+                            A token-shaped string that is not a token, so tests reach the code
+                            they are testing.
+
+                            Without it, anything that builds a GitHubClient stops at
+                            CredentialManager instead. OfflineBehaviourTest passed on a developer
+                            machine and failed in CI for exactly that reason: locally it reached
+                            the socket and asserted on the offline message, and in CI it never
+                            got past "GitHub Token is missing". A test whose result depends on
+                            whether the machine happens to be logged in is testing the machine.
+
+                            Nothing here may use it against the real API: the API base is pointed
+                            at a host that does not resolve wherever that matters.
+                        -->
+                        <GITHUB_TOKEN>not-a-real-token-for-tests</GITHUB_TOKEN>
                     </environmentVariables>
+                    <systemPropertyVariables>
+                        <!--
+                            And with a token now present, nothing may reach the real API. This
+                            is the paired half: api.invalid is reserved by RFC 2606 to never
+                            resolve, so the whole suite is offline by construction rather than
+                            by every test remembering to be.
+                        -->
+                        <oss.github.api>https://api.invalid</oss.github.api>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
             <plugin>

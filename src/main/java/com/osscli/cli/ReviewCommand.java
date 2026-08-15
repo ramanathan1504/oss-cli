@@ -123,6 +123,20 @@ public class ReviewCommand implements Callable<Integer> {
         } catch (IllegalArgumentException e) {
             LOGGER.error("{}", e.getMessage());
             return 1;
+        } catch (java.io.IOException | InterruptedException | RuntimeException e) {
+            // This catch used to name IllegalArgumentException alone, so a connect failure -- not
+            // one -- escaped into picocli and reached the user as forty lines of
+            // jdk.internal.net.http stack. A review needs the network and cannot be done without
+            // it; that is a sentence, not a crash.
+            //
+            // RuntimeException is here for the same reason and was found the same way: with no
+            // token registered, CredentialManager throws one, and CI -- which has no token --
+            // printed a second stack trace under the message it had already logged.
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            LOGGER.error("{}", com.osscli.github.Reachability.describe(e));
+            return 1;
         }
 
         printFacts(ev);

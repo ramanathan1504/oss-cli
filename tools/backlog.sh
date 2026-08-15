@@ -69,7 +69,19 @@ RATE_WARN="${RATE_WARN:-200}"
 for bin in gh jq; do
   command -v "$bin" >/dev/null || { echo "error: '$bin' not found on PATH" >&2; exit 3; }
 done
-gh auth status >/dev/null 2>&1 || { echo "error: run 'gh auth login' first" >&2; exit 3; }
+# `gh auth status` needs the network to verify a token, so it fails identically
+# whether you are logged out or merely offline. Telling somebody who IS logged in
+# to log in again sends them to re-issue a credential that was never the problem;
+# the stored token is checked first, and only its absence is a login problem.
+if ! gh auth status >/dev/null 2>&1; then
+  if gh auth token >/dev/null 2>&1; then
+    echo "error: a token is stored, but GitHub could not be reached — this needs a connection." >&2
+    echo "       What is already synced still answers: oss search, oss critical, oss inspect." >&2
+  else
+    echo "error: run 'gh auth login' first" >&2
+  fi
+  exit 3
+fi
 [[ "$AI" == 1 ]] && ! command -v claude >/dev/null && \
   { echo "note: 'claude' not found — falling back to --no-ai" >&2; AI=0; }
 
@@ -311,9 +323,21 @@ md_to_html() {
 
 # ── Claude enrichment helper (read-only) ─────────────────────────────────────
 RO_TOOLS='Read,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*)'
+# Bounded, because `|| echo` catches a failure and not a hang. With no network
+# this call does not fail -- it sits there, and `oss backlog` sits with it, having
+# already printed every deterministic table it had. The fallback line below was
+# written for exactly this case and could never be reached.
+AI_TIMEOUT="${OSS_BACKLOG_AI_TIMEOUT:-120}"
+_timeout_cmd() {
+  if command -v timeout >/dev/null 2>&1; then echo timeout
+  elif command -v gtimeout >/dev/null 2>&1; then echo gtimeout
+  fi
+}
+
 enrich_ai() {
   local file="$1" prompt="$2"
-  { claude -p "READ-ONLY triage for ${REPO}. Do NOT run any command that modifies the repo.
+  local t; t="$(_timeout_cmd)"
+  { ${t:+$t "$AI_TIMEOUT"} claude -p "READ-ONLY triage for ${REPO}. Do NOT run any command that modifies the repo.
 Output GitHub-Flavored Markdown only: a single table, no preamble and no trailing commentary.
 Keep every cell under 240 characters — this renders as a table cell, not a paragraph.
 ${prompt}

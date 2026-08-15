@@ -98,7 +98,10 @@ public class HubCommand implements Callable<Integer> {
             System.out.printf("  %d not waiting on you — oss hub --all%n%n", theirs.size());
         }
         if (unreachable > 0) {
-            System.out.printf("  %d unreachable (private, deleted, or no token)%n%n", unreachable);
+            // The reason is asked for rather than assumed. With the wifi off this listed seventeen
+            // pull requests as "private, deleted, or no token" -- three explanations, all wrong,
+            // each of which sends the reader hunting for a problem they do not have.
+            System.out.printf("  %d unreachable (%s)%n%n", unreachable, com.osscli.github.Reachability.whyUnreadable());
         }
         return 0;
     }

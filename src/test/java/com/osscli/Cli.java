@@ -91,14 +91,17 @@ final class Cli {
             // Mirrors Main exactly. Without it `oss run list --apps` is parsed HERE and the
             // extension never sees --apps -- which is a real bug this harness must be able to
             // reproduce, not one it quietly avoids by configuring itself differently.
-            for (String dispatcher : java.util.List.of("run", "memory")) {
+            for (String dispatcher : java.util.List.of("run", "memory", "backlog")) {
                 CommandLine sub = commandLine.getSubcommands().get(dispatcher);
                 if (sub != null) {
                     sub.setStopAtPositional(true).setUnmatchedOptionsArePositionalParams(true);
                 }
             }
 
-            int code = commandLine.execute(args);
+            // Main strips a pasted `#` comment before parsing. Skipping it here would make this a
+            // different program than the one that ships -- and the first version of this harness
+            // did skip it, so the end-to-end paste test failed against a fix that was working.
+            int code = commandLine.execute(Main.withoutPastedComment(args));
             return new Result(code, out.toString(StandardCharsets.UTF_8), err.toString(StandardCharsets.UTF_8));
         } finally {
             System.setOut(originalOut);

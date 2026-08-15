@@ -372,6 +372,8 @@ oss search "deadlock in network appender" --global
 ```
 When nothing has been indexed yet, or the embedding model has not been fetched, the search ranks by shared terms instead of refusing — the issues are already local, and declining to search data you have is the wrong answer to a missing optional layer.
 
+**A result below 0.25 is not a result.** Ranking by meaning always produces a ranking, so a corpus with nothing on your subject still returns its least-unrelated documents — and prints them in exactly the shape a real hit takes. Asked for `keyspace` against six notes, this used to answer with three, at 0.10, 0.09 and 0.08, about a website deployment and two releases. Below the floor nothing is listed and the search says so; real subject matches land at 0.35 and above, and are unaffected. The floor is read from the `search.relevance_floor` config key when one is present, so a restored configuration can carry a different value; there is no command that writes it today.
+
 ### `report`
 Compiles SQLite data into a unified Weekly Health Report in Markdown format.
 *   `--me` : Generates a highly personalized roadmap tailored to your Developer Expertise Vector, including Regression Guard alerts and your specific stale PRs.

@@ -409,6 +409,13 @@ public class SyncCommand implements Callable<Integer> {
                 }
 
                 String sourceRepo = pr.getRepositoryOwnerAndName();
+                if (sourceRepo == null) {
+                    // Used to be impossible, because the model invented a repository rather than
+                    // admit it could not tell. Skipping is the only correct move: the alternative
+                    // is asking GitHub for this pull request's files in some other project.
+                    LOGGER.warn("    ↳ [Skipped] PR #{} does not say which repository it is from.", pr.number());
+                    continue;
+                }
                 String[] repoParts = sourceRepo.split("/");
                 String owner = repoParts[0];
                 String repoName = repoParts[1];

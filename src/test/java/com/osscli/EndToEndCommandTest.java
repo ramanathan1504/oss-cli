@@ -176,6 +176,31 @@ class EndToEndCommandTest {
     }
 
     @Test
+    @DisplayName("setup with nobody at the keyboard refuses, rather than throwing")
+    void setupWithoutATerminalRefuses() throws IOException {
+        // `oss setup` is the first command a new install is told to run, and it asked eleven
+        // questions through scanner.nextLine(). With stdin closed -- a script, a pipe, CI -- the
+        // first one threw java.util.NoSuchElementException: No line found, over six frames of
+        // picocli.
+        //
+        // Returning "" would be worse than throwing: every prompt treats empty as "keep the
+        // current value", so the wizard would run to the end, change nothing, and exit 0.
+        java.io.InputStream realIn = System.in;
+        System.setIn(new java.io.ByteArrayInputStream(new byte[0]));
+        try {
+            Cli.Result r = Cli.run("setup");
+
+            assertNotEquals(0, r.exitCode(), "it configured nothing, so it must not report success");
+            assertFalse(r.says("NoSuchElementException"), "the crash is back:\n" + r.all());
+            assertFalse(r.says("at picocli.CommandLine"), "and it must not print a stack trace:\n" + r.all());
+            assertTrue(r.says("no terminal here"), "it should say what is missing:\n" + r.all());
+            assertTrue(r.says("Nothing was changed"), "and that it changed nothing:\n" + r.all());
+        } finally {
+            System.setIn(realIn);
+        }
+    }
+
+    @Test
     @DisplayName("memory search is answered rather than refused")
     void memorySearchIsAnswered() {
         // `oss memory file` prints `oss memory search` as its own next step. With an archive
@@ -233,8 +258,11 @@ class EndToEndCommandTest {
         assertTrue(main.contains("setStopAtPositional(true)"), "Main should still configure the dispatchers");
         assertTrue(harness.contains("setStopAtPositional(true)"), "and the harness must do the same");
         assertTrue(
-                harness.contains("List.of(\"run\", \"memory\")"),
-                "for the same two dispatchers Main names, or the harness is a different program");
+                harness.contains("List.of(\"run\", \"memory\", \"backlog\")"),
+                "for the same dispatchers Main names, or the harness is a different program");
+        assertTrue(
+                main.contains("List.of(\"run\", \"memory\", \"backlog\")"),
+                "and Main must name that same list -- asserting only one side lets the two drift");
 
         // Bootstrap too. Skipping it is not a small difference: a probe that did so had eleven
         // commands leaking `no such table` from SQLite rather than answering, because the schema
@@ -243,6 +271,11 @@ class EndToEndCommandTest {
         assertTrue(harness.contains("AppPaths.bootstrap()"), "and the harness must do the same");
         assertTrue(main.contains("DatabaseManager.initializeSchema()"), "Main should still create the schema");
         assertTrue(harness.contains("initializeSchema()"), "and the harness must do the same");
+
+        // Argument rewriting too. Main drops a pasted `#` comment before parsing; a harness that
+        // parses the raw array is testing a program nobody runs.
+        assertTrue(main.contains("withoutPastedComment(args)"), "Main should still strip a pasted comment");
+        assertTrue(harness.contains("withoutPastedComment(args)"), "and the harness must do the same");
     }
 
     @Test

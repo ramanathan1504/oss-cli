@@ -38,6 +38,8 @@ public class Main {
         // through the system property this publishes, and Log4j reads its configuration once.
         AppPaths.bootstrap();
 
+        args = withoutPastedComment(args);
+
         try {
             DatabaseManager.initializeSchema();
         } catch (SchemaTooNewException e) {
@@ -55,7 +57,12 @@ public class Main {
         // `oss run list --apps` printed picocli's own usage because --apps was unknown HERE
         // and so never reached the bench. Scoped to these two, because every other subcommand does
         // want its arguments parsed.
-        for (String dispatcher : java.util.List.of("run", "memory")) {
+        // `backlog` joined them for the same reason, found the same way: it declares
+        // "Arguments passed to the report, e.g. owner/name" and then picocli claimed
+        // every flag before the report saw it, so `oss backlog owner/name --no-ai`
+        // answered with usage. The script's own --no-ai and --dry-run were
+        // documented and unreachable.
+        for (String dispatcher : java.util.List.of("run", "memory", "backlog")) {
             CommandLine sub = commandLine.getSubcommands().get(dispatcher);
             if (sub != null) {
                 sub.setStopAtPositional(true).setUnmatchedOptionsArePositionalParams(true);
@@ -69,6 +76,39 @@ public class Main {
     /** True when the first argument is one of the commands that stays available. */
     static boolean diagnostic(String[] args) {
         return args.length > 0 && SAFE_WITHOUT_A_DATABASE.contains(args[0]);
+    }
+
+    /**
+     * Drops everything from a bare {@code #} onward, so a command pasted out of the documentation
+     * runs.
+     *
+     * <p>Documentation writes examples with the explanation on the same line, which is the near
+     * universal convention:
+     *
+     * <pre>
+     * oss followup                 # every recorded PR, one line each
+     * </pre>
+     *
+     * <p><b>zsh does not strip that.</b> {@code interactive_comments} is off in an interactive zsh,
+     * so the shell hands {@code #}, {@code every}, {@code recorded} … straight through as arguments
+     * and the answer to a pasted line is {@code '#' is not an int} followed by twenty lines of
+     * usage. bash users never see it, which is exactly why it survived: the docs are correct, the
+     * tool is correct, and the combination is broken on the default macOS shell.
+     *
+     * <p>Fixed here rather than by rewriting sixty-one documentation lines, because this also covers
+     * every example written after today, and every blog post and README that quotes one.
+     *
+     * <p>Only a token that is <em>exactly</em> {@code #} counts. {@code #4240} is left alone —
+     * somebody typing {@code oss pr #4240} means the number, and silently discarding it would trade
+     * a clear error for a confusing one.
+     */
+    static String[] withoutPastedComment(String[] args) {
+        for (int i = 0; i < args.length; i++) {
+            if ("#".equals(args[i])) {
+                return java.util.Arrays.copyOfRange(args, 0, i);
+            }
+        }
+        return args;
     }
 
     /** The first line of {@code --version}, so the refusal names the build the user is actually running. */

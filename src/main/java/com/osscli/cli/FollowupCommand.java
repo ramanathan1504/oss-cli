@@ -123,6 +123,13 @@ public class FollowupCommand implements Callable<Integer> {
                 }
                 report(r);
             }
+            if (com.osscli.github.Reachability.seen()) {
+                // Every row printed the bare word "unreachable", which reads as a fact about those
+                // pull requests. Said once here, it is a fact about this machine instead.
+                System.out.println();
+                System.out.println("  none of these could be read: " + com.osscli.github.Reachability.whyUnreadable());
+                System.out.println("  What you already synced still answers: oss search, oss inspect, oss prompt.");
+            }
             if (only == null) {
                 System.out.println();
                 System.out.println("  oss followup <n>          one pull request in full");
@@ -131,7 +138,7 @@ public class FollowupCommand implements Callable<Integer> {
             }
             return 0;
         } catch (Exception e) {
-            System.err.println("error  " + e.getMessage());
+            System.err.println("error  " + com.osscli.github.Reachability.describe(e));
             return 1;
         }
     }
@@ -146,7 +153,7 @@ public class FollowupCommand implements Callable<Integer> {
         }
         JsonNode pull = fetch(target, pr);
         if (pull == null) {
-            System.err.println("error  could not read " + target + "#" + pr);
+            System.err.println("error  " + whyNot(target, pr));
             return 1;
         }
         List<ReviewLedger.Row> rows = ReviewLedger.read();
@@ -617,13 +624,31 @@ public class FollowupCommand implements Callable<Integer> {
 
     // ------------------------------------------------------------------- github ---
 
+    /**
+     * Why the last {@link #api} call came back empty.
+     *
+     * <p>Null means "GitHub answered, and the answer was 404". Anything else is the reason it never
+     * got an answer at all. Collapsing every failure to null made {@code --record} report
+     * {@code could not read owner/name#4234} for a missing pull request, an expired token, a
+     * rate limit and a pulled cable alike -- four different problems with four different remedies,
+     * behind one sentence that suggests none of them.
+     */
+    private String lastFailure;
+
     private JsonNode api(String path) {
+        lastFailure = null;
         try {
             String json = new GitHubClient().getJson(path);
             return (json == null || json.isBlank()) ? null : MAPPER.readTree(json);
         } catch (Exception e) {
+            lastFailure = com.osscli.github.Reachability.describe(e);
             return null;
         }
+    }
+
+    /** What to tell someone about a pull request that could not be read. */
+    private String whyNot(String repoName, int pr) {
+        return lastFailure != null ? lastFailure : repoName + "#" + pr + " does not exist, or this token cannot see it";
     }
 
     private JsonNode fetch(String repoName, int pr) {

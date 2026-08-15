@@ -109,6 +109,36 @@ public final class Corpus {
         return m;
     }
 
+    /**
+     * The cosine below which a match is not an answer.
+     *
+     * <p>There was no floor at all, and with a small corpus that is indistinguishable from having no
+     * search. Asked for "keyspace" against six notes, this ranked all six and presented the top
+     * three — at 0.10, 0.09 and 0.08 — in the same shape as a real hit. None of them was about
+     * keyspaces; they were simply the least unrelated things on disk. Every nearest-neighbour search
+     * has a nearest neighbour, so without a floor the answer to a question the corpus cannot answer
+     * is noise formatted as knowledge.
+     *
+     * <p>0.25 is set from the observed spread: real subject matches on this corpus land at 0.35 and
+     * above, and everything under 0.2 has been unrelated. Overridable, because the right floor
+     * depends on how much a corpus holds.
+     */
+    public static final double RELEVANCE_FLOOR = 0.25;
+
+    private static double floor() {
+        try {
+            String configured = com.osscli.storage.SqliteStorage.loadConfig("search.relevance_floor");
+            if (configured != null && !configured.isBlank()) {
+                return Double.parseDouble(configured.trim());
+            }
+        } catch (Exception e) {
+            // An unreadable or misconfigured floor must not silently become 0 and bring the noise
+            // back. Falling back to the default is the safe direction here.
+            return RELEVANCE_FLOOR;
+        }
+        return RELEVANCE_FLOOR;
+    }
+
     public List<Hit> search(String query, int limit) throws IOException {
         if (docs.isEmpty()) {
             return List.of();
@@ -120,6 +150,7 @@ public final class Corpus {
 
     private List<Hit> bySimilarity(String query, int limit) throws IOException {
         double[] q = embedder.embed(query);
+        double floor = floor();
         List<Hit> out = new ArrayList<>();
         for (Doc d : docs) {
             double[] v = vectorFor(d);
@@ -134,7 +165,13 @@ public final class Corpus {
             for (int i = 0; i < v.length; i++) {
                 dot += q[i] * v[i];
             }
-            out.add(new Hit(d.id(), d.title(), d.kind(), dot * weightFactor(d), true));
+            // Weighted before the comparison, so a document promoted by its kind is judged on the
+            // score it will actually be shown with rather than on a raw cosine nobody sees.
+            double score = dot * weightFactor(d);
+            if (score < floor) {
+                continue;
+            }
+            out.add(new Hit(d.id(), d.title(), d.kind(), score, true));
         }
         out.sort(Comparator.comparingDouble(Hit::score).reversed());
         return out.size() > limit ? out.subList(0, limit) : out;
