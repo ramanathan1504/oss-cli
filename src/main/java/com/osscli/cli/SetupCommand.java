@@ -32,10 +32,49 @@ public class SetupCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(SetupCommand.class);
 
+    /** Raised when the wizard is asked a question and there is nobody there to answer it. */
+    private static final class NoOneThere extends RuntimeException {}
+
+    /**
+     * One answer from the operator, or a refusal.
+     *
+     * <p>{@code scanner.nextLine()} on a closed stdin throws {@link java.util.NoSuchElementException},
+     * and this wizard called it eleven times. Run from a script, a pipe, or anything without a
+     * terminal, the first prompt printed and then the user got
+     * {@code java.util.NoSuchElementException: No line found} over six frames of picocli — from the
+     * very first command a new install is told to run.
+     *
+     * <p>Returning "" instead would be worse, not better: every one of the eleven prompts means
+     * "keep the current value" when empty, so the wizard would run to completion, change nothing,
+     * and report success. A setup that silently configures nothing is the failure this whole
+     * codebase is built to avoid.
+     */
+    private static String ask(Scanner scanner) {
+        if (!scanner.hasNextLine()) {
+            throw new NoOneThere();
+        }
+        return scanner.nextLine().trim();
+    }
+
     @Override
     public Integer call() throws Exception {
-        Scanner scanner = new Scanner(System.in);
+        try {
+            return wizard(new Scanner(System.in));
+        } catch (NoOneThere e) {
+            LOGGER.error("");
+            LOGGER.error("  oss setup asks questions, and there is no terminal here to answer them.");
+            LOGGER.error("  Nothing was changed.");
+            LOGGER.error("");
+            LOGGER.error("  Run it from a terminal, or set values directly:");
+            LOGGER.error("    oss sync --add owner/name        the repository to follow");
+            LOGGER.error("    oss model --fetch                the embedding model");
+            LOGGER.error("    export GITHUB_TOKEN=$(gh auth token)");
+            LOGGER.error("");
+            return 1;
+        }
+    }
 
+    private Integer wizard(Scanner scanner) throws Exception {
         LOGGER.info("==================================================");
         LOGGER.info("            oss Interactive Setup Wizard          ");
         LOGGER.info("==================================================");
@@ -44,7 +83,7 @@ public class SetupCommand implements Callable<Integer> {
         String currentUsername = SqliteStorage.loadConfig("github.username");
         LOGGER.info("Current GitHub Username: [ {} ]", currentUsername == null ? "(none)" : currentUsername);
         LOGGER.info("Enter new Username (or press Enter to keep current):");
-        String inputUsername = scanner.nextLine().trim();
+        String inputUsername = ask(scanner);
         if (!inputUsername.isEmpty()) {
             SqliteStorage.saveConfig("github.username", inputUsername);
             currentUsername = inputUsername;
@@ -55,7 +94,7 @@ public class SetupCommand implements Callable<Integer> {
         String currentDefaultRepo = SqliteStorage.loadConfig("default.repository");
         LOGGER.info("Current Primary Repository: [ {} ]", currentDefaultRepo == null ? "(none)" : currentDefaultRepo);
         LOGGER.info("Enter new Primary Repository (owner/name) or press Enter to keep current:");
-        String inputRepo = scanner.nextLine().trim();
+        String inputRepo = ask(scanner);
         if (!inputRepo.isEmpty()) {
             SqliteStorage.saveConfig("default.repository", inputRepo);
             currentDefaultRepo = inputRepo;
@@ -66,7 +105,7 @@ public class SetupCommand implements Callable<Integer> {
         String currentTriageModel = SqliteStorage.loadConfig("ollama.model.triage");
         LOGGER.info("Current AI Triage Model: [ {} ]", currentTriageModel == null ? "(none)" : currentTriageModel);
         LOGGER.info("Enter new Triage Model (or press Enter to keep current):");
-        String inputTriage = scanner.nextLine().trim();
+        String inputTriage = ask(scanner);
         if (!inputTriage.isEmpty()) {
             SqliteStorage.saveConfig("ollama.model.triage", inputTriage);
             currentTriageModel = inputTriage;
@@ -91,7 +130,7 @@ public class SetupCommand implements Callable<Integer> {
         LOGGER.info(
                 "Current Deep Guidance Model: [ {} ]", currentGuidanceModel == null ? "(none)" : currentGuidanceModel);
         LOGGER.info("Enter new Guidance Model (or press Enter to keep current):");
-        String inputGuidance = scanner.nextLine().trim();
+        String inputGuidance = ask(scanner);
         if (!inputGuidance.isEmpty()) {
             SqliteStorage.saveConfig("ollama.model.guidance", inputGuidance);
             currentGuidanceModel = inputGuidance;
@@ -107,7 +146,7 @@ public class SetupCommand implements Callable<Integer> {
                 "Current Ollama address: [ {} ]",
                 currentOllamaUrl == null ? com.osscli.Defaults.OLLAMA_URL : currentOllamaUrl);
         LOGGER.info("Enter new Ollama address (e.g. http://gpu-box.local:11434) or press Enter to keep current:");
-        String inputOllamaUrl = scanner.nextLine().trim();
+        String inputOllamaUrl = ask(scanner);
         if (!inputOllamaUrl.isEmpty()) {
             SqliteStorage.saveConfig("ollama.url", inputOllamaUrl);
             LOGGER.info("  ↳ Updated Ollama address to: {}", inputOllamaUrl);
@@ -120,7 +159,7 @@ public class SetupCommand implements Callable<Integer> {
                 currentGeminiModel == null ? "(none)" : currentGeminiModel);
         LOGGER.info(
                 "Enter new Gemini Model (e.g., gemini-1.5-flash-latest, gemini-pro) or press Enter to keep current:");
-        String inputGemini = scanner.nextLine().trim();
+        String inputGemini = ask(scanner);
         if (!inputGemini.isEmpty()) {
             SqliteStorage.saveConfig("gemini.model", inputGemini);
             currentGeminiModel = inputGemini;
@@ -133,7 +172,7 @@ public class SetupCommand implements Callable<Integer> {
                 "Current Cloud Agent Model (OpenAI): [ {} ]",
                 currentOpenAiModel == null ? "(none)" : currentOpenAiModel);
         LOGGER.info("Enter new OpenAI Model (e.g., gpt-4o, gpt-4-turbo) or press Enter to keep current:");
-        String inputOpenAi = scanner.nextLine().trim();
+        String inputOpenAi = ask(scanner);
         if (!inputOpenAi.isEmpty()) {
             SqliteStorage.saveConfig("openai.model", inputOpenAi);
             currentOpenAiModel = inputOpenAi;
@@ -146,7 +185,7 @@ public class SetupCommand implements Callable<Integer> {
                 "Current Cloud Agent Model (Claude): [ {} ]",
                 currentClaudeModel == null ? "(none)" : currentClaudeModel);
         LOGGER.info("Enter new Claude Model (e.g., claude-3-5-sonnet-20240620) or press Enter to keep current:");
-        String inputClaude = scanner.nextLine().trim();
+        String inputClaude = ask(scanner);
         if (!inputClaude.isEmpty()) {
             SqliteStorage.saveConfig("claude.model", inputClaude);
             currentClaudeModel = inputClaude;
@@ -157,7 +196,7 @@ public class SetupCommand implements Callable<Integer> {
         String currentDrivePaths = SqliteStorage.loadConfig("drive.paths");
         LOGGER.info("Current Google Drive Paths: [ {} ]", currentDrivePaths == null ? "(none)" : currentDrivePaths);
         LOGGER.info("Enter new Google Drive Paths (comma-separated, or press Enter to keep current):");
-        String inputDrive = scanner.nextLine().trim();
+        String inputDrive = ask(scanner);
         if (!inputDrive.isEmpty()) {
             SqliteStorage.saveConfig("drive.paths", inputDrive);
             currentDrivePaths = inputDrive;
@@ -168,7 +207,7 @@ public class SetupCommand implements Callable<Integer> {
         String currentBackupPath = SqliteStorage.loadConfig("backup.path");
         LOGGER.info("Current Automated Backup Path: [ {} ]", currentBackupPath == null ? "(none)" : currentBackupPath);
         LOGGER.info("Enter new Backup Directory Path (or press Enter to keep current):");
-        String inputBackup = scanner.nextLine().trim();
+        String inputBackup = ask(scanner);
         if (!inputBackup.isEmpty()) {
             SqliteStorage.saveConfig("backup.path", inputBackup);
             currentBackupPath = inputBackup;
@@ -297,7 +336,7 @@ public class SetupCommand implements Callable<Integer> {
     private void registerOptionalExtension(Scanner scanner, String kind, String hint) {
         LOGGER.info("\nRegister a {} extension? {}", kind, hint);
         LOGGER.info("Path to the repo (or press Enter to skip):");
-        String path = scanner.nextLine().trim();
+        String path = ask(scanner);
         if (path.isEmpty()) {
             LOGGER.info("  ↳ skipped");
             return;

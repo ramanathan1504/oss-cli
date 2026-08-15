@@ -250,6 +250,23 @@ be read, because then that is the true list.
 there for GitHub Enterprise, and it is how the offline behaviour above is tested:
 aimed at a host that does not resolve, it reproduces a pulled cable exactly.
 
+### All 36, checked both ways
+
+Every command was run with the network up and with it gone. Twenty-nine need no
+connection at all; seven do, and refuse in a sentence naming the cause.
+
+Two things that sweep corrected, both of which had looked fine:
+
+- **`oss backlog` is a shell script.** A JVM property cannot make it offline, so
+  the first pass "tested offline" while it made real API calls. Blocking `gh`,
+  `curl` and `claude` needs a proxy (`https_proxy=http://127.0.0.1:9`), not a
+  `-D` flag. It also used to *hang* offline rather than fall back — `|| echo`
+  catches a failure and not a hang — and it told you to run `gh auth login` when
+  you were already logged in and merely disconnected.
+- **`oss setup` needs a terminal, and now says so.** Eleven prompts read from
+  stdin; with stdin closed the first one threw `NoSuchElementException` over six
+  frames of picocli. It refuses cleanly and changes nothing.
+
 ---
 
 ## 7. Where it all lives

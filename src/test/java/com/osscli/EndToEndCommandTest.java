@@ -176,6 +176,31 @@ class EndToEndCommandTest {
     }
 
     @Test
+    @DisplayName("setup with nobody at the keyboard refuses, rather than throwing")
+    void setupWithoutATerminalRefuses() throws IOException {
+        // `oss setup` is the first command a new install is told to run, and it asked eleven
+        // questions through scanner.nextLine(). With stdin closed -- a script, a pipe, CI -- the
+        // first one threw java.util.NoSuchElementException: No line found, over six frames of
+        // picocli.
+        //
+        // Returning "" would be worse than throwing: every prompt treats empty as "keep the
+        // current value", so the wizard would run to the end, change nothing, and exit 0.
+        java.io.InputStream realIn = System.in;
+        System.setIn(new java.io.ByteArrayInputStream(new byte[0]));
+        try {
+            Cli.Result r = Cli.run("setup");
+
+            assertNotEquals(0, r.exitCode(), "it configured nothing, so it must not report success");
+            assertFalse(r.says("NoSuchElementException"), "the crash is back:\n" + r.all());
+            assertFalse(r.says("at picocli.CommandLine"), "and it must not print a stack trace:\n" + r.all());
+            assertTrue(r.says("no terminal here"), "it should say what is missing:\n" + r.all());
+            assertTrue(r.says("Nothing was changed"), "and that it changed nothing:\n" + r.all());
+        } finally {
+            System.setIn(realIn);
+        }
+    }
+
+    @Test
     @DisplayName("memory search is answered rather than refused")
     void memorySearchIsAnswered() {
         // `oss memory file` prints `oss memory search` as its own next step. With an archive
