@@ -391,7 +391,7 @@ public class ServeCommand implements Callable<Integer> {
             .doc h1{font-size:19px} .doc h2{font-size:16px} .doc h3{font-size:14px}
             </style></head><body><div class="wrap">
             <h1>oss</h1>
-            <div class="sub">One core that knows. A <b>bench</b> runs something real; a <b>kb</b> remembers.</div>
+            <div class="sub">One core that knows. A <b>runner</b> runs something real; a <b>memory</b> remembers.</div>
 
             <div class="grp">palette</div>
             <div id="list"></div>
@@ -410,7 +410,13 @@ public class ServeCommand implements Callable<Integer> {
               ordinary repository. Detaching only forgets the path; it deletes nothing.<br><br>
               This page attaches and reports. It deliberately does not <em>run</em> anything: an
               outward write must be confirmed at a terminal, and a browser has none. Run verbs from
-              the CLI — <code>oss run &lt;verb&gt;</code>, <code>oss memory &lt;verb&gt;</code>.
+              the CLI — <code>oss run &lt;verb&gt;</code>, <code>oss memory &lt;verb&gt;</code>.<br><br>
+              <b>You do not need this page.</b> Everything on it is two commands —
+              <code>oss ext add &lt;path&gt;</code> and <code>oss ext list</code> — and a
+              <b>pack</b> needs neither, because it has nothing to attach:
+              <code>oss run --pack &lt;dir&gt; &lt;verb&gt;</code>. If you have it running at login
+              and would rather not, <code>oss serve --uninstall</code> stops that and removes
+              nothing.
             </div>
             </div><script>
             const $=s=>document.querySelector(s);

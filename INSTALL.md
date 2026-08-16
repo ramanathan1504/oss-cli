@@ -306,10 +306,13 @@ comes through the guard, and the guard still asks you.
 
 ## 7. Ports
 
-| Port | Serves | Started by |
-|---|---|---|
-| **1504** | `oss serve` — the palette | you, by hand |
-| **8787** | `bench hub` — the runner's working page | launchd at login, or by hand |
+| Port | Serves | Started by | Needed? |
+|---|---|---|---|
+| **1504** | `oss serve` — the palette: attach an extension, see what is attached | you, by hand, or `oss serve --install` | **no.** It is `oss ext add <path>` and `oss ext list` with a paste box. `oss serve --uninstall` stops it starting at login and removes nothing |
+| **8787** | `oss run hub` — the runner's working page, which composes a review | launchd at login, or by hand | only if you use the hub. It belongs to a pack, not to `oss` |
+
+Neither is required to use a **pack**. A pack has nothing to attach, so it needs
+no service at all: `oss run --pack <dir> <verb>`.
 
 ---
 
