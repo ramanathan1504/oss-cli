@@ -13,11 +13,11 @@
 #
 # pr-review.sh — mechanical review harness for a Log4j pull request.
 #
-#   ./bench review 4218
-#   ./bench review 4153 --full           force a full reactor build
-#   ./bench review 4218 --no-build       metadata + diff only
-#   ./bench review 4218 --offline --keep fast, and keep the worktree
-#   ./bench review 4301 --3x             against the 3.x clone
+#   oss run review 4218
+#   oss run review 4153 --full           force a full reactor build
+#   oss run review 4218 --no-build       metadata + diff only
+#   oss run review 4218 --offline --keep fast, and keep the worktree
+#   oss run review 4301 --3x             against the 3.x clone
 #
 # Gathers the evidence a reviewer needs into one directory, and runs the two
 # checks that a human cannot do by reading: whether the PR's tests actually fail
@@ -562,7 +562,7 @@ say "Done"
 cat "$OUT/00-SUMMARY.md"
 
 # ------------------------------------------------ hand it to the archive ---
-# The evidence above is disposable — .bench/ is cleared by `./bench clean`. The
+# The evidence above is disposable — .bench/ is cleared by `oss run clean`. The
 # write-up is not, and it is the one artefact no harvester can reconstruct:
 # public threads record what was said, not the reasoning that got there.
 if [ "$FILE_IT" -eq 1 ]; then
@@ -588,8 +588,8 @@ fi
 say "these facts are necessary, not sufficient — next, by hand:"
 cat >&2 <<NEXT
     Reference/reviewing-a-contributor-pull-request §2   fix vs overshoot?
-    ./bench coverage                        does any app put that module on a classpath
-    ./bench repro $PR --pr --config <cfg> --scenario <s>
+    oss run coverage                        does any app put that module on a classpath
+    oss run repro $PR --pr --config <cfg> --scenario <s>
     ~/.oss-cli/reviews/$PR-<slug>.md        write it up, paste-ready block last
 NEXT
 printf '\nAll output: %s\n' "$OUT" >&2
