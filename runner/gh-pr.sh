@@ -13,10 +13,10 @@
 #
 # gh-pr.sh — put an upstream pull request on your classpath.
 #
-#   ./bench pr 4133                    which log4j-* modules it touches
-#   ./bench pr 4133 --checkout         fetch it into the Log4j clone as pr-4133
-#   ./bench pr 4133 --checkout --install    ...and mvn install it as a SNAPSHOT
-#   ./bench pr 4133 --3x --checkout --install
+#   oss run pr 4133                    which log4j-* modules it touches
+#   oss run pr 4133 --checkout         fetch it into the Log4j clone as pr-4133
+#   oss run pr 4133 --checkout --install    ...and mvn install it as a SNAPSHOT
+#   oss run pr 4133 --3x --checkout --install
 #
 # This used to also print the title, author, body, checks and reviews. It no
 # longer does, because `oss pr <n>` prints all of that for ANY repository and
@@ -34,7 +34,7 @@
 #
 # --install is what makes the PR selectable by the bench: it publishes
 # 2.27.0-SNAPSHOT (or 3.0.0-SNAPSHOT with --3x) into ~/.m2, which is where
-# ./bench resolves those versions from. Baseline against a release *before*
+# `oss run` resolves those versions from. Baseline against a release *before*
 # running it, because the snapshot you overwrite is whatever was there before.
 
 set -euo pipefail
@@ -54,7 +54,7 @@ CHECKOUT=0
 INSTALL=0
 ID=""
 
-[[ $# -gt 0 ]] || die "usage: ./bench pr <number> [--files] [--diff] [--checkout] [--install] [--3x] [--repo OWNER/NAME] [--clone PATH]   (facts: oss pr <number>)"
+[[ $# -gt 0 ]] || die "usage: oss run pr <number> [--files] [--diff] [--checkout] [--install] [--3x] [--repo OWNER/NAME] [--clone PATH]   (facts: oss pr <number>)"
 ID="$1"; shift
 [[ "$ID" =~ ^[0-9]+$ ]] || die "'$ID' is not a pull request number"
 
@@ -89,7 +89,7 @@ info "modules touched"
 MODULES=$(printf '%s\n' "$FILES_TOUCHED" | sed -n 's#^\(log4j-[a-z0-9-]*\)/.*#\1#p' | sort -u)
 if [[ -n $MODULES ]]; then
   printf '%s\n' "$MODULES" | sed 's/^/    /'
-  printf '    (cross-check with ./bench coverage: which app puts that module on a classpath)\n' >&2
+  printf '    (cross-check with oss run coverage: which app puts that module on a classpath)\n' >&2
 else
   printf '    none — this pull request touches no log4j-* module\n' >&2
   printf '    (docs, build or changelog only; there may be nothing here to run)\n' >&2
@@ -124,10 +124,10 @@ if [[ $CHECKOUT -eq 1 ]]; then
 
   rule
   info "next: run it, then compare against the release either side —"
-  printf '    ./bench run core-java --config <cfg>                  # = %s = this PR\n' "$SNAPSHOT" >&2
-  printf '    ./bench run core-java --config <cfg> --log4j 2.26.1   # the release before\n' >&2
-  printf '    ./bench matrix --apps core-java --configs <cfg> --javas 17 --scenario <s>\n' >&2
-  printf '    ./bench repro %s --pr --config <cfg> --scenario <s>\n' "$ID" >&2
+  printf '    oss run run core-java --config <cfg>                  # = %s = this PR\n' "$SNAPSHOT" >&2
+  printf '    oss run run core-java --config <cfg> --log4j 2.26.1   # the release before\n' >&2
+  printf '    oss run matrix --apps core-java --configs <cfg> --javas 17 --scenario <s>\n' >&2
+  printf '    oss run repro %s --pr --config <cfg> --scenario <s>\n' "$ID" >&2
   printf '\n' >&2
   info "when done: git -C $CLONE switch main"
 fi

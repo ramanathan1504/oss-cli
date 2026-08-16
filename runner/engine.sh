@@ -11,20 +11,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# bench — drive the Log4j feature bench across the version × config × app matrix.
+# The matrix engine — walk a pack across its version × config × app matrix.
 #
-#   ./bench list                                    what exists
-#   ./bench run core-java --config xml/layout-ecs   run scenarios under a config
-#   ./bench run core-java --log4j 2.25.4 exceptions run one scenario on one version
-#   ./bench matrix --scenario exceptions            same scenario, every version
-#   ./bench matrix --apps core-java,db --javas 17,21
-#   ./bench matrix --all                            every valid cell — hours
-#   ./bench coverage                                what is reached, what is not
-#   ./bench repro 4143 --log4j 2.26.0               build a standalone repro zip
-#   ./bench pr 4133 --checkout --install            read a PR, and run it here
-#   ./bench review 4133                             every mechanical fact about a PR
-#   ./bench hub                                     all three repos, one local page
-#   ./bench hub --pr 4133                           write and send the review, on the page
+# Every line below is what you type. This block IS `oss run help`: usage() reads
+# it, so an example here that nobody can paste is a wrong answer given to the
+# person who came looking. It said `./bench ...` for a while after the engine
+# moved into oss and the script stopped being a program you could call directly.
+#
+# `oss run run` is not a typo. The first word is the dispatcher, the second is
+# this engine's verb for running one app.
+#
+#   oss run list                                    what exists
+#   oss run run core-java --config xml/layout-ecs   run scenarios under a config
+#   oss run run core-java --log4j 2.25.4 exceptions run one scenario on one version
+#   oss run matrix --scenario exceptions            same scenario, every version
+#   oss run matrix --apps core-java,db --javas 17,21
+#   oss run matrix --all                            every valid cell — hours
+#   oss run coverage                                what is reached, what is not
+#   oss run repro 4143 --log4j 2.26.0               build a standalone repro zip
+#   oss run pr 4133 --checkout --install            read a PR, and run it here
+#   oss run review 4133                             every mechanical fact about a PR
+#   oss run hub                                     all three repos, one local page
+#   oss run hub --pr 4133                           write and send the review, on the page
+#
+# All of them need a pack — the applications, configurations and versions being
+# walked. Either stand in one, or name it:
+#
+#   cd ~/apache/log4j2-workout && oss run list
+#   oss run --pack ~/apache/log4j2-workout list
 #
 # Every run forks a real JVM with an explicit classpath rather than running
 # inside Maven's, so what executes here is exactly what a repro zip would ship.
@@ -64,7 +78,7 @@ mkdir -p "$CACHE"
 # lives in a pack, so the same engine can be pointed at another project by
 # writing one file rather than by editing this one.
 #
-#   BENCH_PACK=mine ./bench list      loads packs/mine/pack.sh
+#   BENCH_PACK=mine oss run list      loads packs/mine/pack.sh
 #
 # Sourced, not executed, because it defines arrays and a function this script
 # then uses directly. `set -u` is already on, so a pack that forgets a variable
@@ -219,7 +233,7 @@ cell_skip_reason() {
   # does not exist, because a manager whose startup failed is the thing under
   # test. In a sweep that is a failure with no stated reason, which is the exact
   # noise every rule above exists to remove. They stay selectable by name for
-  # `./bench run` and `./bench repro`; only the cross product skips them.
+  # `oss run run` and `oss run repro`; only the cross product skips them.
   if [[ "$config" == */repro-* ]]; then
     echo "$config is a hand-run reproduction, not a sweep cell (see Reference/reviewing-a-contributor-pull-request)"
     return
@@ -405,7 +419,7 @@ resolve_config() {
       return 0
     fi
   done
-  die "no such config: $cfg (try: ./bench list --configs)"
+  die "no such config: $cfg (try: oss run list --configs)"
 }
 
 # ── Commands ────────────────────────────────────────────────────────────────
@@ -457,7 +471,7 @@ cmd_run() {
   # Ad-hoc JVM flags, because unrecognised CLI arguments are passed to the app
   # rather than the JVM. Mainly for turning the StatusLogger all the way up
   # when an appender fails quietly:
-  #   BENCH_JVM_ARGS='-Dlog4j2.debug=true -Dlog4j2.StatusLogger.level=TRACE' ./bench run nosql ...
+  #   BENCH_JVM_ARGS='-Dlog4j2.debug=true -Dlog4j2.StatusLogger.level=TRACE' oss run run nosql ...
   if [[ -n "${BENCH_JVM_ARGS:-}" ]]; then
     # Deliberately unquoted: the variable holds several space-separated flags.
     jvm_args+=(${BENCH_JVM_ARGS})
@@ -676,7 +690,7 @@ cmd_clean() {
        -exec rm -rf {} + 2>/dev/null
   local days; days=$(ls "$CACHE/hub/report" 2>/dev/null | wc -l | tr -d ' ')
   info "cleared $CACHE ($was → $(du -sh "$CACHE" 2>/dev/null | cut -f1))"
-  info "kept hub/ (${days} daily reports) and reviews/ — './bench clean --all' takes those too"
+  info "kept hub/ (${days} daily reports) and reviews/ — 'oss run clean --all' takes those too"
 }
 
 # Where the bench actually reaches, as opposed to where it is meant to reach.
@@ -705,7 +719,7 @@ cmd_coverage() {
   pack_modules "$clone" > "$tmp/all"
 
   # Modules resolved onto any app's classpath. Requires that the classpaths have
-  # been resolved at least once, which any ./bench run does.
+  # been resolved at least once, which any `oss run run <app>` does.
   cat "$CACHE"/cp-*.txt 2>/dev/null | pack_modules_on_classpath > "$tmp/on-classpath"
 
   local total covered
@@ -727,7 +741,7 @@ cmd_coverage() {
   # since a classpath entry is not proof a plugin was instantiated.
   printf '\n\033[1mAxis coverage\033[0m  (from %s)\n' "$CACHE/coverage.tsv"
   if [[ ! -s "$CACHE/coverage.tsv" ]]; then
-    printf '  no matrix runs recorded yet — run ./bench matrix\n'
+    printf '  no matrix runs recorded yet — run oss run matrix\n'
     return
   fi
 
@@ -802,5 +816,5 @@ case "${1:-help}" in
   hub)      shift; cmd_hub "$@" ;;
   clean)  shift; cmd_clean "$@" ;;
   help|--help|-h) usage ;;
-  *) die "unknown command '$1' (try: ./bench help)" ;;
+  *) die "unknown command '$1' (try: oss run help)" ;;
 esac

@@ -6,7 +6,7 @@
 # your project instead. Nothing here mentions Log4j, which is the point: the
 # engine does not know what it is testing.
 #
-#   BENCH_PACK=example ./bench list
+#   BENCH_PACK=example oss run list
 #
 # It deliberately declares apps that do not exist on disk. `bench list` works --
 # listing an axis reads no files -- while anything that builds fails with a
