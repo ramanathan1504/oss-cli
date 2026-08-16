@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.11.15
+
+_2026-08-16_
+
+- Say that the local page exists, and that it is not a second product (#104)
+
+
 ## 1.11.14
 
 _2026-08-16_
