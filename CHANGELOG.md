@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.11.14
+
+_2026-08-16_
+
+- Say the command you can actually type (#102)
+
+
 ## 1.11.13
 
 _2026-08-15_
