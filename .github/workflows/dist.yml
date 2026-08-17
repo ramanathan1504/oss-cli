@@ -57,7 +57,7 @@ jobs:
       # built the image, so an image that only fails on a newer OS than the
       # runner passes here and breaks on arrival. That is exactly how this
       # shipped in 1.7.0 and 1.7.1.
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
