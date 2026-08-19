@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.1
+
+_2026-08-19_
+
+- Read the examples, so a page cannot teach a flag that was removed (#118)
+
+
 ## 2.1.0
 
 _2026-08-19_
