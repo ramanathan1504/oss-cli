@@ -581,6 +581,42 @@ Three lines of keyword matching score 5 of 5 on the same set and cannot invent a
 capability ships and the claim does not: on a machine with room for a 3B model this is genuinely
 useful, and on a laptop the honest default is the deterministic path plus `oss llm`.
 
+### The knowledge base is built in
+
+`oss memory` is the whole knowledge base, and needs no repository:
+
+```bash
+oss memory file notes.md      # keep a note
+oss memory index              # read it into the corpus
+oss memory search "…"         # find it again, by meaning
+oss memory map                # which notes touch which topic
+oss memory coverage           # what you have covered, and what you have not
+```
+
+With nothing configured it works over `~/.oss-cli/memory`. Pointing it somewhere else, and telling
+it what you are trying to learn, is a file — `~/.oss-cli/kb.json`:
+
+```json
+{
+  "archive": "~/Documents/notes",
+  "topics":  { "log4j": ["log4j", "appender", "layout"] },
+  "yardsticks": { "log4j": ["Appenders", "Layouts", "Filters", "Lookups", "Garbage-free logging"] }
+}
+```
+
+**A yardstick is the outside opinion, and it is the point of `coverage`.** Counting your own notes
+can only report what you have written: an archive with nothing on Lookups will happily report all
+of its Log4j notes as Log4j notes and call that complete. The yardstick is what the technology's
+own manual documents, so an area nobody wrote about scores `○ nothing` instead of being invisible.
+
+Three grades, and the floors are deliberate: an area needs **3 mentions in a note** before that note
+counts for it — one passing use of a word is not knowledge of the subject — and **3 notes** before it
+grades `● covered` rather than `◐ thin`. A single long note that returns to a term forty times is
+one afternoon's reading; three notes that each come back to it is a subject you have worked in.
+
+Matching is literal and case-insensitive on purpose. A model deciding whether a note is "about" an
+area turns a measurement into an opinion, and makes the number move when nothing was written.
+
 ### A pack is a file
 
 A pack is what points the built-in engine at *your* applications, versions and configurations. It

@@ -13,6 +13,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.stream.Stream;
 
 /**
@@ -42,7 +43,7 @@ public final class BuiltinMemory {
      * it: {@code oss memory} with no verb has nothing else to offer when no archive is attached.
      * Stated once, so the switch, the error text and the listing cannot disagree.
      */
-    public static final List<String> VERBS = List.of("file", "search", "index");
+    public static final List<String> VERBS = List.of("file", "search", "index", "map", "coverage");
 
     private BuiltinMemory() {}
 
@@ -56,10 +57,14 @@ public final class BuiltinMemory {
                     return search(args);
                 case "index":
                     return index();
+                case "map":
+                    return map();
+                case "coverage":
+                    return coverage();
                 default:
                     System.err.println("error  built-in memory has no verb \"" + verb + "\"");
                     System.err.println("       it knows: " + String.join(", ", VERBS));
-                    System.err.println("       Attach a memory extension for more: oss ext add <path>");
+                    System.err.println("       A different archive is a few lines in kb.json, not a checkout.");
                     return 2;
             }
         } catch (IOException e) {
@@ -71,6 +76,74 @@ public final class BuiltinMemory {
     /** The verbs the built-in store can answer, so a caller can ask before falling back to it. */
     public static boolean supports(String verb) {
         return VERBS.contains(verb);
+    }
+
+    // ---------------------------------------------------------------------- map ---
+
+    /**
+     * Which notes touch which topic.
+     *
+     * <p>Topics are declared rather than inferred. A model deciding what a note is "about" turns a
+     * count into an opinion and moves the number when nothing was written; a list of terms in
+     * {@code kb.json} can be read, argued with and corrected.
+     */
+    private static int map() throws IOException {
+        KnowledgePack pack = KnowledgePack.load();
+        if (pack.topics().isEmpty()) {
+            System.out.println("  no topics declared, so there is nothing to group by.");
+            System.out.println();
+            System.out.println("  kb.json:  {\"topics\": {\"log4j\": [\"log4j\", \"appender\"]}}");
+            System.out.println("  " + AppPaths.BASE_DIR.resolve("kb.json"));
+            return 0;
+        }
+        Map<String, List<String>> byTopic = Coverage.map(pack.archive(), pack.topics());
+        System.out.println("  " + pack.archive());
+        for (Map.Entry<String, List<String>> e : byTopic.entrySet()) {
+            System.out.printf("%n  %-20s %d note(s)%n", e.getKey(), e.getValue().size());
+            e.getValue().stream().limit(5).forEach(n -> System.out.println("      " + n));
+            if (e.getValue().size() > 5) {
+                System.out.println("      … and " + (e.getValue().size() - 5) + " more");
+            }
+        }
+        return 0;
+    }
+
+    // ----------------------------------------------------------------- coverage ---
+
+    /**
+     * What the notes cover, against what the technology documents.
+     *
+     * <p>The yardstick has to come from outside the notes. Scoring an archive against itself can
+     * only report what is in it, so a base with nothing on a subject reports full marks on the
+     * subjects it does have and calls that coverage.
+     */
+    private static int coverage() throws IOException {
+        KnowledgePack pack = KnowledgePack.load();
+        if (pack.yardsticks().isEmpty()) {
+            System.out.println("  no yardstick declared, so there is nothing to measure against.");
+            System.out.println();
+            System.out.println("  A yardstick is what a technology's own manual documents:");
+            System.out.println("  kb.json:  {\"yardsticks\": {\"log4j\": [\"Appenders\", \"Layouts\", \"Lookups\"]}}");
+            System.out.println("  " + AppPaths.BASE_DIR.resolve("kb.json"));
+            return 0;
+        }
+        for (Map.Entry<String, List<String>> tech : pack.yardsticks().entrySet()) {
+            List<Coverage.Area> areas = Coverage.score(pack.archive(), tech.getValue());
+            long covered =
+                    areas.stream().filter(a -> a.grade().equals("covered")).count();
+            long thin = areas.stream().filter(a -> a.grade().equals("thin")).count();
+            long nothing =
+                    areas.stream().filter(a -> a.grade().equals("nothing")).count();
+            System.out.printf(
+                    "%n  %s — %d of %d covered · %d thin · %d nothing%n",
+                    tech.getKey(), covered, areas.size(), thin, nothing);
+            for (Coverage.Area a : areas) {
+                System.out.printf(
+                        "    %s  %-28s %3d note(s) %5d mention(s)  %s%n",
+                        a.mark(), a.name(), a.notes(), a.mentions(), a.strongest());
+            }
+        }
+        return 0;
     }
 
     // --------------------------------------------------------------------- file ---
