@@ -313,12 +313,16 @@ security add-generic-password -s anthropic_api_key -a "$USER" -w
 `setup` records which *model* to call for each provider. The key itself stays
 outside the database.
 
-Nothing is ever sent because a key exists. Escalation is a flag you type:
+Nothing is ever sent because a key exists. The engine is a word you type, in front
+of the command:
 
 ```bash
-oss prompt <n> --send-claude     # or --send-openai, --send-gemini
-oss review <n> --escalate        # uses whichever key is configured
+oss claude review <n>            # or gemini, or codex
+oss claude prompt <n>
 ```
+
+And naming one is permission, not an instruction: the ask starts on the local rung
+and goes out only when that rung falls short, printing the reason.
 
 ---
 

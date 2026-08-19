@@ -202,9 +202,9 @@ Two of those are not similarity, and are worth stating precisely:
 oss prompt 1666                   # Ollama answers, or builds expert prompt if too complex
 oss prompt 1666 --copy            # Copy generated prompt to clipboard (macOS pbcopy)
 oss prompt 1666 --out prompt.md   # Save prompt to a Markdown file
-oss prompt 1666 --send-gemini     # Auto-send to Gemini when escalation occurs
-oss prompt 1666 --send-openai     # Auto-send to OpenAI when escalation occurs
-oss prompt 1666 --send-claude     # Auto-send to Anthropic when escalation occurs
+oss gemini prompt 1666            # Send it, if the local rung falls short
+oss codex prompt 1666             # the same, to OpenAI
+oss claude prompt 1666            # the same, to Anthropic
 oss prompt 1666 --force-prompt    # Skip Ollama — always build and display the expert prompt
 ```
 
@@ -256,7 +256,7 @@ oss chat -c                    # the same thing
 oss chat --resume 7            # resume a specific one
 oss chat --resume              # pick one from the list
 oss chat 4129 --resume         # the latest conversation about #4129
-oss chat 4129 --openai         # escalate to OpenAI instead of Gemini
+oss codex chat 4129            # escalate to OpenAI instead of Gemini
 ```
 
 **Long conversations are folded, not silently truncated.** Once the transcript outgrows the model's context, the older turns are summarised into a running summary and the recent ones kept verbatim. With no generation model attached the oldest turns are dropped instead — and that is printed, because quietly forgetting the first half of a conversation while continuing to answer confidently is the failure worth shouting about. The full transcript stays readable in `oss history --show` either way.
