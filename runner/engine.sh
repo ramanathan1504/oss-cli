@@ -87,8 +87,17 @@ mkdir -p "$CACHE"
 # A repository that IS a pack puts pack.sh at its root. A repository that
 # CARRIES packs keeps them under packs/<name>/. Both are supported, and the
 # root spelling is preferred because it is what a pack repository looks like.
+#
+# A pack that describes itself is rendered by oss into this shape and handed over
+# by path. It is checked first and returns immediately: written as a plain branch
+# above the others it set PACK_FILE and was then overwritten two lines later by
+# the BENCH_PACK selection, which is the kind of bug that shows up as "my pack was
+# ignored" rather than as an error.
 BENCH_PACK="${BENCH_PACK:-}"
-if [[ -n "$BENCH_PACK" ]]; then
+if [[ -n "${OSS_PACK_FILE:-}" && -f "${OSS_PACK_FILE}" ]]; then
+  PACK_FILE="$OSS_PACK_FILE"
+  BENCH_PACK="${BENCH_PACK:-rendered}"
+elif [[ -n "$BENCH_PACK" ]]; then
   PACK_FILE="$ROOT/packs/$BENCH_PACK/pack.sh"
 elif [[ -f "$ROOT/pack.sh" ]]; then
   PACK_FILE="$ROOT/pack.sh"
