@@ -495,6 +495,49 @@ A store **older** than this build is not a problem: the next command migrates it
 
 ---
 
+## 🔌 Extensions
+
+`oss` reads any repository through the GitHub API without a clone, in any language. That boundary
+is why it generalises, and it leaves two questions it cannot answer alone: **does this actually
+run?** and **have I worked this out before?** An extension answers one of them. A `runner` executes
+something real; a `memory` remembers. Both are declared by an `oss-ext.json` at the root of any
+repository and called as child processes, so an extension can be written in anything.
+
+```bash
+oss ext add ~/apache/log4j2-workout    # register whatever that repo declares
+oss ext list                           # what is wired up, and is it still reachable
+```
+
+### Typing a dispatcher with no verb
+
+```bash
+oss memory        # what can I actually type here?
+oss run
+```
+
+Lists the verbs read from the manifest of the extension attached **on this machine**, marking any
+that write outward, plus the built-in verbs that keep working when the archive is unreachable. It
+exits 0 — asking what is available is a question, not a mistake.
+
+This is deliberately not usage text. Usage describes the command's own grammar, which is the same
+for everybody; the useful answer is a list that only exists on your machine and cannot be compiled
+in. With nothing attached, `oss memory` names the built-in store and `oss run` names `--pack`,
+which walks a pack with the engine that ships inside.
+
+```
+  devon (memory) — Topic-first archive indexed by DEVONthink
+  /Users/you/knowledge-creator
+
+    oss memory file
+    oss memory index
+    oss memory coverage
+
+    oss memory search   (built in, always available)
+```
+
+A verb that the extension does not declare is refused by name, and the refusal lists what it does
+declare — so the two paths agree.
+
 ## Quick Reference
 
 | Command           | Mode           | AI Required             | Description                                  |
@@ -506,6 +549,7 @@ A store **older** than this build is not a problem: the next command migrates it
 | `ext list`        | Local          | No                      | What is attached, and whether it is still reachable |
 | `bench <verb>`    | Local          | No                      | Dispatch to an attached **bench** (runs something real) |
 | `kb <verb>`       | Local          | No                      | Dispatch to an attached **kb** (files and indexes) |
+| `run` / `memory`  | Local          | No                      | Typed bare, list the verbs the attached extension declares |
 | `sync --all`      | Online         | No                      | Sync all registered repositories             |
 | `sync --me`       | Online         | Embedder (required)     | Sync personal PR profile + Drive logs        |
 | `profile`         | Online         | No                      | Language, build, toolchain, conventions      |

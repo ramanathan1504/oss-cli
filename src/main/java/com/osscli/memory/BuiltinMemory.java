@@ -35,6 +35,15 @@ public final class BuiltinMemory {
     /** Beside the database and the review ledger, for the same reason: it outlives every checkout. */
     public static final Path DIR = AppPaths.BASE_DIR.resolve("memory");
 
+    /**
+     * What the built-in store can answer.
+     *
+     * <p>Public because a caller has to be able to <em>show</em> this list, not only test against
+     * it: {@code oss memory} with no verb has nothing else to offer when no archive is attached.
+     * Stated once, so the switch, the error text and the listing cannot disagree.
+     */
+    public static final List<String> VERBS = List.of("file", "search", "index");
+
     private BuiltinMemory() {}
 
     /** Dispatch a verb. Returns a process exit code. */
@@ -49,7 +58,7 @@ public final class BuiltinMemory {
                     return index();
                 default:
                     System.err.println("error  built-in memory has no verb \"" + verb + "\"");
-                    System.err.println("       it knows: file, search, index");
+                    System.err.println("       it knows: " + String.join(", ", VERBS));
                     System.err.println("       Attach a memory extension for more: oss ext add <path>");
                     return 2;
             }
@@ -61,7 +70,7 @@ public final class BuiltinMemory {
 
     /** The verbs the built-in store can answer, so a caller can ask before falling back to it. */
     public static boolean supports(String verb) {
-        return java.util.Set.of("file", "search", "index").contains(verb);
+        return VERBS.contains(verb);
     }
 
     // --------------------------------------------------------------------- file ---
