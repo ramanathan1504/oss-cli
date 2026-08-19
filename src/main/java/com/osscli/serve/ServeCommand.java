@@ -357,8 +357,8 @@ public class ServeCommand implements Callable<Integer> {
                brown accent while the landing page and the manual are deep teal with
                brass -- so the local service looked like a different product from the
                tool that started it. Values are the same as site/index.html. */
-            :root{--bg:#EDF2F3;--fg:#08161D;--mut:#536A74;--line:#CBDADD;--card:#F8FBFB;
-                  --acc:#8A6A0F;--ok:#1B6259;--bad:#8C3A22;--code:#E2EBEC}
+            :root{--bg:#E4EBED;--fg:#08161D;--mut:#4C626C;--line:#BFD0D4;--card:#FFFFFF;
+                  --acc:#7A5D0C;--ok:#175A52;--bad:#7E3320;--code:#D3DEE1}
             @media(prefers-color-scheme:dark){:root{--bg:#07141A;--fg:#E6EFF0;--mut:#7B949C;
                   --line:#1A3540;--card:#0D202A;--acc:#D8B23A;--ok:#5FBFB0;--bad:#E08066;--code:#040E13}}
             *{box-sizing:border-box}
