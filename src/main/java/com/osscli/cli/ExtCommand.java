@@ -188,13 +188,75 @@ public class ExtCommand implements Callable<Integer> {
                 description = "Permit ONE outward write to exactly this repository. Still confirmed at the terminal.")
         String approveUpstream;
 
-        @Parameters(index = "0", description = "Verb to dispatch, e.g. run, matrix, review, file, index, search")
+        // Optional, because the answer to "what can I type here" has to come from the tool
+        // rather than from a person who already knows. Missing it used to print picocli's
+        // "Missing required parameter: '<verb>'" over a usage block naming EXAMPLE verbs --
+        // `run, matrix, review, file, index, search` -- none of which are read from the
+        // extension that is actually attached. Someone typing `oss memory` blind was told to
+        // try verbs their archive may not declare, and never told about the ones it does.
+        @Parameters(index = "0", arity = "0..1", description = "Verb to dispatch. Omit to list what is available.")
         String verb;
 
         @Parameters(index = "1..*", description = "Arguments passed through untouched")
         List<String> passthrough = List.of();
 
         abstract Extension.Kind kind();
+
+        /** The name a reader would type, for the examples printed by {@link #discover()}. */
+        abstract String label();
+
+        /** What the core itself can do for this kind when nothing is attached. */
+        List<String> builtinVerbs() {
+            return List.of();
+        }
+
+        /** Anything else worth saying when nothing of this kind is registered. */
+        void whenNothingAttached() {}
+
+        /**
+         * What can be typed here, read from what is actually attached.
+         *
+         * <p>Deliberately not usage text. Usage describes this command's own grammar; the useful
+         * answer is the verb list of a child process registered on this machine, which picocli
+         * cannot know. Exit 0 -- asking what is available is a fair question, not a mistake.
+         */
+        Integer discover() {
+            List<Extension> attached = ExtensionRegistry.ofKind(kind());
+            if (attached.isEmpty()) {
+                if (!builtinVerbs().isEmpty()) {
+                    System.out.println("  built-in " + kind().lower() + ", nothing attached:");
+                    for (String v : builtinVerbs()) {
+                        System.out.println("    oss " + label() + " " + v);
+                    }
+                    System.out.println();
+                }
+                whenNothingAttached();
+                System.out.println("  oss ext add <repo>     a repo with an oss-ext.json at its root");
+                return 0;
+            }
+            for (Extension e : attached) {
+                System.out.printf("  %s (%s) — %s%n", e.getName(), e.kind().lower(), e.getDescription());
+                System.out.println("  " + e.getRoot());
+                if (ExtensionRegistry.isStale(e)) {
+                    // The dispatcher refuses every verb while stale, so saying it here saves
+                    // finding that out one command later.
+                    System.out.println(
+                            "  stale — " + Extension.MANIFEST + " changed on disk: oss ext refresh " + e.getName());
+                }
+                System.out.println();
+                for (String v : e.getVerbs().keySet()) {
+                    System.out.println(
+                            "    oss " + label() + " " + v + (e.writesOutward(v) ? "   (writes outward)" : ""));
+                }
+                System.out.println();
+            }
+            for (String v : builtinVerbs()) {
+                // Listed after, and labelled: these keep answering when the archive is
+                // unreachable, which is exactly when someone is looking for them.
+                System.out.println("    oss " + label() + " " + v + "   (built in, always available)");
+            }
+            return 0;
+        }
 
         /**
          * What to do when no extension of this kind is registered.
@@ -228,6 +290,9 @@ public class ExtCommand implements Callable<Integer> {
         @Override
         public Integer call() {
             try {
+                if (verb == null) {
+                    return discover();
+                }
                 // An explicit choice wins over a registered extension: someone who typed
                 // --pack said which one they meant, and silently dispatching elsewhere because
                 // an extension happens to be attached would be the wrong kind of helpful.
@@ -318,6 +383,25 @@ public class ExtCommand implements Callable<Integer> {
         }
 
         @Override
+        String label() {
+            return "run";
+        }
+
+        /**
+         * An empty registry is not the end of the road here.
+         *
+         * <p>The common case turned out not to be a repository that drives itself, but a
+         * description of applications and versions — a pack — walked by the engine that ships
+         * inside. Saying only "attach an extension" would hide the route most people want.
+         */
+        @Override
+        void whenNothingAttached() {
+            System.out.println("  the built-in engine runs a pack directly:");
+            System.out.println("    oss run --pack <dir> list");
+            System.out.println();
+        }
+
+        @Override
         boolean preferFallback() {
             return pack != null;
         }
@@ -353,6 +437,16 @@ public class ExtCommand implements Callable<Integer> {
         @Override
         Extension.Kind kind() {
             return Extension.Kind.MEMORY;
+        }
+
+        @Override
+        String label() {
+            return "memory";
+        }
+
+        @Override
+        List<String> builtinVerbs() {
+            return BuiltinMemory.VERBS;
         }
 
         /**
