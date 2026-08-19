@@ -204,8 +204,8 @@ oss prompt 1666 --copy
 # Save expert prompt to a Markdown file
 oss prompt 1666 --out ~/Desktop/issue-1666-prompt.md
 
-# Auto-send to an external AI when escalation occurs
-oss prompt 1666 --send-gemini
+# Send it, if the local rung cannot answer. The engine goes in front.
+oss gemini prompt 1666
 ```
 
 ### Conversations you can come back to

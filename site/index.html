@@ -819,8 +819,8 @@ td .need,td.need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)
       </div>
       <div class="rung opt">
         <span class="mark" aria-hidden="true">○</span>
-        <span class="what">Local answers<span class="needs">optional: Ollama</span></span>
-        <span class="gives">A verdict on a pull request, a triage audit, an answer to a question — generated on your own machine, with nothing sent anywhere.</span>
+        <span class="what">Local answers<span class="needs">optional: Ollama, and you ask for it</span></span>
+        <span class="gives">A verdict on a pull request, an answer to a question — generated on your own machine, with nothing sent anywhere. Typed as <code>oss llm review 4249</code>: a daemon that happens to be running is not a request.</span>
       </div>
       <div class="rung opt">
         <span class="mark" aria-hidden="true">○</span>
@@ -830,9 +830,46 @@ td .need,td.need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)
       <div class="rung opt">
         <span class="mark" aria-hidden="true">○</span>
         <span class="what">Escalation<span class="needs">optional: a cloud API key</span></span>
-        <span class="gives">When local context or confidence runs out, OSS-CLI assembles a complete expert prompt. Send it automatically, or copy it into whichever model you prefer.</span>
+        <span class="gives">Typed as <code>oss claude review 4249</code>, and only reached when the local rung falls short — the reason is printed. No key? <code>oss prompt</code> assembles the same context for you to paste anywhere.</span>
       </div>
     </div>
+  </div>
+</section>
+
+
+<!-- ══════════════ engines ══════════════ -->
+<section class="band band-sunken" id="engines">
+  <div class="shell">
+    <p class="eyebrow">Who may answer</p>
+    <h2>The engine goes in front of the command.</h2>
+    <p class="sub">
+      Not a flag on some commands and a different flag on others. What you typed is the whole
+      answer to "did a model see this, and whose".
+    </p>
+
+<pre class="block"><span class="c"># nothing leaves this machine</span>
+oss review 4249
+
+<span class="c"># a daemon on this machine may answer</span>
+oss llm review 4249
+
+<span class="c"># Claude may answer — needs a key</span>
+oss claude review 4249
+
+<span class="c"># either may, in that order</span>
+oss llm claude review 4249</pre>
+
+    <p class="sub">
+      <strong>May, not will.</strong> Naming an engine grants permission; it does not order a call.
+      Every ask starts on the local rung — your own notes, the vector index, the deterministic
+      checks — and goes out only when that rung fails a test the command states out loud, with the
+      reason printed. A question your archive already answers is not worth a round trip.
+    </p>
+    <p class="sub">
+      A command that never asks a model refuses the prefix instead of ignoring it.
+      <code>oss claude doctor</code> would look like it asked a model something, and running the
+      same deterministic report anyway would leave that impression standing.
+    </p>
   </div>
 </section>
 
@@ -1059,6 +1096,16 @@ oss prompt 812</pre>
         <span class="k">Local-first</span>
         <h3>Your data stays put</h3>
         <p>Issues, vectors and notes live in SQLite on your disk. Retrieval and embedding run locally. Nothing leaves your machine unless you explicitly escalate a prompt to a cloud model.</p>
+      </div>
+      <div class="card">
+        <span class="k">Extensions</span>
+        <h3>Two questions it will not answer alone</h3>
+        <p>OSS-CLI reads any repository through the API, in any language, without a clone — which is why it generalises, and why it cannot tell you <em>does this actually run</em> or <em>have I worked this out before</em>. A repo declares an <code>oss-ext.json</code> and becomes a runner or a memory; <code>oss ext add &lt;repo&gt;</code> attaches it, and <code>oss run</code> or <code>oss memory</code> dispatch to it. Written in anything, called as a child process.</p>
+      </div>
+      <div class="card">
+        <span class="k">Packs</span>
+        <h3>Nothing to attach, still runs</h3>
+        <p>The common case turned out not to be a repository that drives itself but a description of your applications and versions. <code>oss run --pack &lt;dir&gt; list</code> walks one with the engine that ships inside, so a pack needs no service and no registration at all.</p>
       </div>
     </div>
   </div>
