@@ -550,6 +550,37 @@ anything — it reads the stored `analyze` result and the keyword analyzer.
 The last row is the one that changes behaviour without a flag being typed: a daemon that happens
 to be installed is no longer treated as a request.
 
+### Running a local model in this process
+
+`oss` can run an ONNX decoder **in its own process** — no daemon, no key, no network, nothing to
+start first. Point it at one:
+
+```bash
+export OSS_BUILTIN_MODEL=~/models/qwen2.5-3b-instruct-int8.onnx
+```
+
+The model's shape is read from the graph, so any decoder exporting the usual
+`input_ids` / `attention_mask` / `position_ids` / `past_key_values.N` signature works. Loading is
+**refused** rather than attempted when the machine cannot spare the memory: a runtime that takes
+more than the free RAM does not fail, it swaps, and the machine stops responding for minutes in a
+way that cannot be read as an error or cancelled.
+
+**Nothing is bundled, and that is measured rather than assumed.** A small model was going to ship
+inside the install so that naming no engine still produced a sentence. Two were built and measured
+against five real pull requests:
+
+| asked for | result |
+|---|---|
+| one-sentence summary from the title | invented — "add a new exception type" for a change that adds none |
+| one-sentence summary from the diff | invented — "reviewed the changelogs" for a change touching none |
+| pick one of six labels, raw scores | 1 of 5, and the same label every time |
+| pick one label, prior subtracted | 2 of 5 at 135M, 1 of 5 at 360M |
+| pick one label, four examples given | 2 of 5, a different two |
+
+Three lines of keyword matching score 5 of 5 on the same set and cannot invent anything. So the
+capability ships and the claim does not: on a machine with room for a 3B model this is genuinely
+useful, and on a laptop the honest default is the deterministic path plus `oss llm`.
+
 ## 🔌 Extensions
 
 `oss` reads any repository through the GitHub API without a clone, in any language. That boundary
