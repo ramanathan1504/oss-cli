@@ -84,6 +84,17 @@ public class ReviewCommand implements Callable<Integer> {
     private boolean noVerdict;
 
     @Option(
+            names = {"--verify"},
+            description = "Build the change and re-run its tests with it reverted, in a throwaway worktree")
+    private boolean verify;
+
+    @Option(
+            names = {"--clone"},
+            paramLabel = "<path>",
+            description = "A checkout of the repository, for --verify. Never modified.")
+    private java.nio.file.Path clone;
+
+    @Option(
             names = {"--no-notes"},
             description = "Do not consult your own notes when reviewing")
     private boolean noNotes;
@@ -130,8 +141,64 @@ public class ReviewCommand implements Callable<Integer> {
         printRelatedNotes(notes);
 
         boolean verdictGiven = !noVerdict && printVerdict(ev, profile, notes);
-        printLadder(verdictGiven, conventionsChecked, !notes.isEmpty());
+        boolean verified = verify && printVerification(ev);
+        printLadder(verdictGiven, conventionsChecked, !notes.isEmpty(), verified);
         return 0;
+    }
+
+    /**
+     * Build the change and find out whether its tests mean anything.
+     *
+     * <p>The one layer that produces facts rather than opinions. Everything above reads the diff and
+     * says something about it; this compiles it, runs the tests it adds, takes the production change
+     * back out, and runs them again. A test that passes both ways is the finding -- it would have
+     * passed before the bug was fixed, which is invisible to reading and decisive to a reviewer.
+     */
+    private boolean printVerification(PrEvidence ev) {
+        List<String> changed = new ArrayList<>();
+        try {
+            for (Map<String, Object> f : readList(ev.filesJson())) {
+                changed.add(String.valueOf(f.get("filename")));
+            }
+        } catch (Exception e) {
+            LOGGER.warn("  ⚠ Could not read the file list: {}", e.getMessage());
+            return false;
+        }
+
+        LOGGER.info("");
+        LOGGER.info("── Verification (built and run, not read) ──");
+        com.osscli.review.Verifier.Report report = com.osscli.review.Verifier.verify(
+                clone, ev.headSha(), null, ev.baseRef(), changed, line -> LOGGER.info("  ↳ {}", line));
+
+        if (!report.ran()) {
+            LOGGER.info("  ○ not verified — {}", report.why());
+            return false;
+        }
+        for (com.osscli.review.Verifier.Step step : report.steps()) {
+            LOGGER.info(
+                    "  {} {}{}",
+                    step.outcome() == com.osscli.review.Verifier.Outcome.PASSED ? "✔" : "✘",
+                    step.what(),
+                    step.detail().isEmpty() ? "" : " — " + step.detail());
+        }
+        if (report.why() != null) {
+            LOGGER.info("");
+            LOGGER.info("  {}", report.why());
+            return true;
+        }
+        LOGGER.info("");
+        for (com.osscli.review.Verifier.TestResult t : report.tests()) {
+            switch (t.verdict()) {
+                case PROVEN -> LOGGER.info("  ✔ {} — {}", t.testClass(), t.detail());
+                case PROVES_NOTHING -> {
+                    // The whole reason this layer exists.
+                    LOGGER.info("  ⚠ {} — {}", t.testClass(), t.detail());
+                    LOGGER.info("      It would have passed before the change, so it is not covering it.");
+                }
+                default -> LOGGER.info("  ○ {} — {}", t.testClass(), t.detail());
+            }
+        }
+        return true;
     }
 
     // ── Layer 4: the user's own notes ────────────────────────────────────────
@@ -640,7 +707,7 @@ public class ReviewCommand implements Callable<Integer> {
      * tell the reader their notes had been weighed when they had not -- and a review is trusted precisely because of
      * what went into it.
      */
-    private void printLadder(boolean verdictGiven, boolean conventionsChecked, boolean notesUsed) {
+    private void printLadder(boolean verdictGiven, boolean conventionsChecked, boolean notesUsed, boolean verified) {
         LOGGER.info("");
         LOGGER.info("── What this review used ──");
         LOGGER.info("  ✔ Facts from GitHub");
@@ -657,6 +724,7 @@ public class ReviewCommand implements Callable<Integer> {
                                         ? "start Ollama with 'ollama serve'"
                                         : "not asked for — oss llm review " + prNumber)));
         report(escalated, "Escalation to a cloud model", whyNoEscalation());
+        report(verified, "Built and re-run with the change reverted", verify ? "could not be run" : "--verify");
     }
 
     /**

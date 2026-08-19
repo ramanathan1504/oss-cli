@@ -37,7 +37,7 @@
     "prs": ["--help", "--repo", "--version", "-V", "-h", "-r"],
     "report": ["--help", "--me", "--repo", "--version", "-V", "-h", "-r"],
     "restore": ["--help", "--version", "-V", "-h"],
-    "review": ["--help", "--no-notes", "--no-verdict", "--refresh", "--repo", "--version", "-V", "-h", "-r"],
+    "review": ["--clone", "--help", "--no-notes", "--no-verdict", "--refresh", "--repo", "--verify", "--version", "-V", "-h", "-r"],
     "run": ["--approve-upstream", "--help", "--name", "--pack", "--version", "-V", "-h"],
     "search": ["--global", "--help", "--limit", "--repo", "--version", "-V", "-g", "-h", "-n", "-r"],
     "serve": ["--help", "--install", "--no-open", "--port", "--uninstall", "--version", "-V", "-h"],

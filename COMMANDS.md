@@ -162,9 +162,38 @@ Escalation fires **only when it would change the answer** — a diff that alread
 oss review 4234                    facts, conventions and your notes; no model
 oss llm review 4234                + a local verdict
 oss claude review 4234             + Claude, and it reads the whole diff
+oss review 4234 --verify --clone ~/src/project    + built and re-run with the change reverted
 oss review 4234 --no-verdict       facts only
 oss review 4234 -r owner/name --refresh
 ```
+
+### `--verify` — the layer that produces facts
+
+Every other layer reads. This one **builds the change and runs its tests, then takes the production
+change back out and runs them again**:
+
+```
+── Verification (built and run, not read) ──
+  ✔ build
+  ✔ tests with the change
+  ✔ revert the change
+  ✘ tests without the change — Tests run: 15, Failures: 1, Errors: 1
+
+  ✔ ThrowablesTest — fails when the production change is reverted
+  ⚠ SomeOtherTest — passes with the production change reverted
+      It would have passed before the change, so it is not covering it.
+```
+
+That warning is the point. **A test that passes with the fix reverted is proving nothing**, and it
+is invisible to reading: the test is present, well written, green, and covers none of the change.
+No model can find it, because the fact does not exist in the diff — it only exists once something
+has been run.
+
+- Everything happens in a throwaway `git worktree`; **your working tree is never touched**.
+- The change is reverted to the **merge base**, not to the branch tip — the tip has moved on, and
+  reverting to it would revert other people's work and make every test look proven.
+- Each test class is judged on **its own** result line, not on the build's exit code, and a class
+  that never ran reports `was not run` rather than passing quietly.
 
 When a verdict is produced it is filed to `<topic>/oss-cli/` in your notes archive and indexed, so it becomes retrievable evidence for later questions.
 
