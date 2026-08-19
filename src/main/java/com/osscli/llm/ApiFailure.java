@@ -73,12 +73,25 @@ public final class ApiFailure {
                         + "  oss setup changes it.";
             case 400 ->
                 provider + " rejected the request" + (detail.isEmpty() ? "" : ": " + detail) + "\n"
-                        + "  This is usually a model name that does not accept the request as sent.";
+                        // The hint follows the message, not only the status. Anthropic answers a
+                        // billing problem with 400 and a sentence that says so, and the canned
+                        // "usually a model name" line was then printed under "your credit balance
+                        // is too low" -- sending somebody to change a model that was never wrong.
+                        + (looksLikeBilling(detail)
+                                ? "  Your account is out of credit. Everything in oss that does not need a"
+                                        + " cloud model still works, and oss llm <command> uses a local one."
+                                : "  This is usually a model name that does not accept the request as sent.");
             case 402 ->
                 provider + " reports no available credit" + (detail.isEmpty() ? "" : ": " + detail) + "\n"
                         + "  Everything in oss that does not need a cloud model still works.";
             default -> provider + " returned HTTP " + statusCode + (detail.isEmpty() ? "" : ": " + detail);
         };
+    }
+
+    /** Whether a provider's own words say this is about money rather than about the request. */
+    private static boolean looksLikeBilling(String detail) {
+        String lower = detail.toLowerCase(java.util.Locale.ROOT);
+        return lower.contains("credit") || lower.contains("billing") || lower.contains("quota");
     }
 
     /**

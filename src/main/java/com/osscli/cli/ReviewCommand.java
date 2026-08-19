@@ -62,6 +62,9 @@ public class ReviewCommand implements Callable<Integer> {
     /** Set once the verdict came from a cloud model, so the layer summary reports the route actually taken. */
     private boolean escalated;
 
+    /** Set when a cloud call was made at all, whether or not it came back with anything. */
+    private boolean escalationAttempted;
+
     @Parameters(index = "0", description = "The pull request number to review")
     private long prNumber;
 
@@ -294,11 +297,18 @@ public class ReviewCommand implements Callable<Integer> {
 
             LOGGER.info("");
             if (useCloud) {
-                LOGGER.info(
-                        "  ↳ Diff is {} chars, over the {} local budget — escalating to {} with the full diff...",
-                        fullDiff.length(),
-                        LOCAL_DIFF_BUDGET,
-                        provider);
+                // Say which of the two reasons it actually was. Printing "over the local budget"
+                // for a 12k diff against a 24k budget is a sentence the reader can check and find
+                // false, and once one line is provably wrong the rest of the report is suspect.
+                if (!localReady) {
+                    LOGGER.info("  ↳ No local engine was named, so {} answers with the full diff...", provider);
+                } else {
+                    LOGGER.info(
+                            "  ↳ Diff is {} chars, over the {} local budget — escalating to {} with the full diff...",
+                            fullDiff.length(),
+                            LOCAL_DIFF_BUDGET,
+                            provider);
+                }
             } else {
                 LOGGER.info("  ↳ Asking {} for a verdict{}...", model, truncated ? " (diff truncated)" : "");
             }
@@ -370,6 +380,7 @@ public class ReviewCommand implements Callable<Integer> {
                     truncated ? " (truncated — judge only what is shown)" : "",
                     diff);
 
+            escalationAttempted = useCloud;
             String raw = useCloud ? sendToCloud(provider, prompt) : ollama.generateJson(prompt);
             if (raw == null) {
                 LOGGER.warn("  ⚠ No response from {} — the facts above are unaffected.", useCloud ? provider : model);
@@ -661,6 +672,12 @@ public class ReviewCommand implements Callable<Integer> {
         }
         if (com.osscli.llm.Ai.escalationPath().isEmpty()) {
             return "named, but no key configured — 'oss setup'";
+        }
+        if (escalationAttempted) {
+            // A call that was made and failed is not the same as one that was never needed. The
+            // report said "the local rung answered and the diff fit its budget" directly under a
+            // rejected API call and an empty verdict -- three lines apart, and contradicting both.
+            return "tried, and the provider refused — the message above says why";
         }
         return "the local rung answered and the diff fit its budget";
     }
