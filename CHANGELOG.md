@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.2
+
+_2026-08-19_
+
+- One palette, and a light mode that separates (#120)
+
+
 ## 2.1.1
 
 _2026-08-19_
