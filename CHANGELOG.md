@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.0
+
+_2026-08-19_
+
+- The engine goes in front of the command, and an idle daemon costs nothing (#114)
+
+
 ## 1.11.16
 
 _2026-08-19_
