@@ -70,6 +70,8 @@ Every capability is a layer, and each is optional. The tool reports which layers
 | ...plus a local model | Local answers and PR verdicts |
 | ...plus a cloud API key | Escalation when local context or confidence is not enough |
 | ...plus your own notes | Your history and past reasoning blended into retrieval |
+| ...plus a `pack.json` | The built-in engine runs *your* applications across *your* versions |
+| ...plus a `kb.json` | The knowledge base points at your own archive, with your topics and yardsticks |
 
 A brand-new user with none of the optional pieces still gets working commands. Missing layers print one line saying what they would add and how to enable them — never a hard failure.
 

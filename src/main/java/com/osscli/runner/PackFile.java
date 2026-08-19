@@ -186,7 +186,12 @@ public final class PackFile {
      */
     public String toShell() {
         StringBuilder out = new StringBuilder();
-        out.append("# Generated from ").append(name()).append("'s pack file. Do not edit.\n");
+        // The header interpolates nothing. It used to name the pack, which put an unquoted value
+        // into the output for the one line that was not an assignment: a name containing a newline
+        // ended the comment and made its second line shell code, and a name containing a quote
+        // left the file with an unterminated string. Every value below is quoted, so the header was
+        // the only way in -- found by handing the renderer two thousand hostile names.
+        out.append("# Generated from a pack file by oss. Do not edit.\n");
         out.append("PACK_NAME=").append(quote(name())).append('\n');
         out.append("PACK_DESC=").append(quote(description())).append('\n');
         out.append("PACK_CONFIGS_DIR=")
