@@ -120,6 +120,64 @@ final class Autostart {
     }
 
     /**
+     * The launchd plist for a given start command and port.
+     *
+     * <p>Separated from {@link #install} so the definition can be read without installing it. It
+     * used to be built inside the switch, next to the {@code launchctl} calls, which meant the only
+     * way to see what a platform would be told was to tell it — so on any machine, two of the three
+     * definitions were unreadable and untested. They are the part that goes wrong: a plist naming a
+     * path that {@code brew} deletes on the next upgrade is a service that stops working at a time
+     * unrelated to anything anyone did.
+     */
+    static String plistFor(List<String> start, int port, Path out, Path err) {
+        String plistArgs = start.stream().map(a -> "<string>" + a + "</string>").collect(Collectors.joining());
+        return """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" \
+                "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+                <plist version="1.0"><dict>
+                  <key>Label</key><string>%s</string>
+                  <key>ProgramArguments</key>
+                  <array>
+                    %s
+                    <string>serve</string><string>--no-open</string>
+                    <string>--port</string><string>%d</string>
+                  </array>
+                  <key>RunAtLoad</key><true/>
+                  <key>KeepAlive</key><true/>
+                  <key>ThrottleInterval</key><integer>60</integer>
+                  <key>StandardOutPath</key><string>%s</string>
+                  <key>StandardErrorPath</key><string>%s</string>
+                </dict></plist>
+                """.formatted(LABEL, plistArgs, port, out, err);
+    }
+
+    /** The systemd user unit, for the same reason. */
+    static String unitFor(List<String> start, int port, Path out, Path err) {
+        return """
+                [Unit]
+                Description=oss local service
+                After=network.target
+
+                [Service]
+                ExecStart=%s serve --no-open --port %d
+                Restart=always
+                RestartSec=60
+                StandardOutput=append:%s
+                StandardError=append:%s
+
+                [Install]
+                WantedBy=default.target
+                """.formatted(String.join(" ", start), port, out, err);
+    }
+
+    /** What the Task Scheduler is asked to run. */
+    static String taskCommandFor(List<String> start, int port) {
+        String quoted = start.stream().map(a -> "\"" + a + "\"").collect(Collectors.joining(" "));
+        return "%s serve --no-open --port %d".formatted(quoted, port);
+    }
+
+    /**
      * Install, replacing any previous definition.
      *
      * @return a human sentence describing what happened, or null if the platform is unsupported
@@ -131,31 +189,10 @@ final class Autostart {
         Files.createDirectories(out.getParent());
 
         List<String> start = startCommand(jvm, jar);
-        String plistArgs = start.stream().map(a -> "<string>" + a + "</string>").collect(Collectors.joining());
-        String shellArgs = String.join(" ", start);
-        String quotedArgs = start.stream().map(a -> "\"" + a + "\"").collect(Collectors.joining(" "));
 
         switch (platform) {
             case MAC -> {
-                String plist = """
-                        <?xml version="1.0" encoding="UTF-8"?>
-                        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" \
-                        "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-                        <plist version="1.0"><dict>
-                          <key>Label</key><string>%s</string>
-                          <key>ProgramArguments</key>
-                          <array>
-                            %s
-                            <string>serve</string><string>--no-open</string>
-                            <string>--port</string><string>%d</string>
-                          </array>
-                          <key>RunAtLoad</key><true/>
-                          <key>KeepAlive</key><true/>
-                          <key>ThrottleInterval</key><integer>60</integer>
-                          <key>StandardOutPath</key><string>%s</string>
-                          <key>StandardErrorPath</key><string>%s</string>
-                        </dict></plist>
-                        """.formatted(LABEL, plistArgs, port, out, err);
+                String plist = plistFor(start, port, out, err);
                 Path p = descriptor();
                 Files.createDirectories(p.getParent());
                 Files.writeString(p, plist);
@@ -166,21 +203,7 @@ final class Autostart {
                 return rc == 0 ? "launchd agent installed: " + p : null;
             }
             case LINUX -> {
-                String unit = """
-                        [Unit]
-                        Description=oss local service
-                        After=network.target
-
-                        [Service]
-                        ExecStart=%s serve --no-open --port %d
-                        Restart=always
-                        RestartSec=60
-                        StandardOutput=append:%s
-                        StandardError=append:%s
-
-                        [Install]
-                        WantedBy=default.target
-                        """.formatted(shellArgs, port, out, err);
+                String unit = unitFor(start, port, out, err);
                 Path p = descriptor();
                 Files.createDirectories(p.getParent());
                 Files.writeString(p, unit);
@@ -199,7 +222,7 @@ final class Autostart {
                 // schtasks rather than a Startup-folder shortcut: it survives a reboot, can be
                 // inspected with the tools an administrator already has, and does not depend on a
                 // shell being launched.
-                String cmd = "%s serve --no-open --port %d".formatted(quotedArgs, port);
+                String cmd = taskCommandFor(start, port);
                 exec("schtasks", "/delete", "/tn", TASK, "/f");
                 int rc = exec("schtasks", "/create", "/tn", TASK, "/tr", cmd, "/sc", "onlogon", "/f");
                 if (rc != 0) {
