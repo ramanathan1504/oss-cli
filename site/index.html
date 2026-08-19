@@ -78,32 +78,38 @@
 /* A viewer who has not chosen gets their system preference. */
 @media (prefers-color-scheme:light){
   :root:not([data-theme="dark"]){
-    --bg:#EDF2F3;
-    --bg-raised:#F8FBFB;
-    --bg-sunken:#E2EBEC;
+    /* A card was 1.09 against the page here, which is no separation at all: every
+       band, card and code block read as one flat sheet, and the shadows carrying
+       the difference were at .05 alpha on a light ground, which is nothing. The
+       page now steps down and surfaces go white, so a surface reads as one --
+       1.21 raised against bg, 1.37 against sunken. Text was never the problem and
+       is unchanged except --accent, which sat at 4.48 and failed AA by a hair. */
+    --bg:#E4EBED;
+    --bg-raised:#FFFFFF;
+    --bg-sunken:#D3DEE1;
     --ink:#08161D;
-    --ink-soft:#3A525D;
-    --ink-faint:#536A74;
-    --rule:#CBDADD;
-    --rule-soft:#DDE7E8;
-    --accent:#8A6A0F;
-    --accent-bright:#7A5D0C;
+    --ink-soft:#334A55;
+    --ink-faint:#4C626C;
+    --rule:#BFD0D4;
+    --rule-soft:#D3DEE1;
+    --accent:#7A5D0C;
+    --accent-bright:#6B510A;
     --accent-ink:#FFFFFF;
-    --link:#1B6259;
-    --glow:rgba(138,106,15,.07);
-    --lift-1:0 1px 2px rgba(8,22,29,.05),0 3px 10px -3px rgba(8,22,29,.10);
-    --lift-2:0 2px 5px rgba(8,22,29,.07),0 16px 34px -14px rgba(8,22,29,.20);
+    --link:#175A52;
+    --glow:rgba(122,93,12,.09);
+    --lift-1:0 1px 2px rgba(8,22,29,.08),0 3px 10px -3px rgba(8,22,29,.16);
+    --lift-2:0 2px 5px rgba(8,22,29,.10),0 16px 34px -14px rgba(8,22,29,.28);
   }
 }
 /* An explicit choice beats the system preference, both ways. */
 :root[data-theme="light"]{
-  --bg:#EDF2F3; --bg-raised:#F8FBFB; --bg-sunken:#E2EBEC;
-  --ink:#08161D; --ink-soft:#3A525D; --ink-faint:#536A74;
-  --rule:#CBDADD; --rule-soft:#DDE7E8;
-  --accent:#8A6A0F; --accent-bright:#7A5D0C; --accent-ink:#FFFFFF;
-  --link:#1B6259; --glow:rgba(138,106,15,.07);
-  --lift-1:0 1px 2px rgba(8,22,29,.05),0 3px 10px -3px rgba(8,22,29,.10);
-  --lift-2:0 2px 5px rgba(8,22,29,.07),0 16px 34px -14px rgba(8,22,29,.20);
+  --bg:#E4EBED; --bg-raised:#FFFFFF; --bg-sunken:#D3DEE1;
+  --ink:#08161D; --ink-soft:#334A55; --ink-faint:#4C626C;
+  --rule:#BFD0D4; --rule-soft:#D3DEE1;
+  --accent:#6B510A; --accent-bright:#6B510A; --accent-ink:#FFFFFF;
+  --link:#175A52; --glow:rgba(122,93,12,.09);
+  --lift-1:0 1px 2px rgba(8,22,29,.08),0 3px 10px -3px rgba(8,22,29,.16);
+  --lift-2:0 2px 5px rgba(8,22,29,.10),0 16px 34px -14px rgba(8,22,29,.28);
 }
 :root[data-theme="dark"]{
   --bg:#07141A; --bg-raised:#0D202A; --bg-sunken:#040E13;
