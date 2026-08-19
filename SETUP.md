@@ -81,7 +81,7 @@ reported reachable while every real request went to localhost anyway.
 
 ```bash
 mvn clean package
-java -jar target/oss-cli-1.11.15.jar setup
+java -jar target/oss-cli-1.11.16.jar setup
 ```
 
 The wizard stores credentials, model names and paths in SQLite. For a global
@@ -89,7 +89,7 @@ command, put a wrapper on your `PATH`:
 
 ```bash
 #!/usr/bin/env bash
-exec java -jar /absolute/path/to/target/oss-cli-1.11.15.jar "$@"
+exec java -jar /absolute/path/to/target/oss-cli-1.11.16.jar "$@"
 ```
 
 Everything lives under `~/.oss-cli/` — database, reports, backups, and the

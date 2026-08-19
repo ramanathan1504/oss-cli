@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.11.16
+
+_2026-08-19_
+
+- A dispatcher typed bare says what it can do, not what is missing (#112)
+
+
 ## 1.11.15
 
 _2026-08-16_
