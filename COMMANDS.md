@@ -581,6 +581,46 @@ Three lines of keyword matching score 5 of 5 on the same set and cannot invent a
 capability ships and the claim does not: on a machine with room for a 3B model this is genuinely
 useful, and on a laptop the honest default is the deterministic path plus `oss llm`.
 
+### A pack is a file
+
+A pack is what points the built-in engine at *your* applications, versions and configurations. It
+is **data the tool reads**, not a program it runs:
+
+```json
+{
+  "name": "log4j",
+  "description": "Apache Log4j across a version x config x app matrix, on real JVMs",
+  "useWhen": { "repository": "apache/logging-log4j2", "files": ["log4j-core/pom.xml"] },
+  "versions": ["2.24.1", "2.25.5", "2.26.1"],
+  "defaultVersion": "2.26.1",
+  "apps": ["core-java", "db", "network"],
+  "appsDir": "apps",
+  "configsDir": "configs",
+  "modulePath": "apps/{app}"
+}
+```
+
+Save it as `pack.json`, or as a ```json block inside `pack.md` if you want the same file to explain
+itself to a person as well. Then:
+
+```bash
+oss run --pack <dir> list
+cd <dir> && oss run list      # the same thing
+```
+
+**`useWhen` is the part a directory could never carry.** A pack states what it is for — the
+repository, or files whose presence identifies the project — so the tool can find the right pack
+instead of being told which one. A pack that says nothing claims nothing: it will not be picked
+automatically, because one pack in a folder of them becoming the answer to every question is how
+the wrong pack gets used without anyone choosing it.
+
+**Why a file rather than a script.** The previous format was `pack.sh`, sourced by the engine —
+which meant "point oss at this pack" and "run this person's shell script" were the same sentence.
+Reading a pack cannot execute anything, every value is quoted on the way to the engine, and a pack
+can be written by somebody who does not know bash arrays. `pack.sh` still loads, and wins when both
+are present: a directory holding both is a pack mid-migration, and the script is the one that has
+been tested.
+
 ## 🔌 Extensions
 
 `oss` reads any repository through the GitHub API without a clone, in any language. That boundary

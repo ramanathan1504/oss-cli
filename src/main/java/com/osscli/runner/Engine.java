@@ -8,6 +8,7 @@ import java.security.CodeSource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 /**
  * Finds and runs the matrix engine that ships beside this jar.
@@ -97,6 +98,19 @@ public final class Engine {
         // against itself. Passing it by environment rather than as an argument keeps it out of the
         // passthrough, so a pack directory can never be mistaken for a verb's argument.
         pb.environment().put("OSS_PACK_DIR", packDir.toAbsolutePath().toString());
+
+        // A pack that describes itself is rendered into the form the engine has always sourced,
+        // and the engine is handed the rendering rather than the pack. The alternative was teaching
+        // POSIX shell to read JSON, which is a large change to the part that works in order to
+        // avoid a small one at the boundary. pack.sh still loads: a directory holding both is a
+        // pack mid-migration, and the script is the one that has been tested.
+        Optional<PackFile> declared = PackFile.find(packDir);
+        if (declared.isPresent() && !Files.isRegularFile(packDir.resolve("pack.sh"))) {
+            Path rendered = Files.createTempFile("oss-pack-", ".sh");
+            rendered.toFile().deleteOnExit();
+            Files.writeString(rendered, declared.get().toShell());
+            pb.environment().put("OSS_PACK_FILE", rendered.toAbsolutePath().toString());
+        }
         pb.inheritIO();
         return pb.start().waitFor();
     }
