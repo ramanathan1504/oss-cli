@@ -50,27 +50,37 @@ public class Main {
             // Fall through: doctor reports the mismatch itself, and reporting it is the point.
         }
 
-        CommandLine commandLine = new CommandLine(new RootCommand());
+        int exitCode = commandLine().execute(args);
+        System.exit(exitCode);
+    }
 
-        // `run` and `memory` are dispatchers, not parsers: everything after the verb belongs to the
-        // extension. Left as ordinary subcommands, picocli claims flags out of the passthrough --
-        // `oss run list --apps` printed picocli's own usage because --apps was unknown HERE
-        // and so never reached the bench. Scoped to these two, because every other subcommand does
-        // want its arguments parsed.
-        // `backlog` joined them for the same reason, found the same way: it declares
-        // "Arguments passed to the report, e.g. owner/name" and then picocli claimed
-        // every flag before the report saw it, so `oss backlog owner/name --no-ai`
-        // answered with usage. The script's own --no-ai and --dry-run were
-        // documented and unreachable.
-        for (String dispatcher : java.util.List.of("run", "memory", "backlog")) {
+    /**
+     * The command tree, configured.
+     *
+     * <p>One factory because there are three callers -- this entry point, the engine prefixes that
+     * re-dispatch what follows them, and the test harness -- and the settings below are not
+     * decoration: a harness that built its own {@code CommandLine} would be testing a different
+     * program than the one that ships, which is exactly how a passing suite once covered a bug in
+     * argument handling.
+     *
+     * <p>The dispatchers are not parsers: everything after the verb belongs to somebody else. Left
+     * as ordinary subcommands, picocli claims flags out of the passthrough -- {@code oss run list
+     * --apps} printed picocli's own usage because {@code --apps} was unknown HERE and so never
+     * reached the bench. {@code backlog} joined them for the same reason, found the same way. The
+     * engine prefixes are on the list for a third reason: {@code oss claude review 4249 --refresh}
+     * must hand {@code --refresh} to {@code review}, not answer about it here.
+     */
+    public static CommandLine commandLine() {
+        CommandLine commandLine = new CommandLine(new RootCommand());
+        java.util.List<String> dispatchers = new java.util.ArrayList<>(java.util.List.of("run", "memory", "backlog"));
+        dispatchers.addAll(com.osscli.llm.Ai.prefixes());
+        for (String dispatcher : dispatchers) {
             CommandLine sub = commandLine.getSubcommands().get(dispatcher);
             if (sub != null) {
                 sub.setStopAtPositional(true).setUnmatchedOptionsArePositionalParams(true);
             }
         }
-
-        int exitCode = commandLine.execute(args);
-        System.exit(exitCode);
+        return commandLine;
     }
 
     /** True when the first argument is one of the commands that stays available. */

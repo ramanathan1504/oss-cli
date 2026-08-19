@@ -81,7 +81,7 @@ class DocumentedCommandsTest {
         Set<String> all = everyCommand();
 
         Set<String> networked = backtickedTableKeys(doc);
-        Set<String> offline = fencedWords(doc, "The other twenty-nine need no network");
+        Set<String> offline = fencedWords(doc, offlineSentence(doc));
 
         assertOverlapIsEmpty(networked, offline, "OFFLINE.md");
 
@@ -168,6 +168,20 @@ class DocumentedCommandsTest {
     }
 
     /** The words inside the fenced block that follows a heading line. */
+    /**
+     * The "The other <number> need no network" line, whatever number it currently says.
+     *
+     * <p>This used to be a literal in the test, spelled-out number and all, so adding a command
+     * failed here with "cannot find the sentence" -- a test that had typed the count it exists to
+     * derive. The sentence is located by its shape now; {@link #offlineDocTotalsAreTrue} is what
+     * checks the number in it.
+     */
+    private static String offlineSentence(String doc) {
+        Matcher m = Pattern.compile("The other [a-z-]+ need no network").matcher(doc);
+        assertTrue(m.find(), "OFFLINE.md no longer has a 'The other <number> need no network' line");
+        return m.group();
+    }
+
     private static Set<String> fencedWords(String doc, String after) {
         int at = doc.indexOf(after);
         assertTrue(at >= 0, "cannot find the sentence '" + after + "' in OFFLINE.md");

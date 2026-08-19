@@ -62,6 +62,13 @@ import picocli.CommandLine.Command;
             ExtCommand.class,
             com.osscli.serve.ServeCommand.class,
             ExtCommand.BenchDispatch.class,
-            ExtCommand.KbDispatch.class
+            ExtCommand.KbDispatch.class,
+            // The engine you are willing to let answer, in front of the command it applies to.
+            // Registered as four names rather than one --engine flag because what a reader types
+            // is then the whole answer to "did a model see this, and whose".
+            EngineCommand.Llm.class,
+            EngineCommand.Claude.class,
+            EngineCommand.Gemini.class,
+            EngineCommand.Codex.class
         })
 public class RootCommand {}

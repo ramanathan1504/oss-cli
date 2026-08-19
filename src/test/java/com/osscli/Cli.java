@@ -87,16 +87,11 @@ final class Cli {
                 // harness lets the command itself decide, which is what is being tested.
             }
 
-            CommandLine commandLine = new CommandLine(new RootCommand());
-            // Mirrors Main exactly. Without it `oss run list --apps` is parsed HERE and the
-            // extension never sees --apps -- which is a real bug this harness must be able to
-            // reproduce, not one it quietly avoids by configuring itself differently.
-            for (String dispatcher : java.util.List.of("run", "memory", "backlog")) {
-                CommandLine sub = commandLine.getSubcommands().get(dispatcher);
-                if (sub != null) {
-                    sub.setStopAtPositional(true).setUnmatchedOptionsArePositionalParams(true);
-                }
-            }
+            // The real tree, from the one factory that configures it. This used to be a second
+            // copy of Main's wiring with a comment promising it "mirrors Main exactly" -- a promise
+            // no test could keep, and the kind of drift that lets a suite pass over a bug in
+            // argument handling.
+            CommandLine commandLine = Main.commandLine();
 
             // Main strips a pasted `#` comment before parsing. Skipping it here would make this a
             // different program than the one that ships -- and the first version of this harness

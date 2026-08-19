@@ -314,6 +314,19 @@ comes through the guard, and the guard still asks you.
 Neither is required to use a **pack**. A pack has nothing to attach, so it needs
 no service at all: `oss run --pack <dir> <verb>`.
 
+**Both are long-lived JVMs, and an idle one must cost nothing.** Up to 1.11.16
+they did not: the async file appender used a queue that busy-waits for an entry
+rather than parking, so each process pinned a core for as long as it lived. On a
+laptop with both installed at login that was four cores, indefinitely, and a
+machine left shut overnight was flat by morning. Fixed in 2.0.0 — an idle
+`oss serve` now measures 0.0% CPU. If you installed either agent before that,
+upgrade and restart them:
+
+```bash
+brew upgrade oss
+launchctl kickstart -k gui/$UID/com.osscli.serve
+```
+
 ---
 
 ## 8. Building from source

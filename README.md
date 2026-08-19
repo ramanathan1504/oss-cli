@@ -186,10 +186,13 @@ The two slowest operations — fetching the embedding model with `oss model --fe
 ### Prompt Intelligence Flow (New — Adaptive)
 
 ```bash
-# Ollama answers locally if it can — escalates to expert prompt if context is too large
+# The engine goes in front. Plain assembles the context and hands it to you.
 oss prompt 1666
 
-# See exactly what context was retrieved and whether Ollama will answer or escalate
+# Ollama answers locally if it can — falls back to the expert prompt when the context is too large
+oss llm prompt 1666
+
+# See exactly what context was retrieved, and which rung would answer
 oss inspect 1666
 
 # Force the expert prompt regardless (skip local Ollama)

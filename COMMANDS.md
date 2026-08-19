@@ -156,14 +156,13 @@ No local clone is required — everything comes from the GitHub API.
 *   `--refresh` : Re-fetch even when this exact commit is cached.
 *   `--no-verdict` : Report facts and conventions only, without asking a model to judge.
 *   `--no-notes` : Do not consult your own notes.
-*   `--escalate` : When the diff exceeds the local budget, send it to a cloud model instead of truncating. Picks whichever provider key is configured.
-*   `--send-claude`, `--send-openai`, `--send-gemini` : Escalate to a named provider.
-
-Escalation fires **only when it would change the answer** — a diff that already fits the local budget is answered locally and says so, rather than spending a cloud call to reread what the local model could see anyway.
+Escalation fires **only when it would change the answer** — a diff that already fits the local budget, on a rung that can read it, is answered here and says so rather than spending a call to reread what the local model could already see.
 
 ```bash
-oss review 4234
-oss review 4234 --no-verdict
+oss review 4234                    facts, conventions and your notes; no model
+oss llm review 4234                + a local verdict
+oss claude review 4234             + Claude, and it reads the whole diff
+oss review 4234 --no-verdict       facts only
 oss review 4234 -r owner/name --refresh
 ```
 
@@ -495,6 +494,62 @@ A store **older** than this build is not a problem: the next command migrates it
 
 ---
 
+## 🧠 Which engine may answer
+
+The engine goes **in front of** the command, and it is the whole answer to "did a model see this,
+and whose".
+
+```bash
+oss review 4249              nothing leaves this machine
+oss llm review 4249          a local Ollama daemon may answer
+oss claude review 4249       Anthropic Claude may answer
+oss gemini review 4249       Google Gemini may answer
+oss codex review 4249        OpenAI may answer
+oss llm claude review 4249   either may, in that order
+```
+
+### May, not will
+
+Naming an engine grants **permission**, it does not order a call. Every ask starts on the local
+rung — your own notes, the vector index, the deterministic checks — and an external engine is
+reached only when that rung fails a test the command states out loud, with the reason printed:
+
+```
+↳ qwen2.5-coder:7b answered and the diff fits its budget — no call to claude needed.
+```
+
+A question your own archive already answers is not worth a network round trip, and paying for one
+anyway is how a tool teaches you to distrust its judgement about when it genuinely needs help.
+
+### Three classes of command
+
+| | commands | plain `oss` | with a prefix |
+|---|---|---|---|
+| **never generates** | everything else | the whole command | **refused** — the prefix would change nothing, and running anyway would suggest a model was involved |
+| **optionally generates** | `review` `onboard` `sync` | facts, conventions, your own notes | adds a verdict, build steps, or development stories |
+| **only generates** | `analyze` `chat` `guide` `prompt` | says which prefix it needs | answers |
+
+`analyze` refuses a **cloud** prefix on purpose: it scores a whole backlog in a loop, and doing
+that against a metered API is a bill nobody asked for. `oss llm analyze` is the local form, and
+`oss critical` ranks the same backlog with no model at all.
+
+`triage` is in the first row and used to be documented as an Ollama command. It never generated
+anything — it reads the stored `analyze` result and the keyword analyzer.
+
+### What replaced what
+
+| gone | now |
+|---|---|
+| `review --escalate` | `oss claude review <n>` (or `gemini` / `codex`) |
+| `review --send-claude` etc. | `oss claude review <n>` |
+| `chat --claude` / `--gemini` / `--openai` | `oss claude chat <n>` |
+| `guide --claude` / `--gemini` / `--openai` | `oss claude guide <n>` |
+| `prompt --send-claude` etc. | `oss claude prompt <n>` |
+| an automatic local verdict when Ollama happened to be running | `oss llm <command>` |
+
+The last row is the one that changes behaviour without a flag being typed: a daemon that happens
+to be installed is no longer treated as a request.
+
 ## 🔌 Extensions
 
 `oss` reads any repository through the GitHub API without a clone, in any language. That boundary
@@ -550,6 +605,10 @@ declare — so the two paths agree.
 | `bench <verb>`    | Local          | No                      | Dispatch to an attached **bench** (runs something real) |
 | `kb <verb>`       | Local          | No                      | Dispatch to an attached **kb** (files and indexes) |
 | `run` / `memory`  | Local          | No                      | Typed bare, list the verbs the attached extension declares |
+| `llm <cmd>`       | Local          | Ollama                  | Let a local daemon answer when the local rung cannot |
+| `claude <cmd>`    | Online         | Anthropic key           | Let Claude answer when the local rung cannot |
+| `gemini <cmd>`    | Online         | Gemini key              | Let Gemini answer when the local rung cannot |
+| `codex <cmd>`     | Online         | OpenAI key              | Let OpenAI answer when the local rung cannot |
 | `sync --all`      | Online         | No                      | Sync all registered repositories             |
 | `sync --me`       | Online         | Embedder (required)     | Sync personal PR profile + Drive logs        |
 | `profile`         | Online         | No                      | Language, build, toolchain, conventions      |
@@ -561,7 +620,7 @@ declare — so the two paths agree.
 | `prompt`          | Offline/Online | Ollama + Optional cloud | **Generate expert prompt from full context** |
 | `inspect`         | Offline        | No                      | Show retrieved context for an issue          |
 | `search`          | Offline        | Optional embedder       | Semantic vector search, else shared terms    |
-| `triage`          | Offline        | Ollama                  | Full triage audit for one issue              |
+| `triage`          | Offline        | No                      | Full triage audit for one issue              |
 | `guide`           | Offline/Online | Ollama **or** cloud key | Step-by-step resolution blueprint            |
 | `chat`            | Offline/Online | Ollama **or** cloud key | Resumable conversation, saved as you go      |
 | `history`         | Offline        | Optional embedder       | Browse and resume saved conversations        |

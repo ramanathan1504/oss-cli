@@ -16,9 +16,9 @@
  */
 package com.osscli;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -146,14 +146,6 @@ class LoggingConfigTest {
     }
 
     @Test
-    @DisplayName("the queue is the lock-free one, which is the reason for doing this")
-    void theQueueIsTheDisruptor() throws IOException {
-        assertTrue(
-                element(config(), "Async", "AsyncFile").contains("<DisruptorBlockingQueue"),
-                "without it this is an ArrayBlockingQueue taking a lock per message");
-    }
-
-    @Test
     @DisplayName("a full buffer blocks rather than discarding")
     void diagnosticsAreNotDropped() throws IOException {
         // The alternative silently discards messages once the buffer fills -- and the moment it
@@ -165,18 +157,40 @@ class LoggingConfigTest {
     }
 
     @Test
-    @DisplayName("the disruptor queue is on the classpath, so it cannot silently fall back")
-    void theQueueClassIsActuallyPresent() {
-        // This is the failure the pom grep could not see. DisruptorBlockingQueue is a log4j
-        // plugin: when the jar is absent, log4j notes it in the status logger and carries on
-        // with the default ArrayBlockingQueue. Nothing fails, nothing is logged at WARN, and
-        // the lock-free queue that was the entire reason for this is quietly not there.
+    @DisplayName("the async queue does not busy-wait while the process is idle")
+    void theQueueDoesNotSpin() throws Exception {
+        // This replaces a test that asserted the OPPOSITE: that Conversant's
+        // DisruptorBlockingQueue was on the classpath, because a missing jar would have let
+        // log4j fall back to ArrayBlockingQueue silently and lose the lock-free queue that was
+        // "the entire reason for this".
         //
-        // Shading is where that would happen -- a relocation rule or a minimizeJar that drops
-        // an apparently unreferenced class. A declaration in the pom says what was asked for;
-        // this says what arrived.
-        assertDoesNotThrow(
+        // The reason did not survive contact with a laptop. Conversant's queue defaults to
+        // SpinPolicy WAITING, so the AsyncAppender dispatcher thread busy-waits in take() for
+        // the life of the process. In a CLI run that is invisible. In `oss serve` and the bench
+        // hub -- both started at login, both long-lived -- it was two threads per process
+        // pegging a core each, nine hours at 200% CPU, and a machine that was flat by morning
+        // with the lid shut.
+        //
+        // So the assertion is inverted, and it guards the property that actually matters: no
+        // configured queue may be one that spins. The JDK default parks when empty.
+        String async = element(config(), "Async", "AsyncFile");
+        assertFalse(
+                async.contains("DisruptorBlockingQueue"),
+                "Conversant's queue busy-waits by default (SpinPolicy WAITING) and this process may run for days");
+        assertFalse(
+                async.contains("BlockingQueueFactory") || async.contains("SpinPolicy"),
+                "a queue was configured explicitly -- state here why it does not spin when idle");
+    }
+
+    @Test
+    @DisplayName("the spinning queue is gone from the build, not merely unconfigured")
+    void theSpinningQueueIsNotEvenOnTheClasspath() {
+        // Removed from the pom as well as from the configuration. A dependency that is present
+        // is a dependency somebody can configure back in, and the failure mode is a laptop that
+        // does not survive the night -- too quiet to notice and too expensive to re-learn.
+        assertThrows(
+                ClassNotFoundException.class,
                 () -> Class.forName("com.conversantmedia.util.concurrent.DisruptorBlockingQueue"),
-                "the disruptor jar is missing, so the async appender is silently using ArrayBlockingQueue");
+                "the disruptor jar is back on the classpath");
     }
 }

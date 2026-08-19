@@ -72,21 +72,6 @@ public class PromptCommand implements Callable<Integer> {
             description = "Save the generated expert prompt to a Markdown file")
     private String outFile;
 
-    @Option(
-            names = {"--send-gemini"},
-            description = "Auto-send the expert prompt to Google Gemini when escalation occurs")
-    private boolean sendGemini;
-
-    @Option(
-            names = {"--send-openai"},
-            description = "Auto-send the expert prompt to OpenAI GPT-4o when escalation occurs")
-    private boolean sendOpenAi;
-
-    @Option(
-            names = {"--send-claude"},
-            description = "Auto-send the expert prompt to Anthropic Claude when escalation occurs")
-    private boolean sendClaude;
-
     @Override
     public Integer call() throws Exception {
         if (repository == null) {
@@ -233,10 +218,16 @@ public class PromptCommand implements Callable<Integer> {
 
         // ── Auto-send to cloud if requested ──────────────────────────────────
         String cloudResponse = null;
+        // The engine is a prefix now, so `oss claude prompt 42` sends and a bare `oss prompt 42`
+        // assembles the context and hands it to you -- which was always the point of this command.
         String providerSent = null;
-        if (sendGemini || sendOpenAi || sendClaude) {
+        if (named(com.osscli.llm.Ai.Engine.GEMINI)
+                || named(com.osscli.llm.Ai.Engine.OPENAI)
+                || named(com.osscli.llm.Ai.Engine.CLAUDE)) {
             cloudResponse = sendToCloud(expertPrompt);
-            providerSent = sendOpenAi ? "openai" : (sendClaude ? "claude" : "gemini");
+            providerSent = named(com.osscli.llm.Ai.Engine.OPENAI)
+                    ? "openai"
+                    : (named(com.osscli.llm.Ai.Engine.CLAUDE) ? "claude" : "gemini");
             if (cloudResponse != null) {
                 LOGGER.info(
                         "\n═══════════════════ CLOUD RESPONSE ({}) ═══════════════════", providerSent.toUpperCase());
@@ -395,10 +386,10 @@ public class PromptCommand implements Callable<Integer> {
 
     private String sendToCloud(String prompt) {
         try {
-            if (sendOpenAi) {
+            if (named(com.osscli.llm.Ai.Engine.OPENAI)) {
                 String model = SqliteStorage.loadConfig("openai.model");
                 return new OpenAiClient(model == null ? "gpt-4o" : model).generateText(prompt);
-            } else if (sendClaude) {
+            } else if (named(com.osscli.llm.Ai.Engine.CLAUDE)) {
                 String model = SqliteStorage.loadConfig("claude.model");
                 return new ClaudeClient(CredentialManager.getClaudeKey(), model).generateText(prompt);
             } else {
@@ -427,5 +418,10 @@ public class PromptCommand implements Callable<Integer> {
         } catch (Exception e) {
             return defaultValue;
         }
+    }
+
+    /** True when this engine was named in front of the command. */
+    private static boolean named(com.osscli.llm.Ai.Engine engine) {
+        return com.osscli.llm.Ai.engines().contains(engine);
     }
 }

@@ -85,26 +85,6 @@ public class ReviewCommand implements Callable<Integer> {
             description = "Do not consult your own notes when reviewing")
     private boolean noNotes;
 
-    @Option(
-            names = {"--escalate"},
-            description = "Send the review to a cloud model when the diff exceeds the local budget")
-    private boolean escalate;
-
-    @Option(
-            names = {"--send-claude"},
-            description = "Escalate to Anthropic Claude (implies --escalate)")
-    private boolean sendClaude;
-
-    @Option(
-            names = {"--send-openai"},
-            description = "Escalate to OpenAI (implies --escalate)")
-    private boolean sendOpenAi;
-
-    @Option(
-            names = {"--send-gemini"},
-            description = "Escalate to Google Gemini (implies --escalate)")
-    private boolean sendGemini;
-
     @Override
     public Integer call() throws Exception {
         if (repository == null) {
@@ -280,16 +260,32 @@ public class ReviewCommand implements Callable<Integer> {
             String fullDiff = ev.diff() == null ? "" : ev.diff();
             boolean oversized = fullDiff.length() > LOCAL_DIFF_BUDGET;
 
-            // A cloud model reads the whole diff, so escalation is worth it precisely when truncation would other-
-            // wise hide part of the change. Escalating a diff that already fits buys nothing and costs a call.
-            String provider = escalationProvider();
-            boolean useCloud = provider != null && oversized;
+            // The local rung, and whether it can actually answer. Ollama is asked only when it was
+            // asked for: `oss review` on a machine that happens to run a daemon used to get a local
+            // verdict nobody requested, which is the thing the engine prefixes exist to end.
+            boolean localOffered = com.osscli.llm.Ai.engines().contains(com.osscli.llm.Ai.Engine.OLLAMA);
+            boolean localReady = localOffered && ollama.isServerReachable();
 
-            if (provider != null && !oversized) {
+            // Escalate on a stated test, never on a hunch: either the local rung cannot answer at
+            // all, or it can but only by reading part of the change. A diff that already fits and a
+            // rung that can read it are a question this machine can answer, and paying for a call
+            // anyway is how a tool teaches you to distrust its judgement about when it needs help.
+            String provider = escalationProvider();
+            boolean useCloud = provider != null && (!localReady || oversized);
+
+            if (provider != null && localReady && !oversized) {
                 LOGGER.info("");
-                LOGGER.info("  ↳ Diff fits the local budget — answering locally, no cloud call needed.");
+                LOGGER.info("  ↳ {} answered and the diff fits its budget — no call to {} needed.", model, provider);
             }
-            if (!useCloud && !ollama.isServerReachable()) {
+            if (!useCloud && !localReady) {
+                LOGGER.info("");
+                if (!localOffered) {
+                    LOGGER.info("  ↳ No engine was named, so no verdict is written here.");
+                    LOGGER.info("     oss llm review {}      a local Ollama verdict", prNumber);
+                    LOGGER.info("     oss claude review {}   Claude reads the whole diff", prNumber);
+                } else {
+                    LOGGER.info("  ↳ Ollama is not reachable — start it with 'ollama serve'.");
+                }
                 return false;
             }
 
@@ -397,7 +393,7 @@ public class ReviewCommand implements Callable<Integer> {
                 LOGGER.info("");
                 LOGGER.info("  Note: the diff exceeded the local budget and was truncated.");
                 LOGGER.info("        Findings cover only the portion shown above.");
-                LOGGER.info("        Pass --escalate to send the whole diff to a cloud model.");
+                LOGGER.info("        oss claude review {} sends the whole diff instead.", prNumber);
             }
 
             escalated = useCloud;
@@ -412,36 +408,30 @@ public class ReviewCommand implements Callable<Integer> {
     }
 
     /**
-     * Which cloud provider to escalate to, or null when escalation was not asked for or is not configured.
+     * Which external engine may be reached, or null when none was named or none has a key.
      *
-     * <p>An explicit {@code --send-*} names the provider. A bare {@code --escalate} picks whichever key is present,
-     * so the common case — one configured provider — needs no second flag. Asking to escalate with no key configured
-     * says so rather than silently answering locally, because the difference is what the review is worth.
+     * <p>Read from the prefix typed in front of the command rather than from a flag on it, so the
+     * answer to "whose model saw my code" is the line you typed. A prefix naming an engine with no
+     * key says so here instead of failing at the end of a long review.
      */
     private String escalationProvider() {
-        if (sendClaude) {
-            return "claude";
+        List<com.osscli.llm.Ai.Engine> path = com.osscli.llm.Ai.escalationPath();
+        for (com.osscli.llm.Ai.Engine missing : com.osscli.llm.Ai.missingCredentials()) {
+            LOGGER.warn("  ⚠ {} was named and has no key configured — 'oss setup'.", missing.typed());
         }
-        if (sendOpenAi) {
-            return "openai";
-        }
-        if (sendGemini) {
-            return "gemini";
-        }
-        if (!escalate) {
+        if (path.isEmpty()) {
             return null;
         }
-        for (String[] pair : new String[][] {
-            {"ANTHROPIC_API_KEY", "claude"}, {"OPENAI_API_KEY", "openai"}, {"GEMINI_API_KEY", "gemini"}
-        }) {
-            String v = System.getenv(pair[0]);
-            if (v != null && !v.isBlank()) {
-                return pair[1];
-            }
+        switch (path.get(0)) {
+            case CLAUDE:
+                return "claude";
+            case OPENAI:
+                return "openai";
+            case GEMINI:
+                return "gemini";
+            default:
+                return null;
         }
-        LOGGER.warn("  ⚠ --escalate was requested but no cloud key is configured — answering locally instead.");
-        LOGGER.warn("    Set ANTHROPIC_API_KEY, OPENAI_API_KEY or GEMINI_API_KEY, or run 'setup'.");
-        return null;
     }
 
     private String sendToCloud(String provider, String prompt) throws Exception {
@@ -650,16 +640,29 @@ public class ReviewCommand implements Callable<Integer> {
                 "Local verdict from Ollama",
                 noVerdict
                         ? "skipped by --no-verdict"
-                        : (escalated ? "escalated instead" : "start Ollama with 'ollama serve'"));
+                        : (escalated
+                                ? "escalated instead"
+                                : (com.osscli.llm.Ai.engines().contains(com.osscli.llm.Ai.Engine.OLLAMA)
+                                        ? "start Ollama with 'ollama serve'"
+                                        : "not asked for — oss llm review " + prNumber)));
         report(escalated, "Escalation to a cloud model", whyNoEscalation());
     }
 
-    /** Separates "you cannot escalate" from "escalation was not needed", which mean different things to a reviewer. */
+    /**
+     * Separates the three ways a review can go without a cloud call.
+     *
+     * <p>"You did not ask", "you asked and there is no key" and "you asked, there is a key, and the
+     * local rung had it covered" mean different things to somebody deciding whether to trust what
+     * they just read. Collapsing them into one line was the old flag's habit.
+     */
     private String whyNoEscalation() {
-        if (!escalate && !sendClaude && !sendOpenAi && !sendGemini) {
-            return hasCloudKey() ? "not requested (pass --escalate)" : "no cloud key configured";
+        if (!com.osscli.llm.Ai.mayEscalate()) {
+            return "not asked for — oss claude review " + prNumber;
         }
-        return hasCloudKey() ? "diff fit the local budget" : "no cloud key configured";
+        if (com.osscli.llm.Ai.escalationPath().isEmpty()) {
+            return "named, but no key configured — 'oss setup'";
+        }
+        return "the local rung answered and the diff fit its budget";
     }
 
     /** Distinguishes "you have no notes" from "your notes had nothing to say about this change". */

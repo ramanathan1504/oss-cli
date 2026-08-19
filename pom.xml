@@ -67,11 +67,6 @@
             asynchronous; see log4j2.xml for why the console must not be.
         -->
         <dependency>
-            <groupId>com.conversantmedia</groupId>
-            <artifactId>disruptor</artifactId>
-            <version>1.2.21</version>
-        </dependency>
-        <dependency>
             <groupId>com.microsoft.onnxruntime</groupId>
             <artifactId>onnxruntime</artifactId>
             <version>1.22.0</version>

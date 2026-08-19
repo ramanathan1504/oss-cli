@@ -51,20 +51,34 @@
         <!--
             The file appender, off the caller's thread.
 
-            DisruptorBlockingQueue is a lock-free ring buffer; the default
-            ArrayBlockingQueue takes a lock per message, which is most of what
-            there was to avoid here.
+            The queue is the JDK default, and that is deliberate.
 
-            blocking="true" on purpose. The alternative discards messages when
-            the buffer fills, and a diagnostic log that silently drops the
-            entries written during the incident is worse than a slow one: the
-            moment the buffer overflows is exactly the moment worth reading
-            about. 8192 slots is far more than a CLI run produces, so the
-            blocking path should never be reached in practice.
+            This used to name Conversant's DisruptorBlockingQueue, on the
+            reasoning that a lock-free ring buffer beats one lock per message.
+            The reasoning was about throughput on a path that has none to speak
+            of (a CLI run writes a few thousand debug lines) and it bought a
+            defect that only appears in the processes that never exit.
+
+            Conversant's queue defaults to SpinPolicy WAITING, which busy-waits
+            for an element instead of parking. Log4j's AsyncAppender dispatcher
+            thread sits in take(), so the thread burns a core for as long as the
+            process lives, doing nothing. Measured on an idle laptop: `oss serve`
+            and the bench hub, both started at login, each pegged at 200% CPU for
+            nine hours: two dispatcher threads apiece, and a sample stack of
+            cthread_yield / swtch_pri all the way down. A machine left shut
+            overnight was flat by morning.
+
+            ArrayBlockingQueue parks when empty. An idle daemon costs nothing,
+            which is the only acceptable price for a log nobody is reading.
+
+            blocking="true" on purpose, unchanged. The alternative discards
+            messages when the buffer fills, and a diagnostic log that silently
+            drops the entries written during an incident is worse than a slow
+            one: the moment the buffer overflows is exactly the moment worth
+            reading about.
         -->
         <Async name="AsyncFile" bufferSize="8192" blocking="true">
             <AppenderRef ref="File" />
-            <DisruptorBlockingQueue />
         </Async>
     </Appenders>
 
