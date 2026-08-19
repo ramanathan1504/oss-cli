@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.0
+
+_2026-08-19_
+
+- Run a local model in this process, and say what a small one cannot do (#116)
+
+
 ## 2.0.0
 
 _2026-08-19_
