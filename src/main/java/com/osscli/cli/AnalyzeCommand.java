@@ -82,6 +82,28 @@ public class AnalyzeCommand implements Callable<Integer> {
 
         LOGGER.info("Starting AI Severity Analysis for '{}' using model '{}'...", repository, modelName);
 
+        // Local-only on purpose, and now that the engine is a prefix the refusal can say which
+        // prefix it wants. A cloud engine is refused rather than ignored: scoring a whole backlog
+        // in a loop against a metered API is a bill nobody asked for, and silently answering
+        // locally under `oss claude analyze` would hide that decision instead of stating it.
+        for (com.osscli.llm.Ai.Engine e : com.osscli.llm.Ai.engines()) {
+            if (e.isExternal()) {
+                LOGGER.error("analyze does not use {} — it scores the whole backlog in a loop,", e.label());
+                LOGGER.error("  which against a metered API would cost real money without asking first.");
+                LOGGER.error("");
+                LOGGER.error("  oss llm analyze     the same scoring, locally");
+                LOGGER.error("  oss critical        ranks the same backlog with no model at all");
+                return 2;
+            }
+        }
+        if (!com.osscli.llm.Ai.engines().contains(com.osscli.llm.Ai.Engine.OLLAMA)) {
+            LOGGER.error("analyze writes a severity judgement, so it needs an engine.");
+            LOGGER.error("");
+            LOGGER.error("  oss llm analyze     local Ollama");
+            LOGGER.error("  oss critical        ranks the same backlog with no model at all");
+            return 2;
+        }
+
         OllamaClient client = new OllamaClient(modelName);
         if (!client.isModelAvailable()) {
             // Ollama-only by design: this scores a whole backlog in a loop, and doing that against a

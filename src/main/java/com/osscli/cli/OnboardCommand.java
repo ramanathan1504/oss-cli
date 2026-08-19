@@ -198,7 +198,10 @@ public class OnboardCommand implements Callable<Integer> {
                 model = "qwen2.5-coder:7b";
             }
             com.osscli.llm.OllamaClient ollama = new com.osscli.llm.OllamaClient(model);
-            if (!ollama.isServerReachable()) {
+            // Asked for, not assumed. A daemon that happens to be running is not a request, so
+            // without `oss llm onboard` the steps are skipped -- and the summary at the end says
+            // they were, which is the difference between "no steps exist" and "none were written".
+            if (!com.osscli.llm.Ai.engines().contains(com.osscli.llm.Ai.Engine.OLLAMA) || !ollama.isServerReachable()) {
                 return false;
             }
 
@@ -343,7 +346,13 @@ public class OnboardCommand implements Callable<Integer> {
         LOGGER.info(
                 "  {} Build steps read out of the project's documentation{}",
                 stepsWritten ? "✔" : "○",
-                stepsWritten ? "" : (noSteps ? " — skipped by --no-steps" : " — needs Ollama running"));
+                stepsWritten
+                        ? ""
+                        : (noSteps
+                                ? " — skipped by --no-steps"
+                                : (com.osscli.llm.Ai.engines().contains(com.osscli.llm.Ai.Engine.OLLAMA)
+                                        ? " — needs Ollama running"
+                                        : " — not asked for, try 'oss llm onboard'")));
         LOGGER.info(
                 "  {} Open issues labelled for newcomers{}",
                 issuesShown ? "✔" : "○",

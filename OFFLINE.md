@@ -1,12 +1,14 @@
 # Working offline
 
-**Of 36 commands, seven can reach the network. Twenty-nine never do.**
+**Of 40 commands, ten can reach the network. Thirty never do.**
 
-And of those seven, only one is part of ordinary use: `sync`. The rest fetch one
-specific thing you asked for by number, and `model --fetch` downloads once in the
-life of the install. (`run`, `bench`, `memory` and `kb` hand off to whatever
-extension you attached, so they are as offline as it is — they are counted below
-among the twenty-nine.)
+And of those ten, only one is part of ordinary use: `sync`. Six fetch one specific
+thing you asked for by number, `model --fetch` downloads once in the life of the
+install, and three are the engine prefixes — `claude`, `gemini` and `codex` — which
+reach an API only when the local rung cannot answer. (`run`, `bench`, `memory` and
+`kb` hand off to whatever extension you attached, so they are as offline as it is —
+they are counted below among the thirty, along with `llm`, which talks to a daemon
+on your own machine.)
 
 This page is the long version: what actually goes over the network, what a single
 sync buys you, and why searching by *meaning* keeps working with the wifi off.
@@ -15,9 +17,9 @@ sync buys you, and why searching by *meaning* keeps working with the wifi off.
 
 ## 1. What needs the network
 
-Seven, and you can tell which by what they are for — six fetch something from
-GitHub, and the seventh is a download that happens once in the life of the
-install.
+Ten, and you can tell which by what they are for — six fetch something from
+GitHub, one is a download that happens once in the life of the install, and three
+are engines you named yourself.
 
 | Needs the network | Why |
 | --- | --- |
@@ -28,8 +30,11 @@ install.
 | `followup` | Checks whether a branch has moved since you reviewed it. |
 | `review <pr>` | Asks GitHub for the pull request's head commit. If it has not changed, the answer comes from cache — but the check itself is a call. |
 | `model --fetch` | Downloads the embedding model. **Once, ever.** 22 MB. |
+| `claude <cmd>` | Permission for Anthropic's API to answer, if the local rung cannot. Naming it is not a call. |
+| `gemini <cmd>` | The same, for Google Gemini. |
+| `codex <cmd>` | The same, for OpenAI. |
 
-The other twenty-nine need no network to do their job:
+The other thirty need no network to do their job:
 
 ```
 search    prompt    inspect    history    chat      critical
@@ -37,6 +42,7 @@ duplicates          triage     guide      profile   onboard
 report    trend     analyze    backlog    pick      hidden-critical
 prs       serve     backup     restore    doctor    alias
 ext       setup     run        memory     bench     kb
+llm
 ```
 
 Three of those deserve a word:
@@ -45,10 +51,20 @@ Three of those deserve a word:
   That is the check, not a dependency — it reports "not reachable" and carries on.
 - **`serve`** starts a web interface on `http://localhost:1504`. Local means local:
   it binds to your own machine and serves the corpus already on your disk.
-- **`chat` and `guide` can reach out, but only if you ask.** Both run on a local
-  model with no network at all. Both also accept `--gemini`, `--openai` or
-  `--claude`, and then the turn you are on goes to that API. Nothing is sent
-  unasked; the flag, or pressing `y`, is the asking.
+- **Nothing reaches an API unless you typed the engine yourself.** The provider
+  flags are gone; the engine goes in front of the command, and it is the whole
+  answer to "did a model see this, and whose":
+
+  ```
+  oss review 4249              nothing leaves this machine
+  oss llm review 4249          a daemon on this machine may answer
+  oss claude review 4249       Claude may answer
+  ```
+
+  **May, not will.** Naming an engine grants permission; the ask still starts on
+  the local rung — your own notes and the vector index — and goes out only when
+  that rung fails a test the command states, with the reason printed. `oss llm`
+  never leaves the machine at all.
 
 **The dispatchers are as offline as what you attached.** `run` and `bench` hand
 everything after the verb to a bench extension; `memory` and `kb` to a knowledge

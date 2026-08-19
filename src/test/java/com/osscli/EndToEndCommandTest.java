@@ -258,7 +258,7 @@ class EndToEndCommandTest {
     // ==========================================
 
     @Test
-    @DisplayName("the harness configures the dispatchers exactly as Main does")
+    @DisplayName("the harness runs the tree Main builds, not a copy of it")
     void harnessMatchesMain() throws IOException {
         // If these drift, every test above is exercising a command tree that does not ship. The
         // dispatcher wiring is the part most easily forgotten, and the one whose absence produced
@@ -267,14 +267,21 @@ class EndToEndCommandTest {
         String main = Files.readString(Path.of("src/main/java/com/osscli/Main.java"));
         String harness = Files.readString(Path.of("src/test/java/com/osscli/Cli.java"));
 
+        // Checked as "both files say the same thing" until the two copies became one: the harness
+        // now calls Main's own factory, so they cannot disagree. Comparing the texts would have
+        // gone on passing while asserting nothing, and it could not have covered the engine
+        // prefixes at all -- they joined the dispatcher list in one place, and a textual check for
+        // the old three-name list would have failed on a correct change.
         assertTrue(main.contains("setStopAtPositional(true)"), "Main should still configure the dispatchers");
-        assertTrue(harness.contains("setStopAtPositional(true)"), "and the harness must do the same");
         assertTrue(
-                harness.contains("List.of(\"run\", \"memory\", \"backlog\")"),
-                "for the same dispatchers Main names, or the harness is a different program");
+                main.contains("public static CommandLine commandLine()"),
+                "Main must expose the configured tree, or there is nothing for the harness to share");
         assertTrue(
-                main.contains("List.of(\"run\", \"memory\", \"backlog\")"),
-                "and Main must name that same list -- asserting only one side lets the two drift");
+                harness.contains("Main.commandLine()"),
+                "the harness must use Main's tree rather than building a second one");
+        assertFalse(
+                harness.contains("new CommandLine(new RootCommand())"),
+                "the harness has built its own command tree again -- that is the drift this exists to stop");
 
         // Bootstrap too. Skipping it is not a small difference: a probe that did so had eleven
         // commands leaking `no such table` from SQLite rather than answering, because the schema

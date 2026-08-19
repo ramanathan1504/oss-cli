@@ -53,21 +53,6 @@ public class GuideCommand implements Callable<Integer> {
             description = "Local Ollama model to use")
     private String modelName;
 
-    @Option(
-            names = {"--gemini"},
-            description = "Escalate to Google Gemini")
-    private boolean useGemini;
-
-    @Option(
-            names = {"--openai"},
-            description = "Escalate to OpenAI GPT-4o")
-    private boolean useOpenAi;
-
-    @Option(
-            names = {"--claude"},
-            description = "Escalate to Anthropic Claude")
-    private boolean useClaude;
-
     @Override
     public Integer call() throws Exception {
         // 1. Resolve configurations
@@ -124,7 +109,12 @@ public class GuideCommand implements Callable<Integer> {
         // --gemini, a flag that exists precisely to bypass the local model. So the one command-line
         // option documented as "route immediately to the cloud" could not be used by anybody who had
         // taken the documentation at its word and not installed Ollama.
-        boolean forceCloud = useGemini || useOpenAi || useClaude;
+        // Named in front of the command now: `oss claude guide 42`. The local draft still runs
+        // first when Ollama was also named -- the cloud refines a draft rather than replacing the
+        // step that reads your own history.
+        boolean forceCloud = named(com.osscli.llm.Ai.Engine.GEMINI)
+                || named(com.osscli.llm.Ai.Engine.OPENAI)
+                || named(com.osscli.llm.Ai.Engine.CLAUDE);
 
         OllamaClient localOllama = new OllamaClient(modelName);
         if (!localOllama.isModelAvailable()) {
@@ -250,10 +240,10 @@ public class GuideCommand implements Callable<Integer> {
                     """, issueNumber, memorySection, localOutput, tweak);
 
             try {
-                if (useOpenAi) {
+                if (named(com.osscli.llm.Ai.Engine.OPENAI)) {
                     provider = "OpenAI GPT-4o";
                     cloudOutput = new OpenAiClient(SqliteStorage.loadConfig("openai.model")).generateText(cloudPrompt);
-                } else if (useClaude) {
+                } else if (named(com.osscli.llm.Ai.Engine.CLAUDE)) {
                     provider = "Anthropic Claude 3.5";
                     cloudOutput = new ClaudeClient(SqliteStorage.loadConfig("claude.model")).generateText(cloudPrompt);
                 } else {
@@ -305,5 +295,10 @@ public class GuideCommand implements Callable<Integer> {
         }
 
         return 0;
+    }
+
+    /** True when this engine was named in front of the command. */
+    private static boolean named(com.osscli.llm.Ai.Engine engine) {
+        return com.osscli.llm.Ai.engines().contains(engine);
     }
 }

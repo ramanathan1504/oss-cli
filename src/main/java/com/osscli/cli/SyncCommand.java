@@ -362,10 +362,18 @@ public class SyncCommand implements Callable<Integer> {
         // still wants Ollama. Optional, therefore: an absent daemon costs the narrative summaries
         // and nothing else, so it is reported once here rather than failing the whole sync.
         OllamaClient guideOllama = new OllamaClient(guidanceModel);
-        boolean canNarrate = guideOllama.isModelAvailable();
+        // Asked for, not assumed. A daemon that happens to be running is not a request, so a plain
+        // `oss sync --me` indexes everything and writes no narrative -- and says which it was.
+        boolean engineNamed = com.osscli.llm.Ai.engines().contains(com.osscli.llm.Ai.Engine.OLLAMA);
+        boolean canNarrate = engineNamed && guideOllama.isModelAvailable();
         if (!canNarrate) {
-            LOGGER.warn("  ⚠ Guidance model '{}' unavailable — development stories will be skipped.", guidanceModel);
-            LOGGER.warn("    Everything else is indexed as usual. 'ollama pull {}' adds them.", guidanceModel);
+            if (!engineNamed) {
+                LOGGER.info("  ○ Development stories skipped — no engine named ('oss llm sync --me' writes them).");
+            } else {
+                LOGGER.warn(
+                        "  ⚠ Guidance model '{}' unavailable — development stories will be skipped.", guidanceModel);
+                LOGGER.warn("    Everything else is indexed as usual. 'ollama pull {}' adds them.", guidanceModel);
+            }
         }
         LOGGER.info("  ✔ Pre-flight verification successful (embedder '{}' ready).", embedModel);
 

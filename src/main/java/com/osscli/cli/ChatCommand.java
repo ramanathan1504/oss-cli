@@ -89,21 +89,6 @@ public class ChatCommand implements Callable<Integer> {
             description = "Resume a saved conversation. With no id, pick one from the list.")
     private Long resumeId;
 
-    @Option(
-            names = {"--gemini"},
-            description = "Use Gemini for cloud escalation (default)")
-    private boolean useGemini;
-
-    @Option(
-            names = {"--openai"},
-            description = "Use OpenAI for cloud escalation")
-    private boolean useOpenAi;
-
-    @Option(
-            names = {"--claude"},
-            description = "Use Anthropic Claude for cloud escalation")
-    private boolean useClaude;
-
     @Override
     public Integer call() throws Exception {
         ChatSession session = resolveSession();
@@ -252,7 +237,7 @@ public class ChatCommand implements Callable<Integer> {
         if (modelName == null) {
             modelName = com.osscli.Defaults.GUIDANCE_MODEL;
         }
-        Cloud cloud = Cloud.forFlags(useOpenAi, useClaude);
+        Cloud cloud = Cloud.forEngine();
 
         // Chat needs a model that writes. It does not need a *particular* one.
         //
@@ -261,8 +246,11 @@ public class ChatCommand implements Callable<Integer> {
         // could not open a chat at all. That is the same failure as requiring a cloud key was, just
         // pointing the other way, and it breaks the rule the whole tool is built on: a capability
         // may degrade, but it may not be gated on one particular provider.
+        // Ollama is used when it was asked for. A daemon that happens to be running is not a
+        // request, and answering from it silently is what the engine prefixes exist to end.
         OllamaClient localClient = new OllamaClient(modelName);
-        boolean localUsable = localClient.isModelAvailable();
+        boolean localUsable =
+                com.osscli.llm.Ai.engines().contains(com.osscli.llm.Ai.Engine.OLLAMA) && localClient.isModelAvailable();
 
         // Installed is not the same as runnable. A model larger than the free memory is loaded
         // rather than refused, the machine swaps, and it stops responding for minutes -- which
@@ -284,12 +272,16 @@ public class ChatCommand implements Callable<Integer> {
             localClient = null;
         }
         if (!backends.canAnswer()) {
-            LOGGER.error("Chat needs a model that writes, and neither is connected.");
+            LOGGER.error("Chat needs a model that writes, and none was named.");
             LOGGER.error("");
-            LOGGER.error("  Local:  '{}' is not available at {}", modelName, new OllamaClient(modelName).endpoint());
+            LOGGER.error("  oss llm chat {}      local Ollama", session.issueNumber());
+            LOGGER.error("  oss claude chat {}   Anthropic Claude", session.issueNumber());
+            LOGGER.error("  oss gemini chat {}   Google Gemini", session.issueNumber());
+            LOGGER.error("  oss codex chat {}    OpenAI", session.issueNumber());
+            LOGGER.error("");
+            LOGGER.error("  Local:  '{}' at {}", modelName, new OllamaClient(modelName).endpoint());
             LOGGER.error("          ollama serve, then: ollama pull {}", modelName);
             LOGGER.error("  Cloud:  {}", cloud.why().isEmpty() ? "no API key found" : cloud.why());
-            LOGGER.error("          export GEMINI_API_KEY=…   (or --openai, or --claude)");
             LOGGER.error("");
             LOGGER.error("  Either one is enough. Everything else in oss works without both:");
             LOGGER.error(
@@ -709,13 +701,19 @@ public class ChatCommand implements Callable<Integer> {
     }
 
     private String providerName() {
-        if (useOpenAi) {
-            return "openai";
+        for (com.osscli.llm.Ai.Engine e : com.osscli.llm.Ai.escalationPath()) {
+            switch (e) {
+                case OPENAI:
+                    return "openai";
+                case CLAUDE:
+                    return "claude";
+                case GEMINI:
+                    return "gemini";
+                default:
+                    break;
+            }
         }
-        if (useClaude) {
-            return "claude";
-        }
-        return useGemini ? "gemini" : "local";
+        return "local";
     }
 
     // ==========================================
@@ -806,7 +804,21 @@ public class ChatCommand implements Callable<Integer> {
             this.claude = claude;
         }
 
-        static Cloud forFlags(boolean useOpenAi, boolean useClaude) {
+        /**
+         * The cloud engine named in front of the command, if any.
+         *
+         * <p>Was three boolean flags on this command alone, spelled differently from the same
+         * choice on {@code review}. The engine is one decision about the whole invocation, so it
+         * is read from one place.
+         */
+        static Cloud forEngine() {
+            java.util.List<com.osscli.llm.Ai.Engine> path = com.osscli.llm.Ai.engines();
+            boolean useOpenAi = path.contains(com.osscli.llm.Ai.Engine.OPENAI);
+            boolean useClaude = path.contains(com.osscli.llm.Ai.Engine.CLAUDE);
+            boolean useGemini = path.contains(com.osscli.llm.Ai.Engine.GEMINI);
+            if (!useOpenAi && !useClaude && !useGemini) {
+                return none("cloud", "no engine named — try 'oss claude chat', 'oss gemini chat' or 'oss codex chat'.");
+            }
             if (useOpenAi) {
                 return key("OPENAI_API_KEY", "openai_api_key") == null
                         ? none("OpenAI", "OPENAI_API_KEY is not set and no openai_api_key is in the keychain.")

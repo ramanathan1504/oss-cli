@@ -688,7 +688,7 @@ td .need,td.need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)
     <ul class="hero-facts">
       <li><strong>A GitHub token is the only requirement.</strong> Everything else is a layer you add when you want it.</li>
       <li><strong>Nothing leaves the machine</strong> unless you attach a cloud key and ask it to.</li>
-      <li><strong>Sync once, then the network is optional</strong> — 29 of the 36 commands never need it.</li>
+      <li><strong>Sync once, then the network is optional</strong> — 30 of the 40 commands never need it.</li>
     </ul>
 
     <div class="install-line">
@@ -858,8 +858,8 @@ td .need,td.need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)
           <span class="cable-label">Pull the cable</span>
         </button>
         <p class="cable-read">
-          <span class="cable-num" id="cable-num">36</span>
-          <span class="cable-of">of 36 commands still work</span>
+          <span class="cable-num" id="cable-num">40</span>
+          <span class="cable-of">of 40 commands still work</span>
         </p>
       </div>
 
@@ -870,43 +870,47 @@ td .need,td.need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)
         <li class="cmd net" style="--i:3" title="reads across the repositories you follow">hub</li>
         <li class="cmd net" style="--i:4" title="checks whether a branch moved since you reviewed it">followup</li>
         <li class="cmd net" style="--i:5" title="asks for the PR's head commit; unchanged, and it answers from cache">review</li>
-        <li class="cmd net" style="--i:6" title="downloads the embedder. Once, ever. 22 MB">model --fetch</li>
-        <li class="cmd" style="--i:7">search</li>
-        <li class="cmd" style="--i:8">prompt</li>
-        <li class="cmd" style="--i:9">inspect</li>
-        <li class="cmd" style="--i:10">history</li>
-        <li class="cmd" style="--i:11">chat</li>
-        <li class="cmd" style="--i:12">critical</li>
-        <li class="cmd" style="--i:13">duplicates</li>
-        <li class="cmd" style="--i:14">triage</li>
-        <li class="cmd" style="--i:15">guide</li>
-        <li class="cmd" style="--i:16">profile</li>
-        <li class="cmd" style="--i:17">onboard</li>
-        <li class="cmd" style="--i:18">report</li>
-        <li class="cmd" style="--i:19">trend</li>
-        <li class="cmd" style="--i:20">analyze</li>
-        <li class="cmd" style="--i:21">backlog</li>
-        <li class="cmd" style="--i:22">pick</li>
-        <li class="cmd" style="--i:23">hidden-critical</li>
-        <li class="cmd" style="--i:24">prs</li>
-        <li class="cmd" style="--i:25">serve</li>
-        <li class="cmd" style="--i:26">backup</li>
-        <li class="cmd" style="--i:27">restore</li>
-        <li class="cmd" style="--i:28">doctor</li>
-        <li class="cmd" style="--i:29">alias</li>
-        <li class="cmd" style="--i:30">ext</li>
-        <li class="cmd" style="--i:31">setup</li>
-        <li class="cmd" style="--i:32">run</li>
-        <li class="cmd" style="--i:33">memory</li>
-        <li class="cmd" style="--i:34">bench</li>
-        <li class="cmd" style="--i:35">kb</li>
+        <li class="cmd net" style="--i:6" title="lets Claude answer, if the local rung cannot">claude</li>
+        <li class="cmd net" style="--i:7" title="lets Gemini answer, if the local rung cannot">gemini</li>
+        <li class="cmd net" style="--i:8" title="lets OpenAI answer, if the local rung cannot">codex</li>
+        <li class="cmd" style="--i:9" title="lets a local Ollama daemon answer — never leaves this machine">llm</li>
+        <li class="cmd net" style="--i:10" title="downloads the embedder. Once, ever. 22 MB">model --fetch</li>
+        <li class="cmd" style="--i:11">search</li>
+        <li class="cmd" style="--i:12">prompt</li>
+        <li class="cmd" style="--i:13">inspect</li>
+        <li class="cmd" style="--i:14">history</li>
+        <li class="cmd" style="--i:15">chat</li>
+        <li class="cmd" style="--i:16">critical</li>
+        <li class="cmd" style="--i:17">duplicates</li>
+        <li class="cmd" style="--i:18">triage</li>
+        <li class="cmd" style="--i:19">guide</li>
+        <li class="cmd" style="--i:20">profile</li>
+        <li class="cmd" style="--i:21">onboard</li>
+        <li class="cmd" style="--i:22">report</li>
+        <li class="cmd" style="--i:23">trend</li>
+        <li class="cmd" style="--i:24">analyze</li>
+        <li class="cmd" style="--i:25">backlog</li>
+        <li class="cmd" style="--i:26">pick</li>
+        <li class="cmd" style="--i:27">hidden-critical</li>
+        <li class="cmd" style="--i:28">prs</li>
+        <li class="cmd" style="--i:29">serve</li>
+        <li class="cmd" style="--i:30">backup</li>
+        <li class="cmd" style="--i:31">restore</li>
+        <li class="cmd" style="--i:32">doctor</li>
+        <li class="cmd" style="--i:33">alias</li>
+        <li class="cmd" style="--i:34">ext</li>
+        <li class="cmd" style="--i:35">setup</li>
+        <li class="cmd" style="--i:36">run</li>
+        <li class="cmd" style="--i:37">memory</li>
+        <li class="cmd" style="--i:38">bench</li>
+        <li class="cmd" style="--i:39">kb</li>
       </ul>
 
       <p class="offline-note" id="cable-note">
-        Connected, all thirty-six answer. <strong>Pull the cable</strong> and the seven that
-        reach GitHub go dark — six fetch something you asked for by number, and
+        Connected, all forty answer. <strong>Pull the cable</strong> and the ten that
+        reach out go dark — six fetch something you asked for by number, and
         <code>model --fetch</code> downloads the embedder once in the life of the install.
-        The other twenty-nine never needed it: <code>doctor</code> pings and reports rather
+        The other thirty never needed it: <code>doctor</code> pings and reports rather
         than depends, <code>serve</code> binds to localhost over the corpus already on disk,
         and <code>run</code> and <code>memory</code> are as offline as the extension you attached &mdash; type either on its own and it lists the verbs that extension actually declares, read from the manifest on your machine rather than from this page.
       </p>
