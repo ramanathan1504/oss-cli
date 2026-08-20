@@ -542,6 +542,28 @@ oss codex review 4249        OpenAI may answer
 oss llm claude review 4249   either may, in that order
 ```
 
+### `--cli` — answer on the subscription instead of the API key
+
+Each of the three cloud engines has a command-line tool of its own, and anybody using it has
+already installed and signed in to it. `--cli` reaches the engine that way, so the call bills
+against the subscription rather than against API credit:
+
+```bash
+oss claude --cli review 4249     Claude, through the Claude Code CLI
+oss codex --cli review 4249      OpenAI, through codex exec
+oss gemini --cli review 4249     Google, through the gemini CLI
+```
+
+An account with no API credit is not a broken install. When a provider refuses a call for
+billing and its tool is on your PATH, the error says so and names the one keystroke that
+recovers — but it never switches by itself. Which engine saw your code, and whose account paid,
+stays the line you typed.
+
+Two things worth knowing before you use it. These tools are **agent harnesses, not completion
+endpoints**: they can read files and run commands, so `codex` is invoked `--sandbox read-only`
+and none of them is pointed at the repository being reviewed. And `oss llm --cli` does not
+exist — Ollama is a daemon this already speaks to, with no command-line tool to put in front.
+
 ### May, not will
 
 Naming an engine grants **permission**, it does not order a call. Every ask starts on the local

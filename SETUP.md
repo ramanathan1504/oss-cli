@@ -357,6 +357,20 @@ without touching them.
 | Google    | `GEMINI_API_KEY`              | `gemini_api_key`     |
 | GitHub    | `GITHUB_TOKEN` or `GH_TOKEN`  | `github_token`       |
 
+### A cloud engine without a key at all
+
+If you already have a provider's own command-line tool installed and signed in, `--cli` reaches
+the engine through it and no API key is involved:
+
+```bash
+oss claude --cli review 4249     # Claude Code CLI, on your subscription
+oss codex --cli review 4249      # codex exec
+oss gemini --cli review 4249     # gemini CLI
+```
+
+`oss doctor` lists which of the three it can find. This is a separate account from the API key
+above — a subscription does not add API credit, and API credit does not power the CLI.
+
 **The order is: environment variable, then macOS Keychain, then an error naming the
 key.** Nothing else is consulted, and no key is ever written to the database — `oss
 setup` records which *model* to call for each provider, never the credential.

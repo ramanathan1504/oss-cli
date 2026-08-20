@@ -18,14 +18,10 @@ package com.osscli.cli;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.osscli.llm.ClaudeClient;
-import com.osscli.llm.GeminiClient;
 import com.osscli.llm.OllamaClient;
-import com.osscli.llm.OpenAiClient;
 import com.osscli.model.PromptContextChunk;
 import com.osscli.retrieval.ContextRetriever;
 import com.osscli.storage.SqliteStorage;
-import com.osscli.util.CredentialManager;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -386,16 +382,14 @@ public class PromptCommand implements Callable<Integer> {
 
     private String sendToCloud(String prompt) {
         try {
-            if (named(com.osscli.llm.Ai.Engine.OPENAI)) {
-                String model = SqliteStorage.loadConfig("openai.model");
-                return new OpenAiClient(model == null ? "gpt-4o" : model).generateText(prompt);
-            } else if (named(com.osscli.llm.Ai.Engine.CLAUDE)) {
-                String model = SqliteStorage.loadConfig("claude.model");
-                return new ClaudeClient(CredentialManager.getClaudeKey(), model).generateText(prompt);
-            } else {
-                String model = SqliteStorage.loadConfig("gemini.model");
-                return new GeminiClient(model == null ? "gemini-2.0-flash" : model).generateText(prompt);
-            }
+            // One dispatch, in com.osscli.llm.Cloud -- this and ReviewCommand's copy were the same
+            // switch with different defaults for the same model settings.
+            com.osscli.llm.Ai.Engine engine = named(com.osscli.llm.Ai.Engine.OPENAI)
+                    ? com.osscli.llm.Ai.Engine.OPENAI
+                    : (named(com.osscli.llm.Ai.Engine.CLAUDE)
+                            ? com.osscli.llm.Ai.Engine.CLAUDE
+                            : com.osscli.llm.Ai.Engine.GEMINI);
+            return com.osscli.llm.Cloud.generateText(engine, prompt);
         } catch (Exception e) {
             LOGGER.error("Cloud send failed: {}", e.getMessage());
             return null;

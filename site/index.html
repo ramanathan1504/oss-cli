@@ -863,13 +863,23 @@ oss llm review 4249
 oss claude review 4249
 
 <span class="c"># either may, in that order</span>
-oss llm claude review 4249</pre>
+oss llm claude review 4249
+
+<span class="c"># the provider's own CLI — your subscription, no API key</span>
+oss claude --cli review 4249</pre>
 
     <p class="sub">
       <strong>May, not will.</strong> Naming an engine grants permission; it does not order a call.
       Every ask starts on the local rung — your own notes, the vector index, the deterministic
       checks — and goes out only when that rung fails a test the command states out loud, with the
       reason printed. A question your archive already answers is not worth a round trip.
+    </p>
+    <p class="sub">
+      <strong>No API credit is not a broken install.</strong> Each cloud engine has a command-line
+      tool of its own, and <code>--cli</code> reaches the engine through the one you have already
+      signed in to, billing your subscription rather than an API key. When a provider refuses a
+      call for billing and its tool is on your PATH, the error names the keystroke that recovers —
+      and never switches by itself, because whose account paid should stay the line you typed.
     </p>
     <p class="sub">
       A command that never asks a model refuses the prefix instead of ignoring it.

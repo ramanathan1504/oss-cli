@@ -547,13 +547,9 @@ public class ReviewCommand implements Callable<Integer> {
     }
 
     private String sendToCloud(String provider, String prompt) throws Exception {
-        return switch (provider) {
-            case "claude" ->
-                new com.osscli.llm.ClaudeClient(configOr("claude.model", "claude-sonnet-5")).generateText(prompt);
-            case "openai" -> new com.osscli.llm.OpenAiClient(configOr("openai.model", "gpt-4o")).generateText(prompt);
-            default ->
-                new com.osscli.llm.GeminiClient(configOr("gemini.model", "gemini-2.0-flash")).generateText(prompt);
-        };
+        // One dispatch, in com.osscli.llm.Cloud. This was a switch over the same three providers as
+        // the one in PromptCommand, with different defaults for the same settings.
+        return com.osscli.llm.Cloud.generateText(com.osscli.llm.Cloud.engineNamed(provider), prompt);
     }
 
     private String configOr(String key, String fallback) throws java.sql.SQLException {
