@@ -770,7 +770,24 @@ oss memory index              # read it into the corpus
 oss memory search "…"         # find it again, by meaning
 oss memory map                # which notes touch which topic
 oss memory coverage           # what you have covered, and what you have not
+oss memory harvest            # pull your own public work on GitHub into the archive
 ```
+
+`harvest` is the one verb here that needs the network. It searches for everything you were
+*involved* in — the comment you left, the review you gave, the issue you triaged — not only what
+you authored, and writes one markdown file per item. `sync --me` is narrower on purpose: it stores
+the pull requests you wrote and got merged, which is a fraction of the record.
+
+```bash
+oss memory harvest                 # the username from oss setup
+oss memory harvest someone-else    # or say whose
+oss memory index                   # then read them into the corpus
+```
+
+The file name is stable, so harvesting twice rewrites the note rather than filing a second copy.
+Everything it writes is ordinary markdown in a folder — no database, no front matter, nothing an
+archive extension has to understand — which is why the built-in can read what an extension wrote,
+and the other way round.
 
 With nothing configured it works over `~/.oss-cli/memory`. Pointing it somewhere else, and telling
 it what you are trying to learn, is a file — `~/.oss-cli/kb.json`:

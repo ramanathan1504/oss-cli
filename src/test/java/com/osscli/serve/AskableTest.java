@@ -275,4 +275,19 @@ class AskableTest {
         assertNull(Askable.byKey("report"));
         assertNull(Askable.byKey("backlog"));
     }
+
+    @Test
+    @DisplayName("the board's verdict rule is cheap enough to run on every row")
+    void verdictCheckIsCheap() {
+        long start = System.nanoTime();
+        for (int i = 0; i < 500_000; i++) {
+            ServeCommand.hasVerdict(i % 3 == 0 ? "none" : "take");
+        }
+        long ms = (System.nanoTime() - start) / 1_000_000;
+
+        // It runs once per row on every page load, and a ledger grows for as long as somebody keeps
+        // reviewing. Half a million in under a second leaves no room for it to become the reason a
+        // laptop's fan comes on.
+        assertTrue(ms < 1_000, "500,000 checks took " + ms + "ms");
+    }
 }

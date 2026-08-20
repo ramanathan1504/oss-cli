@@ -126,7 +126,36 @@ public class OllamaClient {
         return Duration.ofSeconds(DEFAULT_TIMEOUT_SECONDS);
     }
 
+    /**
+     * Refuse to load a model that will take the machine down.
+     *
+     * <p>{@link ModelFit} has existed for this since a 7B model on an 8 GB laptop froze it for ten
+     * minutes, and it was called by three of the eight commands that start a model. The other five
+     * -- review, prompt, analyze, onboard and sync -- went straight to Ollama, which loads whatever
+     * it is given and lets the operating system swap. {@code analyze} is the worst of them: it runs
+     * the model once per issue over the whole backlog, so a model that does not fit is that freeze
+     * repeated fifteen thousand times.
+     *
+     * <p>So the check is here, in the one place all of them pass through, rather than in each
+     * caller where five of eight forgot it. It says what does not fit, by how much, and which
+     * installed model would -- "too big" is a complaint; "too big, use this one" is an instruction.
+     */
+    private void refuseIfItWillNotFit() throws IOException {
+        ModelFit.Verdict fit = ModelFit.check(this, model);
+        if (!fit.shouldRefuse()) {
+            return;
+        }
+        StringBuilder why = new StringBuilder("'" + model + "' does not fit in memory right now.");
+        for (String line : fit.explain()) {
+            why.append('\n').append(line);
+        }
+        // Not a warning that scrolls past inside a command which then reports success: loading it
+        // anyway is the thing this exists to prevent.
+        throw new ApiFailure.Permanent(0, why.toString());
+    }
+
     public String generateJson(String prompt) throws IOException, InterruptedException {
+        refuseIfItWillNotFit();
         Map<String, Object> requestBody = Map.of("model", model, "prompt", prompt, "stream", false, "format", "json");
 
         String jsonPayload = MAPPER.writeValueAsString(requestBody);
@@ -243,6 +272,7 @@ public class OllamaClient {
     }
 
     public String generateText(String prompt) throws IOException, InterruptedException {
+        refuseIfItWillNotFit();
         // Standard payload without the "format": "json" constraint
         Map<String, Object> requestBody = Map.of(
                 "model", model,

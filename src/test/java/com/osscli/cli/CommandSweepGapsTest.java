@@ -174,7 +174,11 @@ class CommandSweepGapsTest {
         assertTrue(BuiltinMemory.supports("search"), "search is the verb the file hint suggests");
         assertTrue(BuiltinMemory.supports("file"));
         assertTrue(BuiltinMemory.supports("index"));
-        assertFalse(BuiltinMemory.supports("harvest"), "harvest belongs to an archive, not the built-in store");
+        // harvest used to belong to an archive extension, and this asserted that it did. It is
+        // built in now, because installing oss-cli has to be enough: the half of the corpus that is
+        // your own record of your own work cannot require a second repository to collect.
+        assertTrue(BuiltinMemory.supports("harvest"), "your own work is collectable with nothing attached");
+        assertFalse(BuiltinMemory.supports("digest"), "digest is still an archive's richer form");
     }
 
     @Test

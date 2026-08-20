@@ -43,9 +43,127 @@ public final class BuiltinMemory {
      * it: {@code oss memory} with no verb has nothing else to offer when no archive is attached.
      * Stated once, so the switch, the error text and the listing cannot disagree.
      */
-    public static final List<String> VERBS = List.of("file", "search", "index", "map", "coverage");
+    public static final List<String> VERBS = List.of("file", "search", "index", "map", "coverage", "harvest");
 
     private BuiltinMemory() {}
+
+    /**
+     * Pull your own public work on GitHub into the archive, as plain markdown.
+     *
+     * <p>This is what makes "install oss-cli and that is it" true for the half of the corpus that
+     * is <em>yours</em>. A sibling repository did it in Python against DEVONthink; the notes it
+     * wrote were always ordinary markdown in a folder, and the DEVONthink half was an index on top.
+     * So the built-in writes the same files with no such dependency, and an archive extension still
+     * takes over whenever one is attached.
+     *
+     * <p>Wider than {@code sync --me}, deliberately. That query is
+     * {@code author:<you> type:pr is:merged} — the pull requests you wrote and got landed, which is
+     * a fraction of the record. Most of what you learn happens on somebody else's change: the
+     * comment you left, the review you gave, the issue you triaged. {@code involves:} catches all of
+     * it.
+     *
+     * <p>One file per item, named so a second run rewrites rather than duplicates — the same rule
+     * the review notes learned after six copies of one review accumulated in a real archive.
+     */
+    private static int harvest(List<String> args) throws IOException {
+        String user = args.isEmpty() ? configuredUser() : args.get(0).strip();
+        if (user == null || user.isBlank()) {
+            System.err.println("error  whose work? oss memory harvest <github-username>");
+            System.err.println("       or set one once: oss setup  (github.username)");
+            return 2;
+        }
+
+        Path into = DIR.resolve("harvest");
+        Files.createDirectories(into);
+
+        List<com.osscli.model.Issue> found;
+        try {
+            // Everything you touched, not only what you authored: involves: covers author,
+            // assignee, mentions and commenter in one query.
+            found = new com.osscli.github.GitHubClient().searchIssuesAndPrs("involves:" + user + " sort:updated-desc");
+        } catch (Exception e) {
+            System.err.println("error  could not reach GitHub: " + e.getMessage());
+            System.err.println("       harvest is the one verb here that needs the network.");
+            return 1;
+        }
+
+        int written = 0;
+        for (com.osscli.model.Issue issue : found) {
+            Path note = into.resolve(harvestName(issue));
+            Files.writeString(note, harvestNote(issue), StandardCharsets.UTF_8);
+            written++;
+        }
+
+        System.out.printf("  harvested %d item(s) for %s into %s%n", written, user, into);
+        System.out.println("  oss memory index      reads them into the corpus");
+        return 0;
+    }
+
+    /**
+     * A stable file name for one harvested item.
+     *
+     * <p>Stable because a second harvest must rewrite the note it already has. Timestamping instead
+     * is how one review ended up in an archive six times, each copy embedded and each competing to
+     * answer the same question.
+     */
+    static String harvestName(com.osscli.model.Issue issue) {
+        return "gh-" + repositoryOf(issue).replace('/', '-') + "-" + issue.number() + ".md";
+    }
+
+    /**
+     * Which repository an item belongs to, read from its own URL.
+     *
+     * <p>The search API returns the item, not the repository it came from — the only place the
+     * owner and name appear is the {@code html_url}. Guessing from the configured default would put
+     * somebody else's issue under your project's name.
+     */
+    static String repositoryOf(com.osscli.model.Issue issue) {
+        String url = issue.html_url();
+        if (url == null) {
+            return "unknown";
+        }
+        java.util.regex.Matcher m =
+                java.util.regex.Pattern.compile("github\\.com/([^/]+/[^/]+)/").matcher(url);
+        return m.find() ? m.group(1) : "unknown";
+    }
+
+    /** One harvested item, as the markdown a person would have written about it. */
+    static String harvestNote(com.osscli.model.Issue issue) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("# ")
+                .append(repositoryOf(issue))
+                .append(" #")
+                .append(issue.number())
+                .append('\n');
+        sb.append("## ")
+                .append(issue.title() == null ? "(no title)" : issue.title())
+                .append("\n\n");
+        sb.append("- state: ").append(issue.state()).append('\n');
+        if (issue.labels() != null && !issue.labels().isEmpty()) {
+            sb.append("- labels: ")
+                    .append(issue.labels().stream()
+                            .map(com.osscli.model.Label::name)
+                            .collect(java.util.stream.Collectors.joining(", ")))
+                    .append('\n');
+        }
+        if (issue.html_url() != null) {
+            sb.append("- link: ").append(issue.html_url()).append('\n');
+        }
+        sb.append('\n');
+        if (issue.body() != null && !issue.body().isBlank()) {
+            sb.append(issue.body().strip()).append('\n');
+        }
+        return sb.toString();
+    }
+
+    /** The username configured once, so harvest does not have to be told every time. */
+    private static String configuredUser() {
+        try {
+            return com.osscli.storage.SqliteStorage.loadConfig("github.username");
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
     /** Dispatch a verb. Returns a process exit code. */
     public static int run(String verb, List<String> args) {
@@ -61,6 +179,8 @@ public final class BuiltinMemory {
                     return map();
                 case "coverage":
                     return coverage();
+                case "harvest":
+                    return harvest(args);
                 default:
                     System.err.println("error  built-in memory has no verb \"" + verb + "\"");
                     System.err.println("       it knows: " + String.join(", ", VERBS));
