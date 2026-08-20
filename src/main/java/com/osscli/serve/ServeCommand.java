@@ -56,6 +56,22 @@ import picocli.CommandLine.Option;
  * repository and pastes the path. Nothing is uploaded, nothing is copied, and the extension stays
  * where it is and keeps being an ordinary repository.
  *
+ * <p><b>Why the board is here and not in a bench.</b> It was in one, and it was right to be: the
+ * review ledger, the pull-request state and the triage results all lived in a Log4j bench, and a
+ * page there was the only way to see them. The core had none of it, so a board in the core would
+ * have had nothing to draw.
+ *
+ * <p>That stopped being true. The ledger moved here, and the corpus grew to fifteen thousand issues
+ * across ten repositories — at which point the bench's page was reading a smaller copy of what this
+ * already held, three repositories where the core had ten. A board over one project's playground
+ * can only ever see that playground.
+ *
+ * <p>So it moved, by the rule that moved follow-up before it: <i>being inside a Log4j bench meant a
+ * capability that works against any repository could only be reached by attaching that bench.</i>
+ * What stays in a bench is what a bench can uniquely answer — does this actually work, on a real
+ * JVM, across versions and configurations. No amount of corpus replaces running the thing. And
+ * nothing that posts came across, because a browser has no terminal to confirm an outward write at.
+ *
  * <p>Three decisions worth stating, because each is a thing this deliberately does NOT do:
  *
  * <ul>
