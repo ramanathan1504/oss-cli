@@ -135,6 +135,105 @@ Build commands are extracted from the project's own `BUILDING` / `CONTRIBUTING` 
 
 Starter issues are matched on **whole words in a normalised label**, so `good-first-issue`, `Good First Issue` and `E-easy` all match while `area/resteasy-classic` and `spring boot starter` do not. They are listed fewest-comments-first: a starter issue with a long thread usually turned out to be hard, or someone is already on it.
 
+### `hub`
+Is anyone waiting on you? Every project you follow, in one list.
+
+Ranks by whose turn it is rather than by date, so a thread where the ball is in your court outranks a busier one where it is not.
+
+*   `-r`, `--repo <repo>` : Only this repository.
+*   `--all` : Include the ones where the ball is not in your court.
+
+```bash
+oss hub
+oss hub --all
+```
+
+### `pick`
+What to work on next, scored against what you have already worked on.
+
+Ranks the backlog against your own history — the areas you have touched, the reviews you recorded — so the suggestion is one you are already equipped for rather than the newest thing open. With nothing recorded yet it says so and names the two commands that build that profile.
+
+*   `-r`, `--repo <repo>` : Only this repository.
+*   `--limit <n>` : How many to suggest (default 10).
+*   `--issues-only` : Skip pull requests.
+
+```bash
+oss pick
+oss pick --issues-only --limit 5
+```
+
+### `prs`
+Analyse cached open pull requests for stale status, reviews, and critical fixes.
+
+Reads what `sync` already stored, so it answers offline.
+
+*   `-r`, `--repo <repo>` : Target repository. Defaults to `default.repository`.
+
+### `pr`
+Every mechanical fact about a pull request.
+
+No judgement and no model: the title, author, state, base branch, head commit, and — on request — the files or the patch itself.
+
+*   `-r`, `--repo <repo>` : Target repository. Defaults to `default.repository`.
+*   `--files` : Only the files it touches.
+*   `--diff` : The patch itself.
+
+```bash
+oss pr 4249 -r owner/name
+oss pr 4249 -r owner/name --files
+```
+
+Issues and pull requests share one numbering sequence on GitHub, so asking for a number that is an issue says exactly that rather than failing on a null.
+
+### `issue`
+Read an issue as it was filed.
+
+*   `-r`, `--repo <repo>` : Target repository. Defaults to `default.repository`.
+*   `--comments` : Include the discussion.
+
+```bash
+oss issue 1666 -r owner/name --comments
+```
+
+### `followup`
+What moved on a reviewed pull request since you reviewed it.
+
+Records that you reviewed a pull request at a particular head commit, then tells you what the author pushed after that — so a re-review starts from the difference rather than from the top.
+
+*   `-r`, `--repo <repo>` : Target repository. Defaults to the repository already on that row.
+*   `--record`, `--sync <pr>` : Record a pull request as reviewed at its current head.
+*   `--verdict <v>` : With `--record`: `take`, `changes`, `blocked` or `routine`.
+*   `--note <text>` : With `--record`: one line, for you, later.
+*   `--since <pr>` : What the author pushed since you reviewed it.
+*   `--write` : With `--since`: append the report to the review file.
+*   `--changed` : Only the ones that moved.
+*   `--mine` : Only where the last word is not yours.
+*   `--comment <pr>` : Print just the paste-ready block of a review, to pipe.
+
+`--comment` prints; it does not post. Nothing in this tool writes to anybody's repository — every GitHub call it makes is a read.
+
+### `ext`
+Attach and inspect runners and memories.
+
+An extension is a directory somebody points at; the tool reads its manifest and gains the verbs it declares. Nothing is downloaded and nothing is registered without a path being given.
+
+*   `oss ext list` : Show every registered extension.
+*   `oss ext add <path>` : Register the extension declared by a repository.
+*   `oss ext remove <name>` : Unregister an extension.
+*   `oss ext refresh <name>` : Re-read a registered extension's manifest from disk.
+
+### `alias`
+Give this command your own name — `buddy`, `hey`, anything.
+
+*   `--list` : Show the names already created.
+*   `--remove <name>` : Remove a name.
+*   `--force` : Create it even if the name is already taken.
+
+```bash
+oss alias buddy
+oss alias --list
+```
+
 ### `backlog`
 The whole backlog as one page: what is mergeable, what is one fix away, what to pick up next.
 
@@ -655,7 +754,8 @@ useful, and on a laptop the honest default is the deterministic path plus `oss l
 
 ### The knowledge base is built in
 
-`oss memory` is the whole knowledge base, and needs no repository:
+`oss memory` is the whole knowledge base, and needs no repository. `oss kb` is the same command
+under a shorter name:
 
 ```bash
 oss memory file notes.md      # keep a note
@@ -714,6 +814,7 @@ itself to a person as well. Then:
 ```bash
 oss run --pack <dir> list
 cd <dir> && oss run list      # the same thing
+oss bench list                # `bench` is the same command under an older name
 ```
 
 **`useWhen` is the part a directory could never carry.** A pack states what it is for — the
