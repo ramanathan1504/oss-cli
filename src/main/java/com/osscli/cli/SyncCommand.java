@@ -498,15 +498,15 @@ public class SyncCommand implements Callable<Integer> {
             }
         }
 
-        // B. Sync Google Drive AI Studio Logs (The Ingestion Engine - Always Runs)
+        // B. Ingest the note folders in drive.paths (always runs)
         if (drivePathsStr != null && !drivePathsStr.trim().isEmpty()) {
-            LOGGER.info("Scanning Google Drive paths recursively for AI Studio logs...");
+            LOGGER.info("Scanning your note folders (drive.paths) recursively...");
             String[] paths = drivePathsStr.split(",");
 
             for (String path : paths) {
                 java.nio.file.Path localPath = java.nio.file.Paths.get(path.trim());
                 if (!java.nio.file.Files.exists(localPath)) {
-                    LOGGER.warn("Google Drive directory does not exist locally: {}", localPath.toAbsolutePath());
+                    LOGGER.warn("Note folder does not exist locally: {}", localPath.toAbsolutePath());
                     continue;
                 }
 
@@ -680,13 +680,13 @@ public class SyncCommand implements Callable<Integer> {
                     }
                 } catch (Exception e) {
                     LOGGER.error(
-                            "Failed to scan Google Drive directory recursively '{}': {}",
+                            "Failed to scan note folder recursively '{}': {}",
                             localPath.toAbsolutePath(),
                             e.getMessage());
                 }
             }
         } else {
-            LOGGER.info("No Google Drive paths configured for AI log ingestion. Skipping this step.");
+            LOGGER.info("No note folders configured (drive.paths). Skipping this step.");
         }
 
         // C. Update the sync timestamp in SQLite on success

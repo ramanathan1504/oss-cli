@@ -36,7 +36,9 @@ public class HubCommand implements Callable<Integer> {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    @Option(names = "--repo", description = "Only this repository, as owner/name")
+    @Option(
+            names = {"-r", "--repo"},
+            description = "Only this repository, as owner/name")
     String repo;
 
     @Option(names = "--all", description = "Include the ones where the ball is not in your court")

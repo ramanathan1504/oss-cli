@@ -192,15 +192,16 @@ public class SetupCommand implements Callable<Integer> {
             LOGGER.info("  ↳ Updated Cloud Agent Model to: {}", currentClaudeModel);
         }
 
-        // 8. Configure Google Drive Locations
+        // 8. Configure the note folders
         String currentDrivePaths = SqliteStorage.loadConfig("drive.paths");
-        LOGGER.info("Current Google Drive Paths: [ {} ]", currentDrivePaths == null ? "(none)" : currentDrivePaths);
-        LOGGER.info("Enter new Google Drive Paths (comma-separated, or press Enter to keep current):");
+        LOGGER.info(
+                "Current note folders (drive.paths): [ {} ]", currentDrivePaths == null ? "(none)" : currentDrivePaths);
+        LOGGER.info("Enter new note folders (comma-separated, or press Enter to keep current):");
         String inputDrive = ask(scanner);
         if (!inputDrive.isEmpty()) {
             SqliteStorage.saveConfig("drive.paths", inputDrive);
             currentDrivePaths = inputDrive;
-            LOGGER.info("  ↳ Updated Google Drive Paths to: {}", currentDrivePaths);
+            LOGGER.info("  ↳ Updated note folders to: {}", currentDrivePaths);
         }
 
         // 9. Configure Automated Backup Location

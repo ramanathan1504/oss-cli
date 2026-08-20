@@ -85,6 +85,30 @@ public class BackupCommand implements Callable<Integer> {
      * <p>Read here rather than passed in: the check has to hold for {@code --to} as well, and a
      * caller that has to remember to pass the guard is a guard that eventually is not passed.
      */
+    /**
+     * Whether a backup written at {@code target} would land inside an indexed note folder.
+     *
+     * <p>A value, so the answer can be read without running a backup -- the check is the part worth
+     * getting right, and the failure it prevents is unrecoverable by the time it shows.
+     */
+    static boolean insideIndexedFolder(Path target, String noteDir) {
+        return real(target).startsWith(real(Paths.get(noteDir.trim())));
+    }
+
+    /**
+     * A path with every symbolic link resolved, or the lexical form when it cannot be.
+     *
+     * <p>An unreadable or not-yet-existing path falls back rather than failing: the caller is a
+     * safety check, and a check that throws is a check that stops protecting.
+     */
+    private static Path real(Path path) {
+        try {
+            return path.toRealPath();
+        } catch (Exception e) {
+            return path.toAbsolutePath().normalize();
+        }
+    }
+
     private static List<String> indexedNoteDirs() {
         try {
             String paths = SqliteStorage.loadConfig("drive.paths");
@@ -170,9 +194,13 @@ public class BackupCommand implements Callable<Integer> {
         //
         // Refused rather than warned. A warning scrolls past inside a command that then reports
         // success, and this one is unrecoverable by the time it is obvious.
+        // Resolved, not normalised. normalize() is lexical -- it strips "." and ".." and never
+        // follows a link -- so a target that IS a symlink into an indexed folder passed this check
+        // and sprang the exact trap below. Demonstrated with a link: lexically it does not start
+        // with the indexed path, resolved it does.
         for (String noteDir : indexedNoteDirs()) {
-            Path indexed = Paths.get(noteDir.trim()).toAbsolutePath().normalize();
-            if (targetBackupDir.toAbsolutePath().normalize().startsWith(indexed)) {
+            Path indexed = real(Paths.get(noteDir.trim()));
+            if (insideIndexedFolder(targetBackupDir, noteDir)) {
                 LOGGER.error("Refusing to write backups inside an indexed note folder:");
                 LOGGER.error("  backups → {}", targetBackupDir);
                 LOGGER.error("  indexed → {}", indexed);

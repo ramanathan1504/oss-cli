@@ -28,7 +28,9 @@ public class PrCommand implements Callable<Integer> {
     @Parameters(index = "0", description = "Pull request number")
     int number;
 
-    @Option(names = "--repo", required = true, description = "owner/name")
+    @Option(
+            names = {"-r", "--repo"},
+            description = "owner/name (default: default.repository)")
     String repo;
 
     @Option(names = "--diff", description = "The patch itself")
@@ -39,6 +41,23 @@ public class PrCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
+        // The same fallback as every other repository command. These two required --repo, so the
+        // form that works everywhere else -- `oss pr 4249 -r owner/name`, or a configured default
+        // and no flag at all -- failed here on the flag rather than on anything real.
+        if (repo == null || repo.isBlank()) {
+            try {
+                repo = com.osscli.storage.SqliteStorage.loadConfig("default.repository");
+            } catch (Exception e) {
+                repo = null;
+            }
+            if (repo == null || repo.isBlank()) {
+                System.err.println("error  which repository? -r owner/name");
+                System.err.println("       or set a default: oss setup  (default.repository)");
+                return 2;
+            }
+            repo = repo.strip();
+        }
+
         try {
             GitHubClient gh = new GitHubClient();
             // getJson answers null for a 404, deliberately -- absent is not an error at that
