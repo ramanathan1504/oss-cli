@@ -133,6 +133,13 @@ public class PromptCommand implements Callable<Integer> {
 
                 try {
                     String jsonResponse = ollama.generateJson(jsonPrompt);
+                    if (jsonResponse == null || jsonResponse.isBlank()) {
+                        // A daemon that answered with no "response" field is a daemon that did not
+                        // answer. Falling through to the expert prompt is the honest outcome, and
+                        // the whole point of the escalation path.
+                        LOGGER.warn("  ⚠ The local model returned nothing — building the expert prompt instead.");
+                        throw new java.io.IOException("no response from the local model");
+                    }
                     JsonNode node = MAPPER.readTree(jsonResponse);
                     double confidence = node.path("confidence").asDouble(0.5);
                     boolean escalate = node.path("escalate").asBoolean(false);

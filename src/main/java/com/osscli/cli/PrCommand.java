@@ -83,7 +83,11 @@ public class PrCommand implements Callable<Integer> {
                 return 0;
             }
 
-            String files = gh.getJson("/repos/" + repo + "/pulls/" + number + "/files?per_page=100");
+            // orEmpty, like the check-runs call below. getJson answers null deliberately -- absent
+            // is not an error at that layer -- and readTree(null) throws `argument "content" is
+            // null`, which is a Jackson complaint about an argument rather than an answer about a
+            // pull request. The same mistake was fixed for the pull request itself and left here.
+            String files = orEmpty(gh.getJson("/repos/" + repo + "/pulls/" + number + "/files?per_page=100"));
             JsonNode fileNodes = MAPPER.readTree(files);
 
             if (filesOnly) {
