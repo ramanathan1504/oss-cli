@@ -134,6 +134,8 @@ public class ServeCommand implements Callable<Integer> {
 
         server.createContext("/", this::handlePage);
         server.createContext("/api/extensions", this::handleList);
+        server.createContext("/api/questions", this::handleQuestions);
+        server.createContext("/api/ask", this::handleAsk);
         server.createContext("/api/attach", this::handleAttach);
         server.createContext("/api/detach", this::handleDetach);
         server.setExecutor(null);
@@ -202,6 +204,122 @@ public class ServeCommand implements Callable<Integer> {
 
     private void handleList(HttpExchange x) throws IOException {
         sendJson(x, 200, Map.of("extensions", snapshot()));
+    }
+
+    /** The questions this page can ask, with the sentence each one answers. */
+    private void handleQuestions(HttpExchange x) throws IOException {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Askable.Question q : Askable.all()) {
+            out.add(Map.of(
+                    "key",
+                    q.key(),
+                    "asks",
+                    q.asks(),
+                    "runs",
+                    "oss " + String.join(" ", q.argv()),
+                    "arg",
+                    q.arg() == null ? "" : q.arg()));
+        }
+        sendJson(x, 200, Map.of("questions", out));
+    }
+
+    /**
+     * Run one question and return what came back.
+     *
+     * <p>The page never reimplements a command; it runs one and shows the output, so the two cannot
+     * disagree. Only keys on {@link Askable} are runnable, and nothing on that table writes — which
+     * is what makes dispatching from a browser defensible at all, given a browser has no terminal
+     * to confirm an outward write at.
+     */
+    private void handleAsk(HttpExchange x) throws IOException {
+        Map<String, String> params = query(x.getRequestURI().getRawQuery());
+        Askable.Question q = Askable.byKey(params.get("q"));
+        if (q == null) {
+            // Not "unknown question": the page posts a key, and anything not on the table must not
+            // become a command line.
+            sendJson(x, 400, Map.of("error", "not a question this page can ask"));
+            return;
+        }
+
+        List<String> argv = new ArrayList<>(ownExecutable());
+        argv.addAll(q.argv());
+        if (q.needsArgument()) {
+            String given = params.getOrDefault("arg", "").strip();
+            if (given.isEmpty()) {
+                sendJson(x, 400, Map.of("error", "that question needs " + q.arg()));
+                return;
+            }
+            argv.add(given);
+        }
+
+        try {
+            Process p = new ProcessBuilder(argv).redirectErrorStream(true).start();
+            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            if (!p.waitFor(q.timeoutSeconds(), java.util.concurrent.TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+                sendJson(x, 200, Map.of("output", "", "note", "gave up after " + q.timeoutSeconds() + "s"));
+                return;
+            }
+            sendJson(
+                    x,
+                    200,
+                    Map.of(
+                            "output",
+                            out.strip(),
+                            "note",
+                            out.isBlank() ? q.empty() : "",
+                            "runs",
+                            "oss " + String.join(" ", q.argv())));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            sendJson(x, 500, Map.of("error", "interrupted"));
+        }
+    }
+
+    /**
+     * How to invoke this program again.
+     *
+     * <p>The running jar, not whatever {@code oss} the PATH offers: a page served by this build must
+     * ask this build, or the answers belong to a different version from the one being looked at.
+     */
+    static List<String> ownExecutable() {
+        try {
+            String jar = java.nio.file.Path.of(ServeCommand.class
+                            .getProtectionDomain()
+                            .getCodeSource()
+                            .getLocation()
+                            .toURI())
+                    .toString();
+            String javaBin = java.nio.file.Path.of(System.getProperty("java.home"), "bin", "java")
+                    .toString();
+            if (jar.endsWith(".jar")) {
+                return List.of(javaBin, "-jar", jar);
+            }
+        } catch (Exception e) {
+            // Running from classes rather than a jar, or a code source we cannot resolve. The
+            // installed command is the honest fallback; it may be a different build, which is why
+            // it is the fallback rather than the first choice.
+            System.err.println("  (could not locate the running jar: " + e.getMessage() + ")");
+        }
+        return List.of("oss");
+    }
+
+    /** Query parameters, decoded, with no assumption that any of them are present. */
+    static Map<String, String> query(String raw) {
+        Map<String, String> out = new LinkedHashMap<>();
+        if (raw == null || raw.isBlank()) {
+            return out;
+        }
+        for (String pair : raw.split("&")) {
+            int eq = pair.indexOf('=');
+            if (eq <= 0) {
+                continue;
+            }
+            out.put(
+                    java.net.URLDecoder.decode(pair.substring(0, eq), StandardCharsets.UTF_8),
+                    java.net.URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8));
+        }
+        return out;
     }
 
     private void handleAttach(HttpExchange x) throws IOException {
