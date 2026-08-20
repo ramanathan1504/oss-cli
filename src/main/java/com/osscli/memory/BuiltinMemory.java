@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -43,9 +44,155 @@ public final class BuiltinMemory {
      * it: {@code oss memory} with no verb has nothing else to offer when no archive is attached.
      * Stated once, so the switch, the error text and the listing cannot disagree.
      */
-    public static final List<String> VERBS = List.of("file", "search", "index", "map", "coverage", "harvest");
+    public static final List<String> VERBS =
+            List.of("file", "search", "index", "map", "coverage", "harvest", "digest", "import");
 
     private BuiltinMemory() {}
+
+    /**
+     * Read a data export from a chat product into the archive.
+     *
+     * <p>The half of the record that has no local files. Claude Code, codex and gemini keep their
+     * sessions on disk and {@code harvest} can go and get them; ChatGPT, Claude.ai and AI Studio
+     * keep nothing here, so the only route is the export their owner downloads. This takes that
+     * folder and turns it into ordinary markdown beside everything else.
+     *
+     * <p><b>Secrets are redacted, not dropped.</b> A real export of 111 conversations carried AWS
+     * keys, GitHub tokens, a bearer token and {@code password=} strings in seven of them -- and the
+     * troubleshooting around each was worth keeping. So the text survives with {@code [REDACTED:...]}
+     * where the secret was, and the original download is never modified.
+     *
+     * <p>Anything that is not text is skipped and counted rather than silently ignored: an export is
+     * mostly screenshots by volume, and a reader told "412 files, 68 imported" knows the rest were
+     * images, where silence would read as loss.
+     */
+    private static int importExport(List<String> args) throws IOException {
+        if (args.isEmpty()) {
+            System.err.println("error  which export? oss memory import <folder>");
+            System.err.println("       the folder a chat product's data export unpacked into");
+            return 2;
+        }
+        Path from = Path.of(args.get(0).strip());
+        if (!Files.isDirectory(from)) {
+            System.err.println("error  not a folder: " + from);
+            return 2;
+        }
+
+        Path into = DIR.resolve("imported");
+        Files.createDirectories(into);
+
+        int imported = 0;
+        int skipped = 0;
+        int redacted = 0;
+        try (java.util.stream.Stream<Path> walk = Files.walk(from)) {
+            for (Path file : walk.filter(Files::isRegularFile).toList()) {
+                if (!isText(file)) {
+                    skipped++;
+                    continue;
+                }
+                String raw;
+                try {
+                    raw = Files.readString(file, StandardCharsets.UTF_8);
+                } catch (Exception e) {
+                    // Not decodable as text after all. Counted, not announced one file at a time.
+                    skipped++;
+                    continue;
+                }
+                if (raw.isBlank()) {
+                    skipped++;
+                    continue;
+                }
+                com.osscli.util.Redactor.Result scrubbed = com.osscli.util.Redactor.redact(raw);
+                if (scrubbed.redactedAnything()) {
+                    redacted++;
+                }
+                Files.writeString(into.resolve(importedName(from, file)), scrubbed.text(), StandardCharsets.UTF_8);
+                imported++;
+            }
+        }
+
+        System.out.printf("  imported %d, skipped %d (not text) -> %s%n", imported, skipped, into);
+        if (redacted > 0) {
+            System.out.printf("  %d carried a secret, redacted in the copy -- the original is untouched%n", redacted);
+            System.out.println("  Removing them here does not revoke them; rotate anything real.");
+        }
+        System.out.println("  oss memory index      reads them into the corpus");
+        return 0;
+    }
+
+    /** Whether a file in an export is worth reading as text. */
+    static boolean isText(Path file) {
+        String n = file.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+        return n.endsWith(".md") || n.endsWith(".txt") || n.endsWith(".json") || n.endsWith(".html");
+    }
+
+    /**
+     * A stable, flat name for an imported file.
+     *
+     * <p>Flattened because an export nests deeply and a note archive does not, and stable because a
+     * second import of the same export must rewrite rather than double the corpus -- the rule the
+     * review notes learned after six copies of one review accumulated in a real archive.
+     */
+    static String importedName(Path root, Path file) {
+        String rel = root.relativize(file).toString();
+        String flat = rel.replaceAll("[/\\\\]", "-").replaceAll("[^A-Za-z0-9._-]", "_");
+        return flat.endsWith(".md") ? flat : flat + ".md";
+    }
+
+    /**
+     * What you actually worked out on a topic, rather than where you discussed it.
+     *
+     * <p>{@code map} counts notes; this reads them. It pulls the problem and the resolution out of
+     * each note that carries them and puts the public record first, so the result is a page you can
+     * read top to bottom and come away knowing what was solved.
+     */
+    private static int digest(List<String> args) throws IOException {
+        KnowledgePack pack = KnowledgePack.load();
+        if (pack.topics().isEmpty()) {
+            System.out.println("  no topics declared, so there is nothing to digest.");
+            System.out.println();
+            System.out.println("  kb.json:  {\"topics\": {\"log4j\": [\"log4j\", \"appender\"]}}");
+            System.out.println("  " + AppPaths.BASE_DIR.resolve("kb.json"));
+            return 0;
+        }
+
+        List<String> wanted = args.isEmpty() ? List.copyOf(pack.topics().keySet()) : args;
+        for (String topic : wanted) {
+            List<String> terms = pack.topics().get(topic);
+            if (terms == null) {
+                System.out.println("  no topic called \"" + topic + "\" in kb.json");
+                continue;
+            }
+            List<Digest.Entry> entries = new ArrayList<>();
+            for (Map.Entry<String, String> note : notesMatching(terms).entrySet()) {
+                Map<String, String> sections = Digest.sectionsOf(note.getValue());
+                if (!sections.isEmpty()) {
+                    entries.add(new Digest.Entry(note.getKey(), Digest.originOf(note.getKey()), sections));
+                }
+            }
+            Path out = pack.archive().resolve(topic + "-digest.md");
+            Files.createDirectories(out.getParent());
+            Files.writeString(out, Digest.render(topic, entries), StandardCharsets.UTF_8);
+            System.out.printf("  %-16s %d note(s) with something in them -> %s%n", topic, entries.size(), out);
+        }
+        return 0;
+    }
+
+    /**
+     * Indexed notes whose text carries any of these terms.
+     *
+     * <p>Read from the corpus rather than by walking the archive: the notes are already there with
+     * their content, and a cloud-synced folder answers a full-text walk in minutes where the
+     * database answers in milliseconds — the same reason the harvest writes files and the index
+     * reads them.
+     */
+    private static Map<String, String> notesMatching(List<String> terms) {
+        Map<String, String> out = new LinkedHashMap<>();
+        for (String term : terms) {
+            out.putAll(com.osscli.storage.SqliteStorage.notesContaining(term));
+        }
+        return out;
+    }
 
     /**
      * Pull your own public work on GitHub into the archive, as plain markdown.
@@ -87,12 +234,34 @@ public final class BuiltinMemory {
             return 1;
         }
 
+        com.osscli.github.GitHubClient gh = new com.osscli.github.GitHubClient();
         int written = 0;
+        int withDiscussion = 0;
         for (com.osscli.model.Issue issue : found) {
+            List<String> discussion = new ArrayList<>();
+            String repo = repositoryOf(issue);
+            if (!"unknown".equals(repo) && issue.comments() > 0) {
+                try {
+                    // Two pages. A thread past two hundred comments is one nobody reads to the end,
+                    // and fetching every one of them costs the harvest its pace.
+                    for (Map<String, Object> c :
+                            gh.getPaged("/repos/" + repo + "/issues/" + issue.number() + "/comments", 2)) {
+                        discussion.add(comment(c));
+                    }
+                } catch (Exception e) {
+                    // One unreachable thread must not end the harvest. The note is still worth
+                    // writing, and says so by simply carrying no Why section.
+                    System.err.println("  (could not read the thread on " + repo + " #" + issue.number() + ")");
+                }
+            }
+            if (!discussion.isEmpty()) {
+                withDiscussion++;
+            }
             Path note = into.resolve(harvestName(issue));
-            Files.writeString(note, harvestNote(issue), StandardCharsets.UTF_8);
+            Files.writeString(note, harvestNote(issue, discussion), StandardCharsets.UTF_8);
             written++;
         }
+        System.out.printf("  %d of them carried a conversation worth keeping%n", withDiscussion);
 
         System.out.printf("  harvested %d item(s) for %s into %s%n", written, user, into);
         System.out.println("  oss memory index      reads them into the corpus");
@@ -128,7 +297,7 @@ public final class BuiltinMemory {
     }
 
     /** One harvested item, as the markdown a person would have written about it. */
-    static String harvestNote(com.osscli.model.Issue issue) {
+    static String harvestNote(com.osscli.model.Issue issue, List<String> discussion) {
         StringBuilder sb = new StringBuilder();
         sb.append("# ")
                 .append(repositoryOf(issue))
@@ -150,10 +319,45 @@ public final class BuiltinMemory {
             sb.append("- link: ").append(issue.html_url()).append('\n');
         }
         sb.append('\n');
-        if (issue.body() != null && !issue.body().isBlank()) {
-            sb.append(issue.body().strip()).append('\n');
+
+        sb.append("## The Problem (What & Where)\n\n");
+        sb.append(
+                        issue.body() == null || issue.body().isBlank()
+                                ? "(filed with no description)"
+                                : issue.body().strip())
+                .append("\n\n");
+
+        // The conversation, in order. A comment stranded without the thread around it is the thing
+        // this exists to prevent: the reasoning is in the exchange, not in any one message.
+        if (discussion != null && !discussion.isEmpty()) {
+            sb.append("## The \"Why\" (Review Discussions)\n\n");
+            for (String line : discussion) {
+                sb.append(line).append("\n\n");
+            }
         }
+
+        sb.append("## The Solution (How)\n\n");
+        sb.append(
+                        "closed".equalsIgnoreCase(issue.state())
+                                ? "Closed. The thread above carries how it was resolved."
+                                : "Still open at the time this was harvested.")
+                .append('\n');
         return sb.toString();
+    }
+
+    /**
+     * One comment, as a line of the conversation.
+     *
+     * <p>Author and time kept, because "who said this and when" is most of what makes an old thread
+     * readable a year later.
+     */
+    static String comment(Map<String, Object> raw) {
+        Object user = raw.get("user");
+        String who = user instanceof Map<?, ?> m && m.get("login") != null ? String.valueOf(m.get("login")) : "someone";
+        String when = raw.get("created_at") == null ? "" : String.valueOf(raw.get("created_at"));
+        String body =
+                raw.get("body") == null ? "" : String.valueOf(raw.get("body")).strip();
+        return "### @" + who + (when.isEmpty() ? "" : " — " + when) + "\n\n" + body;
     }
 
     /** The username configured once, so harvest does not have to be told every time. */
@@ -181,6 +385,10 @@ public final class BuiltinMemory {
                     return coverage();
                 case "harvest":
                     return harvest(args);
+                case "digest":
+                    return digest(args);
+                case "import":
+                    return importExport(args);
                 default:
                     System.err.println("error  built-in memory has no verb \"" + verb + "\"");
                     System.err.println("       it knows: " + String.join(", ", VERBS));

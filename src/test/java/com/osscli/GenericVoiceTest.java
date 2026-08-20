@@ -43,13 +43,14 @@ class GenericVoiceTest {
     /**
      * Products the code claimed the user's folders WERE.
      *
-     * <p>Deliberately just these two. Naming a service as one example among several ("point at a
-     * synced folder (iCloud, Dropbox, Drive)") is helpful, and naming one for behaviour that is
-     * genuinely its own — iCloud files that are not downloaded yet — is accurate. What broke was
-     * telling every user that the folders they configured are Google Drive and the files in them
-     * are AI Studio logs.
+     * <p>Deliberately just these two, and the second is a phrase rather than a name. Naming a
+     * service as one example among several ("point at a synced folder (iCloud, Dropbox, Drive)") is
+     * helpful; naming one for behaviour genuinely its own — iCloud files not downloaded yet — is
+     * accurate; and naming one as a product you can import an export <em>from</em> is a fact. What
+     * broke was telling every user that the folders they configured are Google Drive and that the
+     * files in them are AI Studio logs — claims about <em>their</em> archive, not about a source.
      */
-    private static final List<String> NOT_OURS = List.of("Google Drive", "AI Studio");
+    private static final List<String> NOT_OURS = List.of("Google Drive", "AI Studio logs");
 
     @Test
     @DisplayName("no storage vendor is named for the user's own note folders")

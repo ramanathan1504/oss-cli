@@ -17,6 +17,7 @@
 package com.osscli.memory;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.osscli.model.Issue;
@@ -85,7 +86,7 @@ class HarvestTest {
                 "Fix circular references in exceptions",
                 List.of(new Label("bug"), new Label("appenders")));
 
-        String note = BuiltinMemory.harvestNote(i);
+        String note = BuiltinMemory.harvestNote(i, List.of());
 
         assertTrue(note.startsWith("# apache/logging-log4j2 #4249"), note);
         assertTrue(note.contains("## Fix circular references in exceptions"), note);
@@ -101,5 +102,59 @@ class HarvestTest {
     void harvestIsABuiltInVerb() {
         assertTrue(BuiltinMemory.VERBS.contains("harvest"));
         assertTrue(BuiltinMemory.supports("harvest"));
+    }
+
+    @Test
+    @DisplayName("a harvested note carries the headings a digest reads")
+    void noteIsShapedForTheDigest() {
+        Issue i = issue(4249, "https://github.com/apache/logging-log4j2/pull/4249", "Fix circular refs", List.of());
+
+        String note = BuiltinMemory.harvestNote(i, List.of());
+
+        // Every harvester that has written into this archive uses these, Digest mines them, and 443
+        // of 623 notes carry them. A harvest inventing its own layout writes notes the rest of the
+        // tool cannot read.
+        assertTrue(note.contains("## The Problem (What & Where)"), note);
+        assertTrue(note.contains("## The Solution (How)"), note);
+        assertFalse(Digest.sectionsOf(note).isEmpty(), "the digest cannot read what harvest wrote");
+    }
+
+    @Test
+    @DisplayName("the conversation is kept in order, with who said it and when")
+    void discussionIsPreserved() {
+        Issue i = issue(1, "https://github.com/o/n/issues/1", "t", List.of());
+
+        String note = BuiltinMemory.harvestNote(
+                i,
+                List.of(
+                        BuiltinMemory.comment(java.util.Map.of(
+                                "user", java.util.Map.of("login", "alice"),
+                                "created_at", "2026-07-24T03:28:42Z",
+                                "body", "this is the argument that mattered")),
+                        BuiltinMemory.comment(
+                                java.util.Map.of("user", java.util.Map.of("login", "bob"), "body", "and the reply"))));
+
+        assertTrue(note.contains("## The \"Why\" (Review Discussions)"), note);
+        assertTrue(note.indexOf("@alice") < note.indexOf("@bob"), "the thread lost its order");
+        assertTrue(note.contains("2026-07-24"), "a year later, when it was said is most of what makes it readable");
+        assertTrue(note.contains("this is the argument that mattered"), note);
+    }
+
+    @Test
+    @DisplayName("a comment with nothing in it still names its author")
+    void thinCommentsDoNotBreakTheThread() {
+        String c = BuiltinMemory.comment(java.util.Map.of("user", java.util.Map.of("login", "alice")));
+        assertTrue(c.contains("@alice"), c);
+
+        // An anonymous or malformed comment is somebody else's data, not a reason to fail.
+        assertTrue(BuiltinMemory.comment(java.util.Map.of()).contains("someone"));
+    }
+
+    @Test
+    @DisplayName("an item with no conversation has no Why section rather than an empty one")
+    void noThreadMeansNoHeading() {
+        Issue i = issue(1, "https://github.com/o/n/issues/1", "t", List.of());
+
+        assertFalse(BuiltinMemory.harvestNote(i, List.of()).contains("(Review Discussions)"));
     }
 }

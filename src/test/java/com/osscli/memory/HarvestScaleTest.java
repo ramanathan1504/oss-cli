@@ -54,11 +54,11 @@ class HarvestScaleTest {
     /** How long a run of {@code n} notes takes, after a warm-up the JIT has seen. */
     private static long nanosFor(int n) {
         for (int i = 0; i < 1_000; i++) {
-            BuiltinMemory.harvestNote(at(i));
+            BuiltinMemory.harvestNote(at(i), java.util.List.of());
         }
         long start = System.nanoTime();
         for (int i = 0; i < n; i++) {
-            BuiltinMemory.harvestNote(at(i));
+            BuiltinMemory.harvestNote(at(i), java.util.List.of());
             BuiltinMemory.harvestName(at(i));
         }
         return System.nanoTime() - start;

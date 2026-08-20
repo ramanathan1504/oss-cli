@@ -771,6 +771,8 @@ oss memory search "…"         # find it again, by meaning
 oss memory map                # which notes touch which topic
 oss memory coverage           # what you have covered, and what you have not
 oss memory harvest            # pull your own public work on GitHub into the archive
+oss memory digest             # what you actually worked out, per topic
+oss memory import <folder>    # a chat product's data export, redacted
 ```
 
 `harvest` is the one verb here that needs the network. It searches for everything you were
@@ -784,7 +786,24 @@ oss memory harvest someone-else    # or say whose
 oss memory index                   # then read them into the corpus
 ```
 
-The file name is stable, so harvesting twice rewrites the note rather than filing a second copy.
+Each harvested note carries the three headings every harvester in this archive writes — the problem
+as filed, the conversation in order with who said what and when, and how it ended — because `digest`
+reads those headings and a harvest with its own layout would write notes the rest of the tool cannot
+read.
+
+`digest` is the difference between an index and an answer. `map` tells you which notes mention log4j;
+`digest` reads them and says what was solved, putting **the public record above private reasoning** and
+labelling each — what was agreed on a thread and what was reasoned in a conversation are different
+kinds of evidence, and merging them reads as one account when it is two.
+
+`import` is for the products that keep nothing on your machine. Claude Code, codex and gemini write
+their sessions to disk, so `harvest` can go and get them; ChatGPT, Claude.ai and AI Studio do not, so
+the only route in is the export you download. **Secrets are redacted rather than dropped** — a real
+export carried AWS keys and tokens in seven conversations whose troubleshooting was worth keeping —
+and the original download is never modified. Files that are not text are counted, not silently
+skipped, because an export is mostly screenshots and silence would read as loss.
+
+The file name is stable, so harvesting or importing twice rewrites the note rather than filing a second copy.
 Everything it writes is ordinary markdown in a folder — no database, no front matter, nothing an
 archive extension has to understand — which is why the built-in can read what an extension wrote,
 and the other way round.

@@ -178,7 +178,10 @@ class CommandSweepGapsTest {
         // built in now, because installing oss-cli has to be enough: the half of the corpus that is
         // your own record of your own work cannot require a second repository to collect.
         assertTrue(BuiltinMemory.supports("harvest"), "your own work is collectable with nothing attached");
-        assertFalse(BuiltinMemory.supports("digest"), "digest is still an archive's richer form");
+        // digest is built in too now. map counts which notes mention a topic; digest reads them and
+        // says what was worked out -- and that needs no archive extension, only notes with a shape.
+        assertTrue(BuiltinMemory.supports("digest"), "reading your notes should not require an extension");
+        assertTrue(BuiltinMemory.supports("import"), "an export is the only route in for a chat product");
     }
 
     @Test
