@@ -52,10 +52,15 @@ public final class BuiltinMemory {
     /**
      * Read a data export from a chat product into the archive.
      *
-     * <p>The half of the record that has no local files. Claude Code, codex and gemini keep their
-     * sessions on disk and {@code harvest} can go and get them; ChatGPT, Claude.ai and AI Studio
-     * keep nothing here, so the only route is the export their owner downloads. This takes that
-     * folder and turns it into ordinary markdown beside everything else.
+     * <p>The half of the record that has no local files. {@code harvest} fetches what GitHub holds;
+     * ChatGPT, Claude.ai and AI Studio keep nothing on this machine, so the only route in is the
+     * export their owner downloads. This takes that folder and turns it into ordinary markdown
+     * beside everything else.
+     *
+     * <p>This sentence used to say {@code harvest} could also collect the local Claude Code, codex
+     * and gemini session files. It cannot -- {@code harvest} queries the GitHub search API and
+     * nothing else. Those transcripts are on disk and worth reading, but until something actually
+     * reads them, {@code import} pointed at the session folder is the honest answer.
      *
      * <p><b>Secrets are redacted, not dropped.</b> A real export of 111 conversations carried AWS
      * keys, GitHub tokens, a bearer token and {@code password=} strings in seven of them -- and the
