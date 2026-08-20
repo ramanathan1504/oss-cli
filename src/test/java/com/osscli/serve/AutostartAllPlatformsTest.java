@@ -82,6 +82,27 @@ class AutostartAllPlatformsTest {
     }
 
     @Test
+    @DisplayName("a path with XML metacharacters still produces a plist launchd can parse")
+    void hostilePathsStayWellFormed() throws Exception {
+        // & < > are all legal in a filesystem path, and every value in this plist is one. Raw
+        // interpolation made /Users/R&D produce a document that is not XML -- which launchd accepts
+        // at install time and then declines to start at the next boot. plutil, Apple's own parser,
+        // rejected exactly these.
+        java.nio.file.Path out = java.nio.file.Path.of("/Users/R&D/logs/out & err.log");
+        java.nio.file.Path err = java.nio.file.Path.of("/Users/R&D/logs/err.log");
+        String plist = Autostart.plistFor(List.of("/Users/R&D/bin/oss"), 1504, out, err);
+
+        var factory = DocumentBuilderFactory.newInstance();
+        factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+        var doc = factory.newDocumentBuilder()
+                .parse(new java.io.ByteArrayInputStream(plist.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+
+        assertTrue(doc.getDocumentElement() != null);
+        assertTrue(plist.contains("&amp;"), "the ampersand was not escaped");
+        assertFalse(plist.contains("/Users/R&D"), "a raw ampersand is still in the document");
+    }
+
+    @Test
     @DisplayName("the plist says what launchd needs to keep it alive")
     void plistCarriesItsPolicy() {
         String plist = Autostart.plistFor(START, 1504, OUT, ERR);
@@ -116,12 +137,36 @@ class AutostartAllPlatformsTest {
         for (String section : List.of("[Unit]", "[Service]", "[Install]")) {
             assertTrue(unit.contains(section), "a unit without " + section + " will not enable");
         }
-        assertTrue(unit.contains("ExecStart=/opt/homebrew/bin/oss serve --no-open --port 1504"), unit);
+        // Quoted: systemd splits ExecStart on whitespace, so the executable is one argument or it
+        // is several. systemd-analyze accepts this form and reads the whole path as the command.
+        assertTrue(unit.contains("ExecStart=\"/opt/homebrew/bin/oss\" serve --no-open --port 1504"), unit);
         assertTrue(unit.contains("Restart=always"), "would not come back after a crash");
         assertTrue(unit.contains("RestartSec=60"), "would restart in a tight loop");
         // default.target rather than multi-user.target: this is a --user unit, and the wrong target
         // installs cleanly and never starts.
         assertTrue(unit.contains("WantedBy=default.target"), "wrong install target for a user unit");
+    }
+
+    @Test
+    @DisplayName("the unit quotes its executable, as the Windows command already did")
+    void unitQuotesTheExecutable() {
+        // systemd splits ExecStart on whitespace. systemd-analyze, given the unquoted form of this
+        // path, answered "Command /Users/a is not executable" -- a unit that installs cleanly and
+        // never starts. The scheduled-task command has quoted its arguments since it was written;
+        // this one did not, because no machine here could run systemd to find out.
+        String unit = Autostart.unitFor(List.of("/opt/a b/oss"), 1504, OUT, ERR);
+
+        assertTrue(unit.contains("ExecStart=\"/opt/a b/oss\""), unit);
+    }
+
+    @Test
+    @DisplayName("a percent in a path is not read as a systemd specifier")
+    void percentIsEscaped() {
+        // %h is the user's home and %i the instance name, so an unescaped percent silently rewrites
+        // the path into a different one -- which is worse than failing, because the service starts.
+        String unit = Autostart.unitFor(List.of("/opt/100%/oss"), 1504, OUT, ERR);
+
+        assertTrue(unit.contains("/opt/100%%/oss"), unit);
     }
 
     @Test

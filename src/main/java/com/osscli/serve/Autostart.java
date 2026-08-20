@@ -130,7 +130,8 @@ final class Autostart {
      * unrelated to anything anyone did.
      */
     static String plistFor(List<String> start, int port, Path out, Path err) {
-        String plistArgs = start.stream().map(a -> "<string>" + a + "</string>").collect(Collectors.joining());
+        String plistArgs =
+                start.stream().map(a -> "<string>" + xml(a) + "</string>").collect(Collectors.joining());
         return """
                 <?xml version="1.0" encoding="UTF-8"?>
                 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" \
@@ -149,7 +150,26 @@ final class Autostart {
                   <key>StandardOutPath</key><string>%s</string>
                   <key>StandardErrorPath</key><string>%s</string>
                 </dict></plist>
-                """.formatted(LABEL, plistArgs, port, out, err);
+                """.formatted(LABEL, plistArgs, port, xml(out.toString()), xml(err.toString()));
+    }
+
+    /**
+     * XML-escapes a value going into the plist.
+     *
+     * <p>Every path here comes from the filesystem, and {@code &}, {@code <} and {@code >} are all
+     * legal in one. Interpolated raw, a home directory like {@code /Users/R&D} produces a plist that
+     * is not XML -- and launchd does not complain when you install it, it declines to start the job
+     * at the next boot, which is the furthest possible point from the mistake.
+     *
+     * <p>The existing test does parse the plist as XML rather than grepping it, which is the right
+     * check; it was only ever given paths that could not break it. {@code plutil -lint}, Apple's own
+     * parser, rejected all four of the ones with an ampersand in them.
+     */
+    private static String xml(String value) {
+        return value.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;");
     }
 
     /** The systemd user unit, for the same reason. */
@@ -168,7 +188,35 @@ final class Autostart {
 
                 [Install]
                 WantedBy=default.target
-                """.formatted(String.join(" ", start), port, out, err);
+                """.formatted(
+                        start.stream().map(Autostart::unitArg).collect(Collectors.joining(" ")),
+                        port,
+                        unitValue(out.toString()),
+                        unitValue(err.toString()));
+    }
+
+    /**
+     * One ExecStart argument, quoted the way systemd expects.
+     *
+     * <p>ExecStart is split on whitespace, so an unquoted install path containing a space is read as
+     * a command plus arguments. systemd-analyze on a path like {@code /Users/a b/oss} reports
+     * {@code Command /Users/a is not executable} -- and at boot that is a service that installs
+     * cleanly and never starts. The Windows command has quoted its arguments since it was written,
+     * for exactly this reason; this one did not, because no machine here could run it to find out.
+     */
+    private static String unitArg(String value) {
+        return "\"" + unitValue(value).replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+    }
+
+    /**
+     * A literal value in a unit file.
+     *
+     * <p>{@code %} introduces a specifier to systemd -- {@code %h} is the user's home, {@code %i}
+     * the instance name -- so a path containing one is silently rewritten into a different path. A
+     * literal percent is written as two.
+     */
+    private static String unitValue(String value) {
+        return value.replace("%", "%%");
     }
 
     /** What the Task Scheduler is asked to run. */
