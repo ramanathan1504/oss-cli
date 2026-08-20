@@ -108,7 +108,7 @@ else
 fi
 [[ -f $PACK_FILE ]] || {
   printf '\033[31merror\033[0m no pack in %s\n\n' "$ROOT" >&2
-  printf '  A pack is a directory with a pack.sh in it — your applications, your\n' >&2
+  printf '  A pack is a directory with a pack.json in it — your applications, your\n' >&2
   printf '  configurations, your versions. Point at one:\n\n' >&2
   printf '    oss run --pack /path/to/your/pack <verb> ...\n' >&2
   printf '    cd /path/to/your/pack && oss run <verb> ...\n\n' >&2
@@ -116,14 +116,20 @@ fi
   # `|| true` is load-bearing. With no packs/ the glob stays literal, `[[ -f ]]`
   # is false, and the for loop's status IS that failed test -- so the assignment
   # returns 1 and set -e kills the script before it finishes explaining itself.
-  _avail="$(for d in "$ROOT"/packs/*/pack.sh; do [[ -f $d ]] && printf ' %s' "$(basename "$(dirname "$d")")"; done || true)"
+  # Every form a pack can take, not just the oldest. Globbing */pack.sh alone made a directory
+  # holding a pack.json invisible in this list -- the declarative form the documentation tells
+  # people to write, absent from the hint that tells them what is already here.
+  _avail="$(for d in "$ROOT"/packs/*/pack.sh "$ROOT"/packs/*/pack.json "$ROOT"/packs/*/pack.md; do [[ -f $d ]] && printf ' %s' "$(basename "$(dirname "$d")")"; done | tr ' ' '\n' | sort -u | tr '\n' ' ' || true)"
   # An `[[ ]] && printf` here returns 1 when there are no packs, and under set -e
   # that kills the script before the line below ever prints. Same trap as every
   # other top-level && in this file.
   if [[ -n "$_avail" ]]; then
     printf '  this directory carries packs:%s (BENCH_PACK=<name>)\n' "$_avail" >&2
   fi
-  printf '  A worked example, about thirty lines: %s\n' "$ENGINE_DIR/packs/example/pack.sh" >&2
+  # The declarative one first: it is what the documentation tells people to save, and it was the
+  # one format this repository shipped no example of at all.
+  printf '  A worked example, one file: %s\n' "$ENGINE_DIR/packs/example-json/pack.json" >&2
+  printf '  The older shell form, if you prefer it: %s\n' "$ENGINE_DIR/packs/example/pack.sh" >&2
   exit 1
 }
 # shellcheck source=packs/log4j/pack.sh
@@ -439,8 +445,16 @@ cmd_list() {
     --apps|apps)
       printf '%s\n' "${APPS[@]}" ;;
     --configs|configs)
-      ( cd "$ROOT/configs" && find . -type f \( -name '*.xml' -o -name '*.json' -o -name '*.yaml' -o -name '*.properties' \) \
-          | sed 's|^\./||' | sort ) ;;
+      # A pack without a configs directory is a pack that has not got there yet, not an error --
+      # and the worked example this repository ships is one, so `oss run --pack <example> list`
+      # answered with a raw `cd: .../configs: No such file or directory` from this line. The first
+      # thing a newcomer copies, printing a shell error at them.
+      if [ -d "$ROOT/$PACK_CONFIGS_DIR" ]; then
+        ( cd "$ROOT/$PACK_CONFIGS_DIR" && find . -type f \( -name '*.xml' -o -name '*.json' -o -name '*.yaml' -o -name '*.properties' \) \
+            | sed 's|^\./||' | sort )
+      else
+        echo "(none yet — add files under $PACK_CONFIGS_DIR/)"
+      fi ;;
     *)
       echo "Apps:";     printf '  %s\n' "${APPS[@]}"
       echo; echo "$PACK_NAME versions:"; printf '  %s\n' "${VERSIONS[@]}"

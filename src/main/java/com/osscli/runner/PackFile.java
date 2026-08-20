@@ -40,9 +40,9 @@ import java.util.regex.Pattern;
  *
  * <pre>{@code
  * {
- *   "name": "log4j",
- *   "description": "Apache Log4j across a version x config x app matrix, on real JVMs",
- *   "useWhen": { "repository": "apache/logging-log4j2", "files": ["log4j-core/pom.xml"] },
+ *   "name": "yourproject",
+ *   "description": "Your project across a version x config x app matrix, on real JVMs",
+ *   "useWhen": { "repository": "owner/name", "files": ["core/pom.xml"] },
  *   "versions": ["2.24.1", "2.25.5", "2.26.1"],
  *   "defaultVersion": "2.26.1",
  *   "apps": ["core-java", "db"],

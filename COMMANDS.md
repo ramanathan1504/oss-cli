@@ -809,7 +809,9 @@ is **data the tool reads**, not a program it runs:
 ```
 
 Save it as `pack.json`, or as a ```json block inside `pack.md` if you want the same file to explain
-itself to a person as well. Then:
+itself to a person as well. A worked example ships at `runner/packs/example-json/pack.json` —
+copy it into your own repository and edit the four things that are yours: the name, `useWhen`,
+the versions and the apps. Then:
 
 ```bash
 oss run --pack <dir> list

@@ -1,0 +1,17 @@
+{
+  "name": "example-json",
+  "description": "A worked example — copy this file into your own repository and edit it",
+
+  "useWhen": {
+    "repository": "owner/name",
+    "files": ["core/pom.xml"]
+  },
+
+  "versions": ["1.0.0", "1.1.0"],
+  "defaultVersion": "1.1.0",
+
+  "apps": ["hello"],
+  "appsDir": "apps",
+  "configsDir": "configs",
+  "modulePath": "apps/{app}"
+}
