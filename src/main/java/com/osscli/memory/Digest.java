@@ -110,6 +110,38 @@ public final class Digest {
         return List.copyOf(out);
     }
 
+    /**
+     * How many notes a digest carries, and how much of each.
+     *
+     * <p>A digest that copies every section of every note is not a digest. Rendering 335 notes
+     * whole produced a 23 MB file — readable by nothing, and the same bug this repository already
+     * fixed once for prompts, where a context builder appended the entire text of every note above
+     * a score and produced roughly 19 MB for a six-thousand-token model.
+     *
+     * <p>So it is budgeted, and it says what it left out: "40 of 335" is a different answer from
+     * "335", and the reader must not have to guess which they got.
+     */
+    public static final int MAX_ENTRIES = 40;
+
+    /** Enough of a section to know what it said, not enough to reproduce the note. */
+    public static final int MAX_SECTION_CHARS = 1_200;
+
+    /** A section trimmed to the budget, on a paragraph break where one is near. */
+    static String clip(String body) {
+        if (body == null) {
+            return "";
+        }
+        if (body.length() <= MAX_SECTION_CHARS) {
+            return body;
+        }
+        String cut = body.substring(0, MAX_SECTION_CHARS);
+        int lastBreak = cut.lastIndexOf('\n');
+        if (lastBreak > MAX_SECTION_CHARS / 2) {
+            cut = cut.substring(0, lastBreak);
+        }
+        return cut.strip() + "\n\n_(trimmed — the note has more)_";
+    }
+
     /** The page a reader can go through top to bottom. */
     public static String render(String topic, List<Entry> entries) {
         StringBuilder sb = new StringBuilder();
@@ -119,9 +151,20 @@ public final class Digest {
             sb.append("`oss memory map` shows which notes mention it.\n");
             return sb.toString();
         }
-        sb.append(entries.size()).append(" note(s) with something worked out in them.\n");
+        List<Entry> ranked = rank(entries);
+        List<Entry> shown = ranked.size() > MAX_ENTRIES ? ranked.subList(0, MAX_ENTRIES) : ranked;
 
-        for (Entry e : rank(entries)) {
+        if (shown.size() < ranked.size()) {
+            sb.append(shown.size())
+                    .append(" of ")
+                    .append(ranked.size())
+                    .append(" notes with something worked out in them, public record first.\n");
+            sb.append("`oss memory map` lists the rest.\n");
+        } else {
+            sb.append(ranked.size()).append(" note(s) with something worked out in them.\n");
+        }
+
+        for (Entry e : shown) {
             sb.append("\n## ")
                     .append(e.note())
                     .append("  _(")
@@ -129,7 +172,7 @@ public final class Digest {
                     .append(")_\n");
             for (Map.Entry<String, String> s : e.sections().entrySet()) {
                 sb.append("\n**").append(s.getKey()).append("**\n\n");
-                sb.append(s.getValue()).append('\n');
+                sb.append(clip(s.getValue())).append('\n');
             }
         }
         return sb.toString();

@@ -84,6 +84,7 @@ public final class BuiltinMemory {
         int imported = 0;
         int skipped = 0;
         int redacted = 0;
+        int unreadable = 0;
         try (java.util.stream.Stream<Path> walk = Files.walk(from)) {
             for (Path file : walk.filter(Files::isRegularFile).toList()) {
                 if (!isText(file)) {
@@ -93,6 +94,15 @@ public final class BuiltinMemory {
                 String raw;
                 try {
                     raw = Files.readString(file, StandardCharsets.UTF_8);
+                } catch (java.io.IOException e) {
+                    // Told apart from "not text" on purpose. A cloud-backed folder answers a read
+                    // with a timeout rather than bytes: the file is a placeholder whose contents
+                    // are still in the cloud. Counting that as unreadable and moving on reports
+                    // "nothing here" for an export that is entirely there -- 638 files, zero
+                    // imported, on a synced folder whose contents had never been downloaded.
+                    unreadable++;
+                    skipped++;
+                    continue;
                 } catch (Exception e) {
                     // Not decodable as text after all. Counted, not announced one file at a time.
                     skipped++;
@@ -111,7 +121,17 @@ public final class BuiltinMemory {
             }
         }
 
-        System.out.printf("  imported %d, skipped %d (not text) -> %s%n", imported, skipped, into);
+        System.out.printf("  imported %d, skipped %d -> %s%n", imported, skipped, into);
+        if (cloudBacked(imported, unreadable)) {
+            // Loud, because this is the difference between "your export is empty" and "your export
+            // has not been downloaded", and only one of those is worth acting on.
+            System.out.println();
+            System.out.printf(
+                    "  %d file(s) could not be read at all — this folder streams from the cloud%n", unreadable);
+            System.out.println("  and its contents are still there rather than here. Make them local first:");
+            System.out.println("    open the folder in Finder and use 'Download Now',");
+            System.out.println("    or copy it somewhere ordinary and import that.");
+        }
         if (redacted > 0) {
             System.out.printf("  %d carried a secret, redacted in the copy -- the original is untouched%n", redacted);
             System.out.println("  Removing them here does not revoke them; rotate anything real.");
@@ -120,10 +140,37 @@ public final class BuiltinMemory {
         return 0;
     }
 
-    /** Whether a file in an export is worth reading as text. */
+    /**
+     * Whether a run failed because the folder was never downloaded.
+     *
+     * <p>Not "some files failed": every read failing and nothing landing is the signature of a
+     * placeholder folder, where a handful of failures among successes is just a handful of bad
+     * files. The distinction decides whether the advice is worth printing at all.
+     */
+    static boolean cloudBacked(int imported, int unreadable) {
+        return imported == 0 && unreadable > 0;
+    }
+
+    /** Extensions that are certainly not prose, so they are not opened at all. */
+    private static final List<String> BINARY =
+            List.of(".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".zip", ".mov", ".mp4", ".class", ".jar");
+
+    /**
+     * Whether a file in an export is worth trying to read.
+     *
+     * <p>An exclusion, not an allow-list, and that is the whole lesson of running this against a
+     * real export: 638 files, of which the conversations and pastes have <b>no extension at all</b>
+     * -- "Paste July 01, 2026 - 11:21PM", 45 KB of readable text. An allow-list of .md, .txt, .json
+     * and .html imported zero of them and reported it as "not text", which was wrong about 179
+     * files and right for the wrong reason about 418 screenshots.
+     *
+     * <p>So anything not obviously binary is opened, and whether it decodes decides the rest. The
+     * caller counts what would not decode -- a cloud-synced export also contains placeholders whose
+     * bytes were never downloaded, which look like files and read like nothing.
+     */
     static boolean isText(Path file) {
         String n = file.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
-        return n.endsWith(".md") || n.endsWith(".txt") || n.endsWith(".json") || n.endsWith(".html");
+        return BINARY.stream().noneMatch(n::endsWith);
     }
 
     /**
@@ -223,11 +270,13 @@ public final class BuiltinMemory {
         Path into = DIR.resolve("harvest");
         Files.createDirectories(into);
 
+        com.osscli.github.GitHubClient.Found result;
         List<com.osscli.model.Issue> found;
         try {
             // Everything you touched, not only what you authored: involves: covers author,
             // assignee, mentions and commenter in one query.
-            found = new com.osscli.github.GitHubClient().searchIssuesAndPrs("involves:" + user + " sort:updated-desc");
+            result = new com.osscli.github.GitHubClient().search("involves:" + user + " sort:updated-desc");
+            found = result.items();
         } catch (Exception e) {
             System.err.println("error  could not reach GitHub: " + e.getMessage());
             System.err.println("       harvest is the one verb here that needs the network.");
@@ -264,6 +313,14 @@ public final class BuiltinMemory {
         System.out.printf("  %d of them carried a conversation worth keeping%n", withDiscussion);
 
         System.out.printf("  harvested %d item(s) for %s into %s%n", written, user, into);
+        if (result.truncated()) {
+            // The number above is a page of the answer, and saying so is the difference between
+            // "this is your record" and "this is the newest part of it". The first run of this
+            // collected thirty of 1,218 and reported thirty.
+            System.out.printf(
+                    "  %d match in total — GitHub's search stops at %d, newest first%n",
+                    result.totalAvailable(), com.osscli.github.GitHubClient.SEARCH_LIMIT);
+        }
         System.out.println("  oss memory index      reads them into the corpus");
         return 0;
     }

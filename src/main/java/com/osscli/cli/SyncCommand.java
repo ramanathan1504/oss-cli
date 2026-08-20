@@ -395,7 +395,17 @@ public class SyncCommand implements Callable<Integer> {
         LOGGER.info("Querying GitHub Search API for merged contributions...");
 
         GitHubClient client = new GitHubClient();
-        List<Issue> mergedPrs = client.searchIssuesAndPrs(searchQuery);
+        GitHubClient.Found found = client.search(searchQuery);
+        List<Issue> mergedPrs = found.items();
+        // A profile built from a page is not a profile of the person. This used to read one page
+        // -- thirty pull requests, whatever the true number -- and describe them as the history.
+        if (found.truncated()) {
+            LOGGER.warn(
+                    "  ↳ {} match in total; GitHub's search returns at most {}, newest first. "
+                            + "The profile is built from those.",
+                    found.totalAvailable(),
+                    GitHubClient.SEARCH_LIMIT);
+        }
 
         // A. Crawl Diffs and Generate PR Summaries
         if (mergedPrs.isEmpty()) {

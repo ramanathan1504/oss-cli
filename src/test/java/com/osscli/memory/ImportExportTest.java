@@ -42,6 +42,13 @@ class ImportExportTest {
         assertTrue(BuiltinMemory.isText(Path.of("paste.txt")));
         assertTrue(BuiltinMemory.isText(Path.of("chat.html")));
 
+        // The file this got wrong. A real export's conversations have NO extension --
+        // "Paste July 01, 2026 - 11:21PM" is 45 KB of readable text -- and an allow-list of four
+        // extensions imported zero of 179 of them while reporting "not text".
+        assertTrue(BuiltinMemory.isText(Path.of("Paste July 01, 2026 - 11:21PM")));
+        assertTrue(BuiltinMemory.isText(Path.of("some-conversation-with-no-suffix")));
+        assertTrue(BuiltinMemory.isText(Path.of("notes.rtf")));
+
         // An export is mostly images. Skipping them is right; not saying how many were skipped
         // would read as loss.
         assertFalse(BuiltinMemory.isText(Path.of("screenshot.png")));
@@ -91,5 +98,20 @@ class ImportExportTest {
     void importIsBuiltIn() {
         assertTrue(BuiltinMemory.VERBS.contains("import"));
         assertTrue(BuiltinMemory.supports("import"));
+    }
+
+    @Test
+    @DisplayName("a folder that never downloaded is told apart from an empty one")
+    void cloudPlaceholdersAreNamed() {
+        // Found by running this against a real Google Drive export: 638 files, every read timing
+        // out, zero imported. Reported as "binary or unreadable", which reads as "your export has
+        // nothing in it" when the truth is "your export is still in the cloud".
+        assertTrue(BuiltinMemory.cloudBacked(0, 638));
+        assertTrue(BuiltinMemory.cloudBacked(0, 1));
+
+        // A few bad files among good ones is just a few bad files; saying "download your folder"
+        // there would be advice for a problem the reader does not have.
+        assertFalse(BuiltinMemory.cloudBacked(100, 3));
+        assertFalse(BuiltinMemory.cloudBacked(0, 0));
     }
 }
