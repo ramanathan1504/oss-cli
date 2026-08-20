@@ -200,4 +200,44 @@ class PackFuzzTest {
         Files.deleteIfExists(script);
         return out;
     }
+
+    @Test
+    @DisplayName("an app that runs out of another app's module is expressible")
+    void modulePathExceptionsAreNamed() throws Exception {
+        // A real pack runs nineteen applications out of eighteen directories: "nosql" is exercised
+        // through the "db" module and has no directory of its own. A single template can only send
+        // it to apps/nosql, which is not there -- so that pack had to keep pack.sh entirely.
+        String json = """
+                {
+                  "name": "p",
+                  "versions": ["1.0.0"],
+                  "apps": ["db", "nosql"],
+                  "modulePath": "apps/{app}",
+                  "modulePathFor": { "nosql": "apps/db" }
+                }
+                """;
+
+        Path packDir = Files.createTempDirectory("packjson-");
+        Files.writeString(packDir.resolve("pack.json"), json);
+        String shell = PackFile.find(packDir).orElseThrow().toShell();
+
+        assertTrue(shell.contains("pack_module_path()"), shell);
+        assertEquals("apps/db", moduleFor(shell, "nosql"));
+        assertEquals("apps/db", moduleFor(shell, "db"));
+        // Everything unnamed still falls through to the template.
+        assertEquals("apps/core-java", moduleFor(shell, "core-java"));
+    }
+
+    /** What the generated shell answers for one app, by running it. */
+    private static String moduleFor(String shell, String app) throws Exception {
+        Path dir = Files.createTempDirectory("packfn-");
+        Path script = dir.resolve("p.sh");
+        Files.writeString(script, shell + "\npack_module_path \"$1\"\n");
+        Process p = new ProcessBuilder("bash", script.toString(), app)
+                .redirectErrorStream(true)
+                .start();
+        String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).strip();
+        p.waitFor();
+        return out;
+    }
 }

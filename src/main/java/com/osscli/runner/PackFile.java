@@ -48,7 +48,8 @@ import java.util.regex.Pattern;
  *   "apps": ["core-java", "db"],
  *   "appsDir": "apps",
  *   "configsDir": "configs",
- *   "modulePath": "apps/{app}"
+ *   "modulePath": "apps/{app}",
+ *   "modulePathFor": { "nosql": "apps/db" }
  * }
  * }</pre>
  *
@@ -63,8 +64,10 @@ import java.util.regex.Pattern;
  *
  * <p>{@code modulePath} replaces the one thing in the old format that was not data: a bash function
  * from app name to directory. Almost every pack's function was one line returning a path with the
- * name in it, so it becomes a template. A pack whose layout genuinely cannot be expressed that way
- * keeps {@code pack.sh}, which still loads.
+ * name in it, so it becomes a template — and {@code modulePathFor} names the exceptions, because
+ * every real pack has one. A pack running nineteen applications out of eighteen directories, where
+ * one app is exercised through another's module, cannot be written as a template alone: it would
+ * point that app at a directory which does not exist.
  */
 public final class PackFile {
 
@@ -207,12 +210,26 @@ public final class PackFile {
         array(out, "APPS", texts(json.path("apps")));
         array(out, "APPS_2X_ONLY", texts(json.path("appsNewestMajorCannotBuild")));
 
-        // The one thing that was a function. A template covers the layouts that exist; a pack whose
-        // paths cannot be written as one keeps pack.sh, which is why this is not the only format.
+        // The one thing that was a function. A template covers most layouts; the exceptions are
+        // named one by one, because they exist and a pack that has one had to keep pack.sh
+        // entirely. A real pack runs nineteen applications out of eighteen directories -- "nosql"
+        // is exercised through the "db" module and has no directory of its own -- which a single
+        // template can express only by pointing it at a directory that is not there.
         String template = json.path("modulePath").asText(json.path("appsDir").asText("apps") + "/" + APP_TOKEN);
-        out.append("pack_module_path() { printf '%s' ")
+        out.append("pack_module_path() {\n  case \"$1\" in\n");
+        JsonNode overrides = json.path("modulePathFor");
+        java.util.Iterator<String> named = overrides.fieldNames();
+        while (named.hasNext()) {
+            String app = named.next();
+            out.append("    ")
+                    .append(quote(app))
+                    .append(") printf '%s' ")
+                    .append(quote(overrides.path(app).asText()))
+                    .append(" ;;\n");
+        }
+        out.append("    *) printf '%s' ")
                 .append(quote(template).replace(APP_TOKEN, "'\"$1\"'"))
-                .append("; }\n");
+                .append(" ;;\n  esac\n}\n");
         return out.toString();
     }
 
