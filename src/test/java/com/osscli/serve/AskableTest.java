@@ -176,7 +176,18 @@ class AskableTest {
 
         // hub and pick first: they are the board, and the board is what the page opens on.
         assertEquals(
-                List.of("hub", "pick", "search", "duplicates", "followup", "followup-one", "hidden-critical", "doctor"),
+                List.of(
+                        "hub",
+                        "pick",
+                        "search",
+                        "duplicates",
+                        "followup",
+                        "followup-one",
+                        "critical",
+                        "prs",
+                        "triage",
+                        "hidden-critical",
+                        "doctor"),
                 keys);
     }
 
@@ -250,5 +261,18 @@ class AskableTest {
         for (java.util.Map<String, Object> q : payload) {
             assertFalse(String.valueOf(q.get("asks")).isBlank(), String.valueOf(q.get("key")));
         }
+    }
+
+    @Test
+    @DisplayName("a command that writes a file is barred, even though the file is local")
+    void writingLocallyIsStillWriting() {
+        // report writes markdown through MarkdownReportWriter, and backlog shells out to a script
+        // that writes an HTML page into the working directory. Neither shows up in a grep of its
+        // own command class -- the write is a class away, or a process away -- which is how both
+        // nearly reached this table on the strength of one.
+        assertTrue(Askable.WRITES.contains("report"));
+        assertTrue(Askable.WRITES.contains("backlog"));
+        assertNull(Askable.byKey("report"));
+        assertNull(Askable.byKey("backlog"));
     }
 }

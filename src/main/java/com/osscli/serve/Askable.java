@@ -55,8 +55,25 @@ public final class Askable {
      * <p>Named rather than inferred: a list of verbs is something a reader can check, where "does
      * this write" inferred from a name is a guess that gets one wrong eventually.
      */
-    public static final List<String> WRITES =
-            List.of("sync", "setup", "backup", "restore", "alias", "ext", "run", "bench", "serve", "memory", "kb");
+    public static final List<String> WRITES = List.of(
+            "sync",
+            "setup",
+            "backup",
+            "restore",
+            "alias",
+            "ext",
+            "run",
+            "bench",
+            "serve",
+            "memory",
+            "kb",
+            // Both of these produce a file. report writes markdown through MarkdownReportWriter --
+            // which a grep of ReportCommand alone does not show, because the write is a class away
+            // -- and backlog runs a shell script that writes an HTML page into the working
+            // directory. Writing locally is still writing, and a button that writes must not look
+            // like one that only reads.
+            "report",
+            "backlog");
 
     private static final Map<String, Question> TABLE = table();
 
@@ -124,6 +141,36 @@ public final class Askable {
                         120,
                         "This one pull request in full: what you recorded, and what has happened to it" + " since.",
                         "nothing recorded for that one"));
+        put(
+                m,
+                new Question(
+                        "critical",
+                        List.of("critical"),
+                        null,
+                        180,
+                        "What is on fire? Ranks the open backlog by severity with no model involved,"
+                                + " so it answers the same way every time.",
+                        "nothing critical found"));
+        put(
+                m,
+                new Question(
+                        "prs",
+                        List.of("prs"),
+                        null,
+                        180,
+                        "What is stale, unreviewed or waiting? Reads what sync already stored, so it"
+                                + " answers offline.",
+                        "no open pull requests cached"));
+        put(
+                m,
+                new Question(
+                        "triage",
+                        List.of("triage"),
+                        "num",
+                        180,
+                        "Everything known about one issue at once: severity, backlog overlap, the"
+                                + " ecosystem links and what has been decided.",
+                        "nothing to report for that one"));
         put(
                 m,
                 new Question(
