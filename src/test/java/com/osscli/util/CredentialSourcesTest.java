@@ -17,6 +17,7 @@
 package com.osscli.util;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -69,6 +70,32 @@ class CredentialSourcesTest {
                     code.contains("GH_TOKEN"),
                     "doctor reports GH_TOKEN as acceptable and the credential reader ignores it");
         }
+    }
+
+    @Test
+    @DisplayName("doctor asks the credential reader rather than the environment")
+    void doctorDoesNotDoItsOwnLookup() throws IOException {
+        String doctor = Files.readString(DOCTOR);
+
+        // The same bug as above, pointing the other way. Doctor tested System.getenv itself, so a
+        // token stored in the keychain -- which is what 'oss setup' offers first -- was reported
+        // missing while every command that reads GitHub worked. A health check that contradicts the
+        // tool sends people to fix a credential that was never wrong.
+        assertFalse(
+                doctor.contains("System.getenv(\"GITHUB_TOKEN\")") || doctor.contains("System.getenv(\"GH_TOKEN\")"),
+                "doctor reads the environment directly, so it cannot see a keychain token the tool will use");
+        assertTrue(doctor.contains("gitHubTokenSource"), "doctor must answer from the same lookup the fetch uses");
+    }
+
+    @Test
+    @DisplayName("the token is not advertised as needed by one command")
+    void tokenIsNotClaimedToBeSyncOnly() throws IOException {
+        String doctor = Files.readString(DOCTOR);
+
+        // It said "needed only for 'sync'". GitHubClient is what review, pr, issue, prs, hub and
+        // followup all read through, so somebody who cannot review a pull request was told the
+        // missing credential only mattered for a command they had not run.
+        assertFalse(doctor.contains("needed only for"), "the token serves every command that reads GitHub");
     }
 
     @Test

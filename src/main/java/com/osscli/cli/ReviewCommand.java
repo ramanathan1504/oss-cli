@@ -278,7 +278,11 @@ public class ReviewCommand implements Callable<Integer> {
         long addedSources = files.stream()
                 .filter(f -> "added".equals(String.valueOf(f.get("status"))))
                 .map(f -> String.valueOf(f.get("filename")))
-                .filter(p -> p.contains("/src/main/") || p.startsWith("src/"))
+                // Not "anything under src/". An API baseline is about public types, so it is main
+                // Java source or nothing -- and that filter counted 4249's changelog XML as a new
+                // source file, then told the author their changelog entry might need a baseline or
+                // export update. One implementation of "is this production source", in Verifier.
+                .filter(com.osscli.review.Verifier::isMainSource)
                 .count();
 
         if (apiGated && addedSources > 0) {
@@ -433,6 +437,10 @@ public class ReviewCommand implements Callable<Integer> {
                     DIFF%s:
                     %s
 
+                    Every concern must name one of the changed files and say what is wrong in it.
+                    Naming the subject of the change ("circular reference handling") is a description
+                    of the diff, not a concern; if you have none, return an empty list.
+
                     Review THE DIFF and nothing else. The project rules and prior-work sections
                     are background: cite them only where they bear on this diff, and never review
                     them — they are not the change. Report only what the diff actually shows; if
@@ -441,7 +449,7 @@ public class ReviewCommand implements Callable<Integer> {
                     Respond in JSON with this exact structure:
                     {
                       "summary": "<what this change does, one or two sentences>",
-                      "concerns": ["<specific, actionable concern>"],
+                      "concerns": ["<one of the changed file names> — <the specific, actionable problem in it>"],
                       "questions": ["<what you would ask the author>"],
                       "confidence": <0.0 to 1.0>
                     }
@@ -469,13 +477,28 @@ public class ReviewCommand implements Callable<Integer> {
             String answeredBy = useCloud ? provider : model;
 
             LOGGER.info("");
+            // "confidence 80%" is the model scoring itself, and a small one scores itself high on
+            // an answer that found nothing. Printed bare it reads as a measurement somebody took.
             LOGGER.info(
-                    "── Verdict ({}, confidence {}) ──",
+                    "── Verdict ({}, {} confidence claimed) ──",
                     answeredBy,
                     String.format("%.0f%%", node.path("confidence").asDouble(0.5) * 100));
             LOGGER.info("  {}", node.path("summary").asText(""));
 
-            printBullets("Concerns", node.path("concerns"));
+            List<String> rawConcerns = new ArrayList<>();
+            for (JsonNode c : node.path("concerns")) {
+                rawConcerns.add(c.asText(""));
+            }
+            com.osscli.review.Findings.Located located =
+                    com.osscli.review.Findings.locate(rawConcerns, changedPaths(ev));
+            printStrings("Concerns", located.concerns());
+            if (located.unlocated() > 0) {
+                LOGGER.info("");
+                LOGGER.info(
+                        "  {} concern(s) named no file in the change and are not shown — the model",
+                        located.unlocated());
+                LOGGER.info("  described the diff rather than reviewing it.");
+            }
             printBullets("Questions for the author", node.path("questions"));
 
             if (truncated) {
@@ -550,6 +573,33 @@ public class ReviewCommand implements Callable<Integer> {
         int start = s.indexOf('{');
         int end = s.lastIndexOf('}');
         return (start >= 0 && end > start) ? s.substring(start, end + 1) : s;
+    }
+
+    /** The paths this pull request touches, or empty when the file list cannot be read. */
+    private List<String> changedPaths(PrEvidence ev) {
+        List<String> changed = new ArrayList<>();
+        try {
+            for (Map<String, Object> f : readList(ev.filesJson())) {
+                changed.add(String.valueOf(f.get("filename")));
+            }
+        } catch (Exception e) {
+            // An unreadable file list must not lose the verdict. Findings.locate keeps every
+            // concern when it has no names to match against, because unable to judge and judged
+            // and rejected are different answers.
+            LOGGER.debug("could not read the file list for locating concerns: {}", e.getMessage());
+        }
+        return changed;
+    }
+
+    private void printStrings(String heading, List<String> items) {
+        if (items.isEmpty()) {
+            return;
+        }
+        LOGGER.info("");
+        LOGGER.info("  {}:", heading);
+        for (String item : items) {
+            LOGGER.info("    • {}", item);
+        }
     }
 
     private void printBullets(String heading, JsonNode array) {

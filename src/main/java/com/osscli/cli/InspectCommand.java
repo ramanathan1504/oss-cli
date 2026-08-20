@@ -105,8 +105,25 @@ public class InspectCommand implements Callable<Integer> {
         LOGGER.info("  Conf threshold : {}         (ollama.confidence_threshold)", confidenceThreshold);
         LOGGER.info("");
 
+        // Whether the context fits is only half the prediction. This said "Ollama WILL answer
+        // locally" from the token count alone, so on a machine with no Ollama -- which is a
+        // supported state, not a broken one -- it confidently described something that could not
+        // happen, and 'prompt' then built an expert prompt instead.
+        String localModel = SqliteStorage.loadConfig("ollama.model");
+        boolean localAvailable =
+                new com.osscli.llm.OllamaClient(localModel == null ? "" : localModel).isServerReachable();
+
         // Decision preview
-        if (includedTokens <= contextLimit) {
+        if (!localAvailable) {
+            LOGGER.info("  ┌─────────────────────────────────────────────────────────┐");
+            LOGGER.info("  │  ⚠  No local model — an expert prompt WILL be built     │");
+            LOGGER.info(
+                    "  │     Context fits (~{} / {} tokens), but nothing        │",
+                    String.format("%-5d", includedTokens),
+                    contextLimit);
+            LOGGER.info("  │     is running to answer it. 'oss doctor' says why.     │");
+            LOGGER.info("  └─────────────────────────────────────────────────────────┘");
+        } else if (includedTokens <= contextLimit) {
             LOGGER.info("  ┌─────────────────────────────────────────────────────────┐");
             LOGGER.info(
                     "  │  ✔  Ollama WILL answer locally  (~{} / {} tokens)    │",

@@ -327,14 +327,17 @@ public class DoctorCommand implements Callable<Integer> {
         } else {
             ok("github username", user);
         }
-        boolean env = System.getenv("GITHUB_TOKEN") != null || System.getenv("GH_TOKEN") != null;
-        if (env) {
-            ok("github token", "found in the environment");
+        String source = com.osscli.util.CredentialManager.gitHubTokenSource();
+        if (source != null) {
+            ok("github token", "found in " + source);
         } else {
             warn(
                     "github token",
-                    "not in GITHUB_TOKEN or GH_TOKEN",
-                    "export GITHUB_TOKEN=$(gh auth token)   # needed only for 'sync'");
+                    "not in GITHUB_TOKEN, GH_TOKEN or the keychain",
+                    // Not "only for sync": GitHubClient is what review, pr, issue, prs, hub and
+                    // followup all read through, and naming one command sends somebody who cannot
+                    // review a pull request off to look at something unrelated.
+                    "export GITHUB_TOKEN=$(gh auth token)   # or 'oss setup' to store it");
         }
     }
 
