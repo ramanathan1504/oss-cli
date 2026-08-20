@@ -26,6 +26,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 /**
  * Reviewing by running, rather than by reading.
@@ -320,6 +321,24 @@ public final class Verifier {
                 .toList();
     }
 
+    /** Removes the isolated repository, which is ours and lives beside the worktree. */
+    private static void deleteTree(Path root) {
+        if (!Files.isDirectory(root)) {
+            return;
+        }
+        try (Stream<Path> walk = Files.walk(root)) {
+            walk.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException ignored) {
+                    // A file left behind in a temp directory is not worth failing a review over.
+                }
+            });
+        } catch (IOException ignored) {
+            // Same: the directory is under the system temp directory either way.
+        }
+    }
+
     /**
      * Whether {@code path} existed at {@code commit}.
      *
@@ -367,6 +386,7 @@ public final class Verifier {
 
     /** Remove the worktree, whatever happened. A temp directory left behind is a gigabyte per review. */
     private static void cleanUp(Path clone, Path worktree) {
+        deleteTree(isolatedRepo(worktree));
         try {
             new ProcessBuilder("git", "worktree", "remove", "--force", worktree.toString())
                     .directory(clone.toFile())
@@ -462,11 +482,46 @@ public final class Verifier {
 
     /** The build tool this checkout ships, preferred over whatever is on the PATH. */
     private static String[] mavenCommand(Path dir, String[] args) {
-        Path wrapper = dir.resolve("mvnw");
         List<String> cmd = new ArrayList<>();
-        cmd.add(Files.isExecutable(wrapper) ? wrapper.toString() : "mvn");
+        cmd.add(wrapperOrMaven(dir));
+        // The verification INSTALLS the modules it builds, twice -- once with the change and once
+        // with it reverted. Into the user's own ~/.m2 that is a quiet disaster: the second install
+        // is the reverted build, so their local repository ends up holding a SNAPSHOT that is
+        // neither the pull request nor its base, under a version number that means something else.
+        // Any later local build resolving that version silently gets it.
+        //
+        // A bare -Dmaven.repo.local would isolate the writes and re-download the world. The split
+        // local repository keeps the user's cache as a read-only tail, so resolution still hits it
+        // and nothing is written back.
+        cmd.add("-Dmaven.repo.local=" + isolatedRepo(dir));
+        cmd.add("-Dmaven.repo.local.tail=" + Path.of(System.getProperty("user.home"), ".m2", "repository"));
         cmd.addAll(List.of(args));
         return cmd.toArray(new String[0]);
+    }
+
+    /**
+     * The wrapper this checkout ships, or Maven from the PATH.
+     *
+     * <p>{@code mvnw.cmd} on Windows: there is no extensionless wrapper there, so looking only for
+     * {@code mvnw} silently falls through to whatever {@code mvn} the PATH offers -- a different
+     * Maven from the one the project pins.
+     */
+    private static String wrapperOrMaven(Path dir) {
+        boolean windows = System.getProperty("os.name", "")
+                .toLowerCase(java.util.Locale.ROOT)
+                .contains("win");
+        for (String name : windows ? List.of("mvnw.cmd", "mvnw.bat") : List.of("mvnw")) {
+            Path wrapper = dir.resolve(name);
+            if (Files.isExecutable(wrapper)) {
+                return wrapper.toString();
+            }
+        }
+        return windows ? "mvn.cmd" : "mvn";
+    }
+
+    /** Where this verification's installs go, beside the throwaway worktree and removed with it. */
+    static Path isolatedRepo(Path worktree) {
+        return Path.of(worktree.toString() + "-m2");
     }
 
     /** What a command did: whether it succeeded, and everything it printed. */

@@ -197,6 +197,21 @@ class VerifierTest {
     }
 
     @Test
+    @DisplayName("the installs go beside the worktree, never into the user's own repository")
+    void installsAreIsolated() {
+        Path worktree = Path.of("/tmp/oss-verify-1234");
+
+        // The verification installs twice, and the SECOND install is the reverted build. Into a
+        // shared ~/.m2 that leaves a SNAPSHOT which is neither the pull request nor its base, under
+        // a version number that means something else -- and any later local build resolving that
+        // version silently gets it. Found by checking ~/.m2 after a real run.
+        Path repo = Verifier.isolatedRepo(worktree);
+
+        assertTrue(repo.toString().startsWith(worktree.toString()), repo.toString());
+        assertFalse(repo.toString().contains("/.m2/repository"), "installs must not target the real repository");
+    }
+
+    @Test
     @DisplayName("a change with no test is refused, because there is nothing to prove")
     void noTestNothingToProve(@TempDir Path dir) {
         Verifier.Report report =
