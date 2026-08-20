@@ -118,7 +118,17 @@ public class ServeCommand implements Callable<Integer> {
             server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
         } catch (IOException e) {
             System.err.println("error  could not listen on port " + port + ": " + e.getMessage());
-            System.err.println("       Another instance may already be serving. Try --port <n>.");
+            // "Another instance may already be serving" was a guess, and on the machine this was
+            // found on it was the wrong one: `oss run hub` defaults to this same port, so the thing
+            // holding it was another surface of this tool rather than a second copy of this one.
+            // Asking what is there costs one request to loopback and turns a guess into a fact.
+            String occupant = whoIsOn(port);
+            if (occupant != null) {
+                System.err.println("       " + occupant + " is already on http://localhost:" + port + "/");
+                System.err.println("       Leave it, or serve this alongside it: --port " + (port + 1));
+            } else {
+                System.err.println("       Something else holds that port. Try --port " + (port + 1) + ".");
+            }
             return 1;
         }
 
@@ -143,6 +153,44 @@ public class ServeCommand implements Callable<Integer> {
     }
 
     // ---------------------------------------------------------------- handlers ---
+
+    /**
+     * What is answering on a port, named from its own page.
+     *
+     * <p>Only ever loopback, and only after this process has already failed to bind it: the port is
+     * in use by something on this machine and the question is what. A title is enough to tell one
+     * surface of this tool from another -- {@code oss run hub} serves "oss run hub" and this serves
+     * "oss" -- and enough to say "something else" honestly when it is neither.
+     */
+    static String whoIsOn(int port) {
+        try {
+            java.net.HttpURLConnection c = (java.net.HttpURLConnection) java.net
+                    .URI
+                    .create("http://localhost:" + port + "/")
+                    .toURL()
+                    .openConnection();
+            c.setConnectTimeout(1500);
+            c.setReadTimeout(1500);
+            c.setRequestMethod("GET");
+            String body;
+            try (java.io.InputStream in = c.getInputStream()) {
+                byte[] head = in.readNBytes(4096);
+                body = new String(head, java.nio.charset.StandardCharsets.UTF_8);
+            }
+            return titleOf(body);
+        } catch (Exception e) {
+            // Not answering, not HTTP, or refusing us. Either way there is nothing to name.
+            return null;
+        }
+    }
+
+    /** The document title, as a name for whatever is serving. */
+    static String titleOf(String html) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                        "<title>\\s*([^<]{1,60}?)\\s*</title>", java.util.regex.Pattern.CASE_INSENSITIVE)
+                .matcher(html == null ? "" : html);
+        return m.find() ? "\"" + m.group(1) + "\"" : null;
+    }
 
     private void handlePage(HttpExchange x) throws IOException {
         if (!"/".equals(x.getRequestURI().getPath())) {
