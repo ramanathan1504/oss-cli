@@ -556,6 +556,20 @@ public class SyncCommand implements Callable<Integer> {
                         }
                         String rawContent = new String(fileBytes, java.nio.charset.StandardCharsets.UTF_8);
 
+                        // An empty note is not a note. Embedding one produces the vector of the
+                        // empty string -- a fixed value, identical for every such file -- so a
+                        // handful of 0-byte placeholders become a cluster that matches every query
+                        // at the same score and crowds real passages out of the results. Six of
+                        // them were sitting in a real corpus, indistinguishable in the table from
+                        // notes with something in them.
+                        //
+                        // ResolutionWriter already refuses to file a blank note. This is the same
+                        // rule on the way in.
+                        if (!worthIndexing(rawContent)) {
+                            LOGGER.debug("    ↳ Skipping '{}': no content to index.", fileName);
+                            continue;
+                        }
+
                         // Scrub BEFORE anything else touches it. Everything downstream -- the
                         // cache comparison, the embedding, the passages, the stored row -- must
                         // see only redacted text, or a secret ends up encoded in a vector or
@@ -707,5 +721,16 @@ public class SyncCommand implements Callable<Integer> {
         LOGGER.info(
                 "Personal Sync completed successfully. Your complete developer footprint and AI logs are cached locally!");
         return 0;
+    }
+
+    /**
+     * Whether a file has anything worth embedding.
+     *
+     * <p>The vector of an empty string is a fixed value, so every empty note embeds to the same
+     * point and the whole set matches any query at one score. Six 0-byte files were doing exactly
+     * that in a real corpus, sitting in the table looking like notes.
+     */
+    static boolean worthIndexing(String content) {
+        return content != null && !content.isBlank();
     }
 }
