@@ -601,7 +601,14 @@ oss doctor
 #### The schema check, and why it can fail
 
 ### `serve`
-Runs the local page on `http://localhost:1504`, with a palette of whatever extensions are attached.
+Runs the local page on `http://localhost:1504`: the board, the questions you can ask, and a palette of whatever extensions are attached.
+
+**The board opens on `oss hub`** — who is waiting on you, across every repository you follow — and lists the pull requests you have reviewed, from the same ledger `hub` and `followup` read. Beside each row is the question that belongs there: **Seen this?** on every row, and **Since I reviewed** only where a verdict exists, because anywhere else it would answer about nothing.
+
+**The page never reimplements a command.** Every button runs one and shows what came back, so the two cannot disagree — and if they ever did, the page would be the one lying. Hovering a button says what it asks and which command it runs.
+
+**Nothing reachable from the page writes.** A browser has no terminal, and an outward write must be confirmed at one, so the ask table carries only commands that read — `hub`, `pick`, `search`, `duplicates`, `followup`, `hidden-critical`, `doctor`. A test fails the build if a command that writes is ever added to it. Anything that posts stays on the CLI.
+
 *   `--install` : Start it at login and restart it if it dies.
 *   `--uninstall` : Stop starting it at login.
 *   `--port` : Somewhere other than 1504.

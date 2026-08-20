@@ -135,6 +135,7 @@ public class ServeCommand implements Callable<Integer> {
         server.createContext("/", this::handlePage);
         server.createContext("/api/extensions", this::handleList);
         server.createContext("/api/questions", this::handleQuestions);
+        server.createContext("/api/rows", this::handleRows);
         server.createContext("/api/ask", this::handleAsk);
         server.createContext("/api/attach", this::handleAttach);
         server.createContext("/api/detach", this::handleDetach);
@@ -206,8 +207,57 @@ public class ServeCommand implements Callable<Integer> {
         sendJson(x, 200, Map.of("extensions", snapshot()));
     }
 
+    /**
+     * The reviewed pull requests, as rows a page can hang a question on.
+     *
+     * <p>Read from the same ledger {@code oss followup} and {@code oss hub} read, not from a second
+     * copy of the logic — one implementation, so the page and the command cannot drift apart.
+     *
+     * <p>Rows rather than text because the question goes <b>where it is asked</b>: "seen this?"
+     * belongs on every row, and "since I reviewed" only where a verdict exists, since anywhere else
+     * it would answer about nothing.
+     */
+    private void handleRows(HttpExchange x) throws IOException {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (com.osscli.review.ReviewLedger.Row r : com.osscli.review.ReviewLedger.read()) {
+            rows.add(Map.of(
+                    "repo", r.repo,
+                    "pr", r.pr,
+                    "verdict", r.verdict,
+                    "reviewed", r.reviewed,
+                    "author", r.author,
+                    "posted", r.posted,
+                    "note", r.note,
+                    // A verdict is what makes "since I reviewed" answerable at all.
+                    "hasVerdict", hasVerdict(r.verdict)));
+        }
+        sendJson(x, 200, Map.of("rows", rows));
+    }
+
+    /**
+     * Whether a row was actually reviewed.
+     *
+     * <p>The ledger writes {@code "none"} for a row that has been recorded but not judged, so a
+     * blank check alone would draw "since I reviewed" on rows where there is no verdict for
+     * "since" to be measured from — a button that answers about nothing.
+     */
+    static boolean hasVerdict(String verdict) {
+        return verdict != null && !verdict.isBlank() && !"none".equals(verdict.strip());
+    }
+
     /** The questions this page can ask, with the sentence each one answers. */
     private void handleQuestions(HttpExchange x) throws IOException {
+        sendJson(x, 200, Map.of("questions", questionsPayload()));
+    }
+
+    /**
+     * The questions as the page receives them.
+     *
+     * <p>{@code runs} is the command spelled the way somebody would type it, because it is shown in
+     * the hover beside what the button asks — a reader can then run the same thing in a terminal
+     * and get the same answer, which is the claim the whole page rests on.
+     */
+    static List<Map<String, Object>> questionsPayload() {
         List<Map<String, Object>> out = new ArrayList<>();
         for (Askable.Question q : Askable.all()) {
             out.add(Map.of(
@@ -220,7 +270,7 @@ public class ServeCommand implements Callable<Integer> {
                     "arg",
                     q.arg() == null ? "" : q.arg()));
         }
-        sendJson(x, 200, Map.of("questions", out));
+        return List.copyOf(out);
     }
 
     /**
@@ -555,9 +605,40 @@ public class ServeCommand implements Callable<Integer> {
             .note{color:var(--mut);font-size:12.5px;margin-top:26px;border-top:1px solid var(--line);
                   padding-top:14px}
             .doc h1{font-size:19px} .doc h2{font-size:16px} .doc h3{font-size:14px}
+            /* Asking and doing must not look alike. Everything else on this page changes
+               something; these only read, and the dashed outline is the difference a reader can
+               see before they click rather than after. */
+            .asks{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+            .ask{background:none;border:1px dashed var(--line);color:var(--mut);border-radius:6px;
+                 padding:6px 11px;font:inherit;font-size:13px;cursor:pointer}
+            .ask:hover{border-color:var(--acc);color:var(--fg)}
+            .ask[aria-busy="true"]{opacity:.55;cursor:progress}
+            .out{white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+                 font-size:12.5px;line-height:1.55;color:var(--fg);background:var(--card);
+                 border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-top:4px;
+                 max-height:420px;overflow:auto}
+            .ranby{color:var(--mut);font-size:12px;margin:6px 0 0}
+            .rw{display:flex;align-items:baseline;gap:10px;padding:8px 0;
+                border-bottom:1px solid var(--line);flex-wrap:wrap}
+            .rw .pr{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:var(--mut)}
+            .rw .rp{font-size:13px}
+            .rw .vd{font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;
+                    border:1px solid var(--line);border-radius:999px;padding:1px 8px;color:var(--mut)}
+            .rw .sp{flex:1}
             </style></head><body><div class="wrap">
             <h1>oss</h1>
             <div class="sub">One core that knows. A <b>runner</b> runs something real; a <b>memory</b> remembers.</div>
+
+            <div class="grp">board</div>
+            <div class="asks" id="board"></div>
+            <div id="rows"></div>
+            <div class="out" id="boardout">reading the ledger…</div>
+            <p class="ranby" id="boardran"></p>
+
+            <div class="grp">ask</div>
+            <div class="asks" id="asks"></div>
+            <div class="out" id="askout" hidden></div>
+            <p class="ranby" id="askran"></p>
 
             <div class="grp">palette</div>
             <div id="list"></div>
@@ -603,6 +684,73 @@ public class ServeCommand implements Callable<Integer> {
                 ${e.writes&&e.writes.length?' · <b>writes outward:</b> '+e.writes.map(esc).join(', '):''}</div>
               </div>`).join('');
             }
+            // The page never reimplements a command. Every button below runs one and shows the
+            // output, so the two cannot disagree -- and nothing reachable from here writes.
+            const BOARD=['hub','pick'];
+            function ask(q,arg,outEl,ranEl,btn){
+              const url='api/ask?q='+encodeURIComponent(q)+(arg?'&arg='+encodeURIComponent(arg):'');
+              if(btn){btn.setAttribute('aria-busy','true')}
+              outEl.hidden=false; outEl.textContent='asking…';
+              return fetch(url).then(r=>r.json()).then(d=>{
+                outEl.textContent=d.error?d.error:(d.output||d.note||'');
+                if(ranEl){ranEl.textContent=d.runs?('ran  '+d.runs):''}
+              }).catch(e=>{outEl.textContent=String(e)})
+               .finally(()=>{if(btn){btn.removeAttribute('aria-busy')}});
+            }
+            // The question goes where it is asked. "Seen this?" belongs on every row; "since I
+            // reviewed" only where a verdict exists, because anywhere else it answers about nothing.
+            function rows(){
+              return fetch('api/rows').then(r=>r.json()).then(d=>{
+                const host=document.getElementById('rows');
+                host.textContent='';
+                d.rows.forEach(r=>{
+                  const el=document.createElement('div'); el.className='rw';
+                  const pr=document.createElement('span'); pr.className='pr'; pr.textContent='#'+r.pr;
+                  const rp=document.createElement('span'); rp.className='rp'; rp.textContent=r.repo;
+                  const vd=document.createElement('span'); vd.className='vd'; vd.textContent=r.verdict;
+                  const sp=document.createElement('span'); sp.className='sp';
+                  el.append(pr,rp,vd,sp);
+
+                  const seen=document.createElement('button');
+                  seen.className='ask'; seen.textContent='Seen this?';
+                  seen.title='Have I worked this out before? Searches your own notes and synced issues by meaning.';
+                  seen.onclick=()=>ask('search',r.repo+' '+r.pr,
+                      document.getElementById('boardout'),document.getElementById('boardran'),seen);
+                  el.append(seen);
+
+                  if(r.hasVerdict){
+                    const since=document.createElement('button');
+                    since.className='ask'; since.textContent='Since I reviewed';
+                    since.title='What the author did after your verdict.';
+                    since.onclick=()=>ask('followup-one',String(r.pr),
+                        document.getElementById('boardout'),document.getElementById('boardran'),since);
+                    el.append(since);
+                  }
+                  host.append(el);
+                });
+              }).catch(()=>{});
+            }
+            function questions(){
+              return fetch('api/questions').then(r=>r.json()).then(d=>{
+                const board=document.getElementById('board'), asks=document.getElementById('asks');
+                d.questions.forEach(q=>{
+                  const b=document.createElement('button');
+                  b.className='ask'; b.textContent=q.key; b.title=q.asks+'\n\nruns:  '+q.runs;
+                  const onBoard=BOARD.includes(q.key);
+                  b.onclick=()=>{
+                    const arg=q.arg?prompt(q.asks,''):null;
+                    if(q.arg&&!arg){return}
+                    ask(q.key,arg,document.getElementById(onBoard?'boardout':'askout'),
+                        document.getElementById(onBoard?'boardran':'askran'),b);
+                  };
+                  (onBoard?board:asks).appendChild(b);
+                });
+                // The board is what the page opens on, so it answers without being asked.
+                rows();
+                return ask('hub',null,document.getElementById('boardout'),
+                           document.getElementById('boardran'),null);
+              });
+            }
             function load(){fetch('api/extensions').then(r=>r.json())
               .then(d=>draw(d.extensions))}
             function attach(){
@@ -627,6 +775,7 @@ public class ServeCommand implements Callable<Integer> {
                   draw(d.extensions);});
             });
             load();
+            questions();
             </script></body></html>
             """;
 }

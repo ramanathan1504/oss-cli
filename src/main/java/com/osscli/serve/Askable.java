@@ -62,6 +62,29 @@ public final class Askable {
 
     private static Map<String, Question> table() {
         Map<String, Question> m = new LinkedHashMap<>();
+        // The board itself, first: these two are what the page opens on, and they are commands
+        // like every other entry rather than a rendering of their own. A board that reimplemented
+        // the ledger would be a second answer to "who is waiting", free to disagree with the first.
+        put(
+                m,
+                new Question(
+                        "hub",
+                        List.of("hub"),
+                        null,
+                        120,
+                        "Is anyone waiting on me? Every project you follow, ordered by whose turn it"
+                                + " is rather than by date.",
+                        "nobody is waiting on you"));
+        put(
+                m,
+                new Question(
+                        "pick",
+                        List.of("pick"),
+                        null,
+                        180,
+                        "What should I work on next? Scored against what you have already worked on,"
+                                + " so the suggestion is one you are equipped for.",
+                        "nothing to suggest yet — record a review or file a note"));
         put(
                 m,
                 new Question(

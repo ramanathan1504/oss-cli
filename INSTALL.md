@@ -308,10 +308,12 @@ comes through the guard, and the guard still asks you.
 
 | Port | Serves | Started by | Needed? |
 |---|---|---|---|
-| **1504** | `oss serve` — the palette: attach an extension, see what is attached | you, by hand, or `oss serve --install` | **no.** It is `oss ext add <path>` and `oss ext list` with a paste box. `oss serve --uninstall` stops it starting at login and removes nothing |
-| **8787** | `oss run hub` — the runner's working page, which composes a review | launchd at login, or by hand | only if you use the hub. It belongs to a pack, not to `oss` |
+| **1504** | `oss serve` — the board, the questions you can ask, and the palette of attached extensions | you, by hand, or `oss serve --install` | **no.** Everything the page does is a command you can type, and it says which one on hover. `oss serve --uninstall` stops it starting at login and removes nothing |
 
-Neither is required to use a **pack**. A pack has nothing to attach, so it needs
+One port, and only one. The board opens on `oss hub` over whatever repositories you
+follow, so it is not tied to any particular project.
+
+It is not required to use a **pack** either. A pack has nothing to attach, so it needs
 no service at all: `oss run --pack <dir> <verb>`.
 
 **Both are long-lived JVMs, and an idle one must cost nothing.** Up to 1.11.16

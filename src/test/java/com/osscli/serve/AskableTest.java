@@ -174,6 +174,81 @@ class AskableTest {
         // written on the accessor.
         List<String> keys = Askable.all().stream().map(Askable.Question::key).toList();
 
-        assertEquals(List.of("search", "duplicates", "followup", "followup-one", "hidden-critical", "doctor"), keys);
+        // hub and pick first: they are the board, and the board is what the page opens on.
+        assertEquals(
+                List.of("hub", "pick", "search", "duplicates", "followup", "followup-one", "hidden-critical", "doctor"),
+                keys);
+    }
+
+    @Test
+    @DisplayName("only a row with a real verdict offers \"since I reviewed\"")
+    void sinceIsDrawnOnlyWhereItAnswers() {
+        // The ledger writes "none" for a row recorded but not judged. Drawing the button there
+        // would offer to report what changed since a verdict that was never given.
+        assertTrue(ServeCommand.hasVerdict("take"));
+        assertTrue(ServeCommand.hasVerdict("changes"));
+        assertFalse(ServeCommand.hasVerdict("none"));
+        assertFalse(ServeCommand.hasVerdict(" none "));
+        assertFalse(ServeCommand.hasVerdict(""));
+        assertFalse(ServeCommand.hasVerdict(null));
+    }
+
+    @Test
+    @DisplayName("a port already answering is named, not guessed at")
+    void occupantIsNamedFromItsOwnPage() {
+        // `oss serve` said "Another instance may already be serving", which on the machine that
+        // found this was wrong: `oss run hub` defaults to the same port, so the occupant was a
+        // different surface of the same tool.
+        assertEquals("\"oss run hub\"", ServeCommand.titleOf("<html><head><title>oss run hub</title>"));
+        assertEquals("\"oss\"", ServeCommand.titleOf("<TITLE> oss </TITLE>"));
+        // Not HTML, no title, or nothing at all: there is nothing to name, and saying so beats
+        // inventing a name for it.
+        assertNull(ServeCommand.titleOf("{\"json\":true}"));
+        assertNull(ServeCommand.titleOf(""));
+        assertNull(ServeCommand.titleOf(null));
+    }
+
+    @Test
+    @DisplayName("the page keeps the places the board and the questions are drawn into")
+    void thePageStillHasItsBoard() throws IOException {
+        String source = Files.readString(Path.of("src/main/java/com/osscli/serve/ServeCommand.java"));
+
+        // The board, its rows, and the ask output all render into named containers. A page that
+        // loses one of them fails silently -- the fetch succeeds and nothing appears.
+        for (String id : List.of("id=\"board\"", "id=\"rows\"", "id=\"boardout\"", "id=\"asks\"", "id=\"askout\"")) {
+            assertTrue(source.contains(id), "the page no longer draws " + id);
+        }
+        // Asking and doing must not look alike: the ask button is the dashed one.
+        assertTrue(source.contains(".ask{"), "the ask style is gone");
+        assertTrue(source.contains("border:1px dashed"), "ask buttons are no longer dashed");
+    }
+
+    @Test
+    @DisplayName("the page is told the command it can go and type")
+    void payloadNamesTheCommand() {
+        List<java.util.Map<String, Object>> payload = ServeCommand.questionsPayload();
+
+        assertEquals(Askable.all().size(), payload.size());
+        java.util.Map<String, Object> hub = payload.stream()
+                .filter(q -> "hub".equals(q.get("key")))
+                .findFirst()
+                .orElseThrow();
+
+        // Spelled as a person would type it: the reader can run the same thing in a terminal and
+        // get the same answer, which is the claim the page rests on.
+        assertEquals("oss hub", hub.get("runs"));
+        assertEquals("", hub.get("arg"));
+
+        java.util.Map<String, Object> followup = payload.stream()
+                .filter(q -> "followup".equals(q.get("key")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("oss followup --changed", followup.get("runs"));
+
+        // Every entry carries the sentence it answers; that is the hover text and there is no
+        // other documentation for this page.
+        for (java.util.Map<String, Object> q : payload) {
+            assertFalse(String.valueOf(q.get("asks")).isBlank(), String.valueOf(q.get("key")));
+        }
     }
 }
