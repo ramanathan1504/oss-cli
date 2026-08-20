@@ -116,9 +116,9 @@ public class TrendCommand implements Callable<Integer> {
 
     private void printTrendMessage(String metric, int diff) {
         if (diff < 0) {
-            LOGGER.info("  ✔ %s decreased by {}", metric, Math.abs(diff));
+            LOGGER.info("  ✔ {} decreased by {}", metric, Math.abs(diff));
         } else if (diff > 0) {
-            LOGGER.info("  ⚠ %s increased by {}", metric, diff);
+            LOGGER.info("  ⚠ {} increased by {}", metric, diff);
         } else {
             LOGGER.info("  • {} remained unchanged", metric);
         }
