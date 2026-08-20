@@ -132,7 +132,14 @@ public class SearchCommand implements Callable<Integer> {
 
         results.sort((a, b) -> Double.compare(b.similarity(), a.similarity()));
 
-        LOGGER.info("Top {} Global Semantic Search Results:", Math.min(limit, results.size()));
+        // What was actually searched. "Global" was hardcoded, so a search scoped to one repository
+        // -- which is the default, and what -r asks for -- was labelled as covering all of them.
+        // The results were correctly scoped; only the sentence above them was wrong, which is the
+        // worse way round: nothing in the output contradicts it.
+        LOGGER.info(
+                "Top {} Semantic Search Results ({}):",
+                Math.min(limit, results.size()),
+                global ? "all repositories" : repository);
         LOGGER.info("==========================================================================");
 
         for (int i = 0; i < Math.min(limit, results.size()); i++) {

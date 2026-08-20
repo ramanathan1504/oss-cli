@@ -163,4 +163,30 @@ class SeverityAnalyzerTest {
                 analyse("DATA LOSS ON ROLLOVER", "RECORDS ARE DROPPED").severity(),
                 analyse("data loss on rollover", "records are dropped").severity());
     }
+
+    @Test
+    @DisplayName("scoring an issue prints nothing at all")
+    void scoringIsSilent() {
+        // Three System.out calls lived inside this pure function: the matched title, a hundred
+        // characters of the issue body, and the final score. They went to stdout, which is the
+        // result stream -- so `oss critical > report.txt` collected the workings into the report,
+        // and every test run printed them too. ui/Live states the rule this broke: progress is
+        // commentary, not result, and the two go to different places.
+        java.io.PrintStream original = System.out;
+        java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
+        try {
+            System.setOut(new java.io.PrintStream(captured, true, java.nio.charset.StandardCharsets.UTF_8));
+            for (String text : java.util.List.of(
+                    "the application hangs on startup",
+                    "deadlock between two threads",
+                    "memory leak after a few hours",
+                    "nothing remarkable here")) {
+                analyse(text, text);
+            }
+        } finally {
+            System.setOut(original);
+        }
+
+        assertEquals("", captured.toString(java.nio.charset.StandardCharsets.UTF_8));
+    }
 }
