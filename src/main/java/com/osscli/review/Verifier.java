@@ -196,7 +196,7 @@ public final class Verifier {
                 return new Report(false, "could not check out " + shortSha(headSha), steps, tests, modules, null);
             }
 
-            progress.accept("building " + String.join(", ", modules));
+            progress.accept("building " + (modules.isEmpty() ? "the whole project" : String.join(", ", modules)));
             if (!maven(worktree, steps, "build", BUILD_TIMEOUT_MINUTES, install(modules))) {
                 // A change that does not compile is not a change to have opinions about, and this
                 // is the one outcome worth stopping on: everything below assumes a build.
@@ -215,15 +215,49 @@ public final class Verifier {
             }
 
             progress.accept("reverting " + mainSources.size() + " production file(s) and running them again");
-            List<String> checkout = new ArrayList<>(List.of("git", "checkout", against, "--"));
-            checkout.addAll(mainSources);
-            if (!run(worktree, steps, "revert the change", BUILD_TIMEOUT_MINUTES, checkout.toArray(new String[0]))) {
+            // A file the change ADDS does not exist at the merge base, so `git checkout <base> --`
+            // fails on it -- and fails the whole revert with it, which is what any pull request
+            // introducing a new class looks like. Taking the change out means DELETING those and
+            // restoring only the ones that were there before.
+            RevertPlan plan = revertPlan(mainSources, path -> existedAt(worktree, against, path));
+            List<String> restore = plan.restore();
+            List<String> added = plan.delete();
+            try {
+                for (String path : added) {
+                    Files.deleteIfExists(worktree.resolve(path));
+                }
+            } catch (IOException e) {
+                steps.add(new Step("revert the change", Outcome.FAILED, String.valueOf(e.getMessage())));
                 return new Report(true, "could not revert the production change", steps, tests, modules, worktree);
+            }
+            if (restore.isEmpty()) {
+                steps.add(new Step("revert the change", Outcome.PASSED, "deleted " + added.size() + " added file(s)"));
+            } else {
+                List<String> checkout = new ArrayList<>(List.of("git", "checkout", against, "--"));
+                checkout.addAll(restore);
+                if (!run(
+                        worktree, steps, "revert the change", BUILD_TIMEOUT_MINUTES, checkout.toArray(new String[0]))) {
+                    return new Report(true, "could not revert the production change", steps, tests, modules, worktree);
+                }
             }
             // Rebuilt, because the tests resolve the module from the local repository rather than
             // from the reactor. Without this the second run tests the first run's classes and every
             // test looks proven.
-            maven(worktree, steps, "rebuild without the change", BUILD_TIMEOUT_MINUTES, install(modules));
+            //
+            // The result is checked. It used to be discarded, and that is the worst bug this class
+            // has had: when the revert removes a type the tests name, the rebuild fails, the test
+            // run then fails for that reason alone, and every class was reported PROVEN -- the
+            // strongest thing this tool says, said on a compile error rather than on evidence.
+            if (!maven(worktree, steps, "rebuild without the change", BUILD_TIMEOUT_MINUTES, install(modules))) {
+                tests.addAll(cannotBuildWithout(testClasses, !added.isEmpty()));
+                return new Report(
+                        true,
+                        "the project does not build with the change reverted, so nothing was proven",
+                        steps,
+                        tests,
+                        modules,
+                        worktree);
+            }
             boolean greenWithout = maven(
                     worktree,
                     steps,
@@ -252,6 +286,63 @@ public final class Verifier {
      * work too — so the second run would fail for reasons that have nothing to do with the change
      * being reviewed, and every test would look proven.
      */
+    /** Which production files to restore from the base, and which to delete outright. */
+    record RevertPlan(List<String> restore, List<String> delete) {}
+
+    /**
+     * How to take a change out, file by file.
+     *
+     * <p>An edited file is restored from the merge base; an added one has to be deleted, because it
+     * has nothing to be restored to. Reverting the whole set with one {@code git checkout} fails on
+     * the added ones and so reverts none of them.
+     */
+    static RevertPlan revertPlan(List<String> mainSources, java.util.function.Predicate<String> existedAtBase) {
+        List<String> restore = new ArrayList<>();
+        List<String> delete = new ArrayList<>();
+        for (String path : mainSources) {
+            (existedAtBase.test(path) ? restore : delete).add(path);
+        }
+        return new RevertPlan(List.copyOf(restore), List.copyOf(delete));
+    }
+
+    /**
+     * What to report when the project will not build once the change is taken out.
+     *
+     * <p>NOT_RUN, never PROVEN. A test that could not be compiled did not fail because it detected
+     * the change; it did not run at all, and the two look identical in an exit code.
+     */
+    static List<TestResult> cannotBuildWithout(List<String> testClasses, boolean anyAdded) {
+        String why = anyAdded
+                ? "the change adds code this test names, so it cannot be built without it"
+                : "the project does not build with the change reverted";
+        return testClasses.stream()
+                .map(t -> new TestResult(t, Verdict.NOT_RUN, why))
+                .toList();
+    }
+
+    /**
+     * Whether {@code path} existed at {@code commit}.
+     *
+     * <p>Separates a file the change edited from one it added, which are undone in opposite ways.
+     */
+    private static boolean existedAt(Path worktree, String commit, String path) {
+        try {
+            Process p = new ProcessBuilder("git", "cat-file", "-e", commit + ":" + path)
+                    .directory(worktree.toFile())
+                    .redirectErrorStream(true)
+                    .start();
+            p.getInputStream().readAllBytes();
+            return p.waitFor(1, TimeUnit.MINUTES) && p.exitValue() == 0;
+        } catch (IOException e) {
+            // Unknown means "treat it as edited", which is the old behaviour: the checkout then
+            // fails loudly rather than this quietly deleting a file it was unsure about.
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return true;
+        }
+    }
+
     private static String mergeBase(Path clone, String headSha, String baseRef) {
         for (String ref : List.of("origin/" + baseRef, baseRef)) {
             try {
@@ -292,8 +383,21 @@ public final class Verifier {
     // ------------------------------------------------------------------ what to build and run ---
 
     /** {@code log4j-core/src/main/java/…} is production; anything under a test source root is not. */
-    static boolean isMainSource(String path) {
-        return path.contains("/src/main/") && path.endsWith(".java");
+    public static boolean isMainSource(String path) {
+        return rooted(path).contains("/src/main/") && path.endsWith(".java");
+    }
+
+    /**
+     * The path with a leading slash, so a source root matches whether or not a module precedes it.
+     *
+     * <p>These tests were written as {@code contains("/src/main/")}, which needs a segment in front
+     * of it. That holds for the multi-module repository this was built against and for no
+     * single-module one, where GitHub returns {@code src/main/java/…}: {@code --verify} then found
+     * no production source, reported "nothing to revert" and skipped itself. Silently, and on the
+     * simpler layout — so the failure was invisible exactly where the tool is easiest to try.
+     */
+    private static String rooted(String path) {
+        return path.startsWith("/") ? path : "/" + path;
     }
 
     /**
@@ -306,7 +410,7 @@ public final class Verifier {
     static List<String> testClassesOf(List<String> changedFiles) {
         Set<String> out = new LinkedHashSet<>();
         for (String path : changedFiles) {
-            if (path.contains("/src/test/") && path.endsWith("Test.java")) {
+            if (rooted(path).contains("/src/test/") && path.endsWith("Test.java")) {
                 String file = path.substring(path.lastIndexOf('/') + 1);
                 out.add(file.substring(0, file.length() - ".java".length()));
             }

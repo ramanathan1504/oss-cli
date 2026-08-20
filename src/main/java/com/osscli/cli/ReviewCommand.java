@@ -167,8 +167,17 @@ public class ReviewCommand implements Callable<Integer> {
 
         LOGGER.info("");
         LOGGER.info("── Verification (built and run, not read) ──");
-        com.osscli.review.Verifier.Report report = com.osscli.review.Verifier.verify(
-                clone, ev.headSha(), null, ev.baseRef(), changed, line -> LOGGER.info("  ↳ {}", line));
+        // Two Maven runs over somebody else's repository is minutes, and this printed one line at
+        // the start of each and then nothing -- which is the case Live exists for. The rule in this
+        // repository is that anything slower than a second says what it is doing while it does it,
+        // and the newest command was the one breaking it.
+        com.osscli.review.Verifier.Report report;
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("verify")) {
+            report = com.osscli.review.Verifier.verify(clone, ev.headSha(), null, ev.baseRef(), changed, line -> {
+                live.step(line);
+                LOGGER.info("  ↳ {}", line);
+            });
+        }
 
         if (!report.ran()) {
             LOGGER.info("  ○ not verified — {}", report.why());
@@ -180,11 +189,6 @@ public class ReviewCommand implements Callable<Integer> {
                     step.outcome() == com.osscli.review.Verifier.Outcome.PASSED ? "✔" : "✘",
                     step.what(),
                     step.detail().isEmpty() ? "" : " — " + step.detail());
-        }
-        if (report.why() != null) {
-            LOGGER.info("");
-            LOGGER.info("  {}", report.why());
-            return true;
         }
         LOGGER.info("");
         for (com.osscli.review.Verifier.TestResult t : report.tests()) {
@@ -198,7 +202,14 @@ public class ReviewCommand implements Callable<Integer> {
                 default -> LOGGER.info("  ○ {} — {}", t.testClass(), t.detail());
             }
         }
-        return true;
+        if (report.why() != null) {
+            LOGGER.info("  {}", report.why());
+        }
+        // Only a run that got all the way through re-running the tests may tick the ladder. It used
+        // to return true here whatever happened, so a verification that stopped at "could not revert
+        // the production change" still printed "Built and re-run with the change reverted" -- the
+        // summary contradicting the section immediately above it.
+        return report.why() == null;
     }
 
     // ── Layer 4: the user's own notes ────────────────────────────────────────

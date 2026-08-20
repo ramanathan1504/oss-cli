@@ -110,6 +110,93 @@ class VerifierTest {
     }
 
     @Test
+    @DisplayName("a single-module repository is production source too")
+    void singleModulePathsAreRecognised() {
+        // No module directory in front of the source root -- which is what GitHub returns for every
+        // single-module project, and what the first version of this matched none of.
+        List<String> changed = List.of(
+                "src/main/java/com/osscli/runner/PackFile.java",
+                "src/test/java/com/osscli/runner/PackFileTest.java",
+                "COMMANDS.md");
+
+        assertTrue(Verifier.isMainSource("src/main/java/com/osscli/runner/PackFile.java"));
+        assertEquals(List.of("PackFileTest"), Verifier.testClassesOf(changed));
+
+        // But no module is named: "src" is a source root, not a module. Returning it would send
+        // Maven at a directory that has no pom, so the caller must build everything instead.
+        assertEquals(List.of(), Verifier.modulesOf(changed));
+    }
+
+    @Test
+    @DisplayName("a single-module change reaches the build rather than being called unverifiable")
+    void singleModuleChangeIsNotSkipped(@TempDir Path dir) {
+        // The bug this pins: both files are real source, yet verify() answered "touches no
+        // production source" and skipped -- a skip that reads exactly like a change not worth
+        // checking. It must get as far as complaining about the clone instead.
+        Verifier.Report report = Verifier.verify(
+                dir,
+                "abc123",
+                null,
+                "main",
+                List.of(
+                        "src/main/java/com/osscli/runner/PackFile.java",
+                        "src/test/java/com/osscli/runner/PackFileTest.java"),
+                s -> {});
+
+        assertFalse(report.why().contains("no production source"), report.why());
+    }
+
+    @Test
+    @DisplayName("a file the change adds is deleted, not checked out")
+    void addedFilesAreDeletedNotRestored() {
+        List<String> sources = List.of(
+                "src/main/java/com/osscli/runner/PackFile.java", // added by the change
+                "src/main/java/com/osscli/runner/Engine.java"); // edited by it
+
+        Verifier.RevertPlan plan = Verifier.revertPlan(sources, path -> path.endsWith("Engine.java"));
+
+        // The whole set used to go through one `git checkout <base> --`, which fails on a path that
+        // does not exist at the base -- so a pull request adding one class reverted nothing at all.
+        assertEquals(List.of("src/main/java/com/osscli/runner/Engine.java"), plan.restore());
+        assertEquals(List.of("src/main/java/com/osscli/runner/PackFile.java"), plan.delete());
+    }
+
+    @Test
+    @DisplayName("a change that only adds files still has something to revert")
+    void everyFileAddedIsStillARevert() {
+        Verifier.RevertPlan plan = Verifier.revertPlan(List.of("src/main/java/a/A.java"), path -> false);
+
+        assertEquals(List.of(), plan.restore());
+        assertEquals(List.of("src/main/java/a/A.java"), plan.delete());
+    }
+
+    @Test
+    @DisplayName("a build that fails without the change proves nothing, and must not read as proof")
+    void aFailedRebuildIsNotProof() {
+        List<Verifier.TestResult> results = Verifier.cannotBuildWithout(List.of("PackFileTest"), true);
+
+        // The bug: the rebuild's result was discarded, the test run then failed on the compile
+        // error, and a failing run is what PROVEN is read from. Every class came back proven.
+        assertEquals(Verifier.Verdict.NOT_RUN, results.get(0).verdict());
+        assertTrue(
+                results.get(0).detail().contains("cannot be built without it"),
+                results.get(0).detail());
+    }
+
+    @Test
+    @DisplayName("only main Java source is production source")
+    void nonJavaUnderSrcIsNotSource() {
+        // 4249 adds exactly one file: a changelog entry at src/changelog/. The API-baseline check
+        // counted anything starting with "src/" and told the author that their XML changelog entry
+        // might require a baseline or export update.
+        assertFalse(Verifier.isMainSource("src/changelog/.2.x.x/4249_fix-circular-exception.xml"));
+        assertFalse(Verifier.isMainSource("src/site/markdown/index.md"));
+        assertFalse(Verifier.isMainSource("log4j-core/src/test/java/x/YTest.java"));
+        assertTrue(Verifier.isMainSource("src/main/java/com/osscli/runner/PackFile.java"));
+        assertTrue(Verifier.isMainSource("log4j-core/src/main/java/x/Y.java"));
+    }
+
+    @Test
     @DisplayName("a change with no test is refused, because there is nothing to prove")
     void noTestNothingToProve(@TempDir Path dir) {
         Verifier.Report report =

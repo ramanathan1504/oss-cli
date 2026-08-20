@@ -194,6 +194,11 @@ has been run.
   reverting to it would revert other people's work and make every test look proven.
 - Each test class is judged on **its own** result line, not on the build's exit code, and a class
   that never ran reports `was not run` rather than passing quietly.
+- A file the change **adds** is removed rather than restored — there is no earlier version of it to
+  restore to, and reverting the set with one checkout used to fail on it and so revert nothing.
+- If the project will not build once the change is out — usually because the change adds a type the
+  test names — that is reported as **nothing proven**, never as proof. A test run that fails because
+  it could not compile looks exactly like one that failed because it caught the change.
 
 When a verdict is produced it is filed to `<topic>/oss-cli/` in your notes archive and indexed, so it becomes retrievable evidence for later questions.
 
