@@ -626,8 +626,14 @@ public class ReviewCommand implements Callable<Integer> {
         appendSection(sb, "Questions", verdict.path("questions"));
         sb.append("\nHead commit: ").append(ev.headSha()).append('\n');
 
+        // Rewrite the note this pull request already has rather than filing another. Re-reviewing
+        // is normal -- after a push, with a different engine, with --verify added -- and each run
+        // used to leave a copy behind for retrieval to fight over. The head commit is inside the
+        // note, so what it reviewed is never in doubt.
+        java.nio.file.Path existing =
+                com.osscli.knowledge.ResolutionWriter.existingNote(ev.repository(), ev.prNumber(), "oss-cli", "review");
         com.osscli.knowledge.ResolutionWriter.record(
-                ev.repository(), ev.prNumber(), ev.title(), model, null, sb.toString(), "oss-cli", "review");
+                ev.repository(), ev.prNumber(), ev.title(), model, null, sb.toString(), "oss-cli", "review", existing);
     }
 
     private void appendSection(StringBuilder sb, String heading, JsonNode array) {

@@ -135,6 +135,22 @@ Build commands are extracted from the project's own `BUILDING` / `CONTRIBUTING` 
 
 Starter issues are matched on **whole words in a normalised label**, so `good-first-issue`, `Good First Issue` and `E-easy` all match while `area/resteasy-classic` and `spring boot starter` do not. They are listed fewest-comments-first: a starter issue with a long thread usually turned out to be hard, or someone is already on it.
 
+### `backlog`
+The whole backlog as one page: what is mergeable, what is one fix away, what to pick up next.
+
+Fetches the repository's open issues and pull requests, buckets them, builds a cross-reference graph between them, and writes a single HTML page into the current directory. The fetch is cached, so `--dry-run` rebuilds the page from the last real fetch without spending API calls.
+
+*   `-r`, `--repo <repo>` : Target repository. Defaults to `default.repository`.
+*   `--no-ai` : Skip the model-written enrichment.
+*   `--dry-run` : Reuse the cached fetch rather than calling GitHub again.
+
+```bash
+oss backlog -r owner/name
+oss backlog -r owner/name --dry-run
+```
+
+The report itself is POSIX shell, so on Windows it says so and points at WSL rather than half-running. Anything option-shaped that this command does not recognise is refused **here**, by name — passing it down would make the shell script answer with its own interface, which names flags and environment variables no reader of `oss backlog --help` has heard of.
+
 ### `review`
 Reviews a pull request using every source you have connected, and nothing you have not.
 

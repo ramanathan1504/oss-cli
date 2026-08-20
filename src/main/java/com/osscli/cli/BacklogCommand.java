@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
 /**
@@ -27,7 +28,18 @@ public class BacklogCommand implements Callable<Integer> {
 
     private static final String SCRIPT = "tools/backlog.sh";
 
-    @Parameters(index = "0..*", description = "Arguments passed to the report, e.g. owner/name", arity = "0..*")
+    @Option(
+            names = {"-r", "--repo"},
+            description = "Target repository in 'owner/name' format")
+    String repository;
+
+    @Option(names = "--no-ai", description = "Skip the model-written enrichment")
+    boolean noAi;
+
+    @Option(names = "--dry-run", description = "Reuse the cached fetch rather than calling GitHub again")
+    boolean dryRun;
+
+    @Parameters(index = "0..*", description = "The repository, as owner/name", arity = "0..*")
     List<String> args = List.of();
 
     @Override
@@ -46,7 +58,29 @@ public class BacklogCommand implements Callable<Integer> {
         // does not document and mentions env tunables no reader of `oss backlog --help` has heard
         // of. Every other command falls back to default.repository when -r is omitted; this one
         // now does too, rather than leaking the layer underneath it.
+        // Anything option-shaped that reached the positional list is a flag this command does not
+        // have. Passing it down makes the shell script answer, and it answers with ITS interface --
+        // a positional OWNER/REPO and env tunables no reader of `oss backlog --help` has heard of.
+        // That leak was fixed for bare `oss backlog` and not for this door, which is the one people
+        // actually walk through: every other repository command takes -r, so -r is what gets typed.
+        for (String arg : args) {
+            if (arg.startsWith("-")) {
+                System.err.println("error  \"" + arg + "\" is not an option of oss backlog.");
+                System.err.println("       oss backlog -r owner/name [--no-ai] [--dry-run]");
+                return 2;
+            }
+        }
+
         List<String> effective = new ArrayList<>(args);
+        if (repository != null && !repository.isBlank()) {
+            effective.add(0, repository.strip());
+        }
+        if (noAi) {
+            effective.add("--no-ai");
+        }
+        if (dryRun) {
+            effective.add("--dry-run");
+        }
         if (effective.isEmpty()) {
             String fallback = defaultRepository();
             if (fallback == null) {
