@@ -856,6 +856,20 @@ public final class BuiltinMemory {
         boolean configured = !archive.equals(KnowledgePack.DEFAULT_ARCHIVE);
         if (reachable) {
             out.add(new Check("archive", Check.Status.OK, archive.toString(), ""));
+            if (configured) {
+                // Two folders, one command set, and until now the report named only one of them.
+                // `map`, `coverage`, `gaps` and `digest` measure the archive kb.json points at;
+                // `file`, `harvest`, `import` and `search` keep their working copies here, which is
+                // also what `sync --me` embeds. Both are true and the pair is not guessable, so
+                // doctor says it rather than leaving somebody to find out by filing a note and
+                // looking for it in the wrong place.
+                out.add(new Check(
+                        "filed here",
+                        Check.Status.OK,
+                        DIR + " — " + countNotes(DIR) + " note(s)",
+                        "kb.json's archive is what map/coverage/gaps/digest measure;"
+                                + " what you file lives here and is what sync --me embeds"));
+            }
             long notes = countNotes(archive);
             out.add(new Check(
                     "notes",
@@ -990,6 +1004,13 @@ public final class BuiltinMemory {
             System.out.println();
             System.out.println("  " + count() + " note(s) in " + DIR);
             System.out.println("  oss memory search \"<terms>\"");
+            Path measured = KnowledgePack.load().archive();
+            if (!measured.equals(DIR)) {
+                // Said here because this is the moment somebody wonders where their note went.
+                // kb.json names an archive, and it is a fair reading that filing puts notes in it.
+                System.out.println("  (kb.json's archive — " + measured + " — is what coverage measures;");
+                System.out.println("   what you file lives above, and sync --me embeds it)");
+            }
         }
         return filed > 0 ? 0 : 1;
     }

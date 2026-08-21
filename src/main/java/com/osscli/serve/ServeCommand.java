@@ -297,6 +297,34 @@ public class ServeCommand implements Callable<Integer> {
      * is what makes dispatching from a browser defensible at all, given a browser has no terminal
      * to confirm an outward write at.
      */
+    /**
+     * The command's output without the lines it prints before it starts.
+     *
+     * <p>Every command opens with "Initializing local SQLite database connection...", which is
+     * reasonable in a terminal and is noise in a browser: it was the first line of every answer on
+     * this page, above the answer, on a page whose whole job is to show what came back.
+     *
+     * <p>Only leading lines, and only the ones a command prints about itself. Anything that appears
+     * once the command is actually working is the answer and is left alone.
+     */
+    static String withoutStartupChatter(String output) {
+        if (output == null) {
+            return "";
+        }
+        List<String> lines = new ArrayList<>(List.of(output.split("\n", -1)));
+        while (!lines.isEmpty()) {
+            String first = lines.get(0).strip();
+            boolean chatter = first.isEmpty()
+                    || first.startsWith("Initializing local SQLite")
+                    || first.startsWith("Upgrading database schema");
+            if (!chatter) {
+                break;
+            }
+            lines.remove(0);
+        }
+        return String.join("\n", lines).strip();
+    }
+
     private void handleAsk(HttpExchange x) throws IOException {
         Map<String, String> params = query(x.getRequestURI().getRawQuery());
         Askable.Question q = Askable.byKey(params.get("q"));
@@ -326,14 +354,15 @@ public class ServeCommand implements Callable<Integer> {
                 sendJson(x, 200, Map.of("output", "", "note", "gave up after " + q.timeoutSeconds() + "s"));
                 return;
             }
+            String shown = withoutStartupChatter(out);
             sendJson(
                     x,
                     200,
                     Map.of(
                             "output",
-                            out.strip(),
+                            shown,
                             "note",
-                            out.isBlank() ? q.empty() : "",
+                            shown.isBlank() ? q.empty() : "",
                             "runs",
                             "oss " + String.join(" ", q.argv())));
         } catch (InterruptedException e) {
@@ -581,22 +610,43 @@ public class ServeCommand implements Callable<Integer> {
     // --------------------------------------------------------------------- page ---
     // Self-contained: no CDN, no build step, and it renders with the registry it
     // fetches rather than one baked in at start.
+    /** The page as it will be served, so a test can assert on what leads it. */
+    static String page() {
+        return PAGE;
+    }
+
     private static final String PAGE = """
             <!doctype html><html><head><meta charset="utf-8">
             <meta name="viewport" content="width=device-width,initial-scale=1">
             <title>oss</title><style>
-            /* The site's palette, not a third one. This page was warm cream with a
-               brown accent while the landing page and the manual are deep teal with
-               brass -- so the local service looked like a different product from the
-               tool that started it. Values are the same as site/index.html. */
-            :root{--bg:#E4EBED;--fg:#08161D;--mut:#4C626C;--line:#BFD0D4;--card:#FFFFFF;
-                  --acc:#7A5D0C;--ok:#175A52;--bad:#7E3320;--code:#D3DEE1}
-            @media(prefers-color-scheme:dark){:root{--bg:#07141A;--fg:#E6EFF0;--mut:#7B949C;
-                  --line:#1A3540;--card:#0D202A;--acc:#D8B23A;--ok:#5FBFB0;--bad:#E08066;--code:#040E13}}
+            /* The site's palette, its fonts, and its way of choosing between them -- not a
+               third of any of the three. The colours were already the site's; the rest was
+               not, and matching two of three is what makes two pages look like relatives
+               rather than the same product.
+
+               The site is dark by default with light under the media query, and an explicit
+               data-theme beats both. This page did the opposite -- light by default -- so a
+               machine set to light showed a light board beside a dark manual, and a person
+               who had chosen a theme on the site got no say here at all. Same three states,
+               same order, same values, same localStorage key. */
+            :root{--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+                  --mono:ui-monospace,"SF Mono",SFMono-Regular,"JetBrains Mono","Cascadia Mono",Menlo,Consolas,monospace;
+                  --bg:#07141A;--fg:#E6EFF0;--mut:#7B949C;--line:#1A3540;--card:#0D202A;
+                  --acc:#D8B23A;--ok:#5FBFB0;--bad:#E08066;--code:#040E13}
+            @media(prefers-color-scheme:light){:root:not([data-theme="dark"]){
+                  --bg:#E4EBED;--fg:#08161D;--mut:#4C626C;--line:#BFD0D4;--card:#FFFFFF;
+                  --acc:#7A5D0C;--ok:#175A52;--bad:#7E3320;--code:#D3DEE1}}
+            :root[data-theme="light"]{--bg:#E4EBED;--fg:#08161D;--mut:#4C626C;--line:#BFD0D4;
+                  --card:#FFFFFF;--acc:#6B510A;--ok:#175A52;--bad:#7E3320;--code:#D3DEE1}
+            :root[data-theme="dark"]{--bg:#07141A;--fg:#E6EFF0;--mut:#7B949C;--line:#1A3540;
+                  --card:#0D202A;--acc:#D8B23A;--ok:#5FBFB0;--bad:#E08066;--code:#040E13}
             *{box-sizing:border-box}
-            body{margin:0;background:var(--bg);color:var(--fg);
-                 font:15px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-            .wrap{max-width:920px;margin:0 auto;padding:32px 20px 64px}
+            body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 var(--sans)}
+            .theme{position:absolute;top:28px;right:20px;border:1px solid var(--line);
+                   background:none;color:var(--mut);border-radius:6px;padding:4px 10px;
+                   font:inherit;font-size:12.5px;cursor:pointer}
+            .theme:hover{border-color:var(--acc);color:var(--acc)}
+            .wrap{max-width:920px;margin:0 auto;padding:32px 20px 64px;position:relative}
             h1{font-size:20px;margin:0 0 2px}
             .sub{color:var(--mut);font-size:13px}
             .grp{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);
@@ -629,19 +679,33 @@ public class ServeCommand implements Callable<Integer> {
                  padding:6px 11px;font:inherit;font-size:13px;cursor:pointer}
             .ask:hover{border-color:var(--acc);color:var(--fg)}
             .ask[aria-busy="true"]{opacity:.55;cursor:progress}
-            .out{white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+            .out{white-space:pre-wrap;font-family:var(--mono);
                  font-size:12.5px;line-height:1.55;color:var(--fg);background:var(--card);
                  border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-top:4px;
                  max-height:420px;overflow:auto}
             .ranby{color:var(--mut);font-size:12px;margin:6px 0 0}
+            /* Extensions are the least of what this page is for now that the runner and the
+               memory are both built in. Open on demand, so a page whose subject is the board does
+               not open on a box asking for a path nobody needs to paste. */
+            .ext{margin-top:28px;border-top:1px solid var(--line);padding-top:14px}
+            .ext summary{font-size:11px;text-transform:uppercase;letter-spacing:.08em;
+                         color:var(--mut);cursor:pointer;list-style:none}
+            .ext summary::-webkit-details-marker{display:none}
+            .ext summary:hover{color:var(--acc)}
+            /* A question that needs a number gets a field beside it, not a browser dialog: a
+               modal says nothing about what it wants until after it has interrupted you. */
+            .one{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 0}
+            .one input{flex:0 1 130px;min-width:90px;padding:6px 9px;font-size:13px}
+            .one .q{color:var(--mut);font-size:12.5px;flex:1 1 320px}
             .rw{display:flex;align-items:baseline;gap:10px;padding:8px 0;
                 border-bottom:1px solid var(--line);flex-wrap:wrap}
-            .rw .pr{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:var(--mut)}
+            .rw .pr{font-family:var(--mono);font-size:12.5px;color:var(--mut)}
             .rw .rp{font-size:13px}
             .rw .vd{font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;
                     border:1px solid var(--line);border-radius:999px;padding:1px 8px;color:var(--mut)}
             .rw .sp{flex:1}
             </style></head><body><div class="wrap">
+            <button class="theme" id="theme-btn" title="Same choice as the site makes">theme</button>
             <h1>oss</h1>
             <div class="sub">One core that knows. A <b>runner</b> runs something real; a <b>memory</b> remembers.</div>
 
@@ -651,22 +715,25 @@ public class ServeCommand implements Callable<Integer> {
             <div class="out" id="boardout">reading the ledger…</div>
             <p class="ranby" id="boardran"></p>
 
-            <div class="grp">ask</div>
+            <div class="grp">ask about one thing</div>
+            <div id="oneof"></div>
+
+            <div class="grp">sweeps</div>
             <div class="asks" id="asks"></div>
             <div class="out" id="askout" hidden></div>
             <p class="ranby" id="askran"></p>
 
-            <div class="grp">palette</div>
-            <div id="list"></div>
-
-            <div class="grp">attach an extension</div>
-            <div class="card">
-              <div class="row">
-                <input id="path" placeholder="/path/to/a/repo containing oss-ext.json" />
-                <button id="go">Attach</button>
+            <details class="ext">
+              <summary id="extsum">extensions</summary>
+              <div id="list"></div>
+              <div class="card">
+                <div class="row">
+                  <input id="path" placeholder="/path/to/a/repo containing oss-ext.json" />
+                  <button id="go">Attach</button>
+                </div>
+                <div class="msg" id="msg"></div>
               </div>
-              <div class="msg" id="msg"></div>
-            </div>
+            </details>
 
             <div class="note">
               Attaching records a path — nothing is uploaded or copied, and the extension stays an
@@ -748,17 +815,34 @@ public class ServeCommand implements Callable<Integer> {
             }
             function questions(){
               return fetch('api/questions').then(r=>r.json()).then(d=>{
-                const board=document.getElementById('board'), asks=document.getElementById('asks');
+                const board=document.getElementById('board'), asks=document.getElementById('asks'),
+                      oneof=document.getElementById('oneof');
                 d.questions.forEach(q=>{
+                  const onBoard=BOARD.includes(q.key);
+                  const out=()=>document.getElementById(onBoard?'boardout':'askout');
+                  const ran=()=>document.getElementById(onBoard?'boardran':'askran');
+                  // A question that takes an argument gets its own row with a field and the
+                  // sentence it answers. `triage` needs an issue number and used to open a browser
+                  // prompt() -- a modal that interrupts first and explains second, and which left
+                  // the page with no way to say that the question exists at all.
+                  if(q.arg){
+                    const row=document.createElement('div'); row.className='one';
+                    const b=document.createElement('button');
+                    b.className='ask'; b.textContent=q.key; b.title='runs:  '+q.runs;
+                    const i=document.createElement('input');
+                    i.placeholder=q.arg==='num'?'issue or PR number':'what are you looking for?';
+                    const say=document.createElement('span'); say.className='q'; say.textContent=q.asks;
+                    const go=()=>{const v=i.value.trim(); if(!v){i.focus();return}
+                      ask(q.key,v,document.getElementById('askout'),
+                          document.getElementById('askran'),b)};
+                    b.onclick=go;
+                    i.addEventListener('keydown',e=>{if(e.key==='Enter')go()});
+                    row.append(b,i,say); oneof.append(row);
+                    return;
+                  }
                   const b=document.createElement('button');
                   b.className='ask'; b.textContent=q.key; b.title=q.asks+'\n\nruns:  '+q.runs;
-                  const onBoard=BOARD.includes(q.key);
-                  b.onclick=()=>{
-                    const arg=q.arg?prompt(q.asks,''):null;
-                    if(q.arg&&!arg){return}
-                    ask(q.key,arg,document.getElementById(onBoard?'boardout':'askout'),
-                        document.getElementById(onBoard?'boardran':'askran'),b);
-                  };
+                  b.onclick=()=>ask(q.key,null,out(),ran(),b);
                   (onBoard?board:asks).appendChild(b);
                 });
                 // The board is what the page opens on, so it answers without being asked.
@@ -768,7 +852,13 @@ public class ServeCommand implements Callable<Integer> {
               });
             }
             function load(){fetch('api/extensions').then(r=>r.json())
-              .then(d=>draw(d.extensions))}
+              .then(d=>{draw(d.extensions);
+                const n=(d.extensions||[]).length;
+                // Say the count in the summary. Collapsed and unlabelled, "extensions" gives no
+                // reason to open it and no way to know whether anything is attached.
+                document.getElementById('extsum').textContent=
+                  n?('extensions — '+n+' attached'):'extensions — none attached (nothing here needs one)';
+              })}
             function attach(){
               const p=$('#path').value.trim(); if(!p)return;
               $('#msg').textContent='attaching…'; $('#msg').className='msg sub';
@@ -790,6 +880,22 @@ public class ServeCommand implements Callable<Integer> {
                   $('#msg').className='msg '+(d.ok?'ok':'bad');
                   draw(d.extensions);});
             });
+            // The site's toggle, the site's key. A person who set the manual to light and
+            // opened the board should not have to set it twice -- and on a machine whose
+            // system theme disagrees with their choice, the stored answer is the one they
+            // actually gave.
+            (function(){
+              const root=document.documentElement, btn=document.getElementById('theme-btn');
+              try{const saved=localStorage.getItem('ubuos-theme');
+                  if(saved){root.setAttribute('data-theme',saved)}}catch(e){}
+              btn.onclick=function(){
+                let now=root.getAttribute('data-theme');
+                if(!now){now=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}
+                const next=now==='dark'?'light':'dark';
+                root.setAttribute('data-theme',next);
+                try{localStorage.setItem('ubuos-theme',next)}catch(e){}
+              };
+            })();
             load();
             questions();
             </script></body></html>
