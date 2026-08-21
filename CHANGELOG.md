@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.1
+
+_2026-08-21_
+
+- The sweep: a crash, a hang, a silence, two documents, and the daily job that embedded nothing (#129)
+- One slow question took the whole board down with it (#128)
+- Push the release out, do not wait to be polled (#127)
+
+
 ## 2.2.0
 
 _2026-08-21_
