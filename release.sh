@@ -203,17 +203,24 @@ git pull --ff-only origin main
 git tag -a "v$VERSION" -m "OSS-CLI v$VERSION"
 git push origin "v$VERSION"
 
-echo "→ Waiting for the archives, which the tap and the site both read..."
-# The tap's formula points at oss-macos-arm64.tar.gz and needs its checksum, and
-# the site prints the version. Both read the release rather than being handed it,
-# so neither can be nudged until Distributions has attached the archives.
+echo "→ Waiting for every asset the tap and the site read..."
+# Waiting for a COUNT was wrong, and v2.2.1 proved it within the minute. The four
+# archives arrive from Distributions; the .deb arrives later from Packages, which
+# runs after it. Nudged on the count of four, the site deployed against a release
+# that had no oss_amd64.deb yet -- and the site's own link check failed the deploy
+# with "dead link (404)". A guard catching this is the system working; asking it
+# to catch it every release is not.
 #
-# Best effort: if this wait times out the release is still published and the
-# polls below still catch it. What it must not do is nudge them too early, which
-# would publish a formula pointing at a file that is not there yet.
+# So: wait for the last one to land, by name. oss_amd64.deb is the version-free
+# link the download page uses, and it is the final asset either consumer needs.
+#
+# Best effort. If this times out the release is still published, the polls below
+# still catch it, and nothing has been nudged too early.
 for _ in $(seq 1 60); do
-    ASSETS=$(gh release view "v$VERSION" --json assets --jq '[.assets[].name] | length' 2>/dev/null || echo 0)
-    if [ "${ASSETS:-0}" -ge 4 ]; then break; fi
+    HAVE=$(gh release view "v$VERSION" --json assets --jq '[.assets[].name] | join(" ")' 2>/dev/null || echo "")
+    case "$HAVE" in
+        *oss-macos-arm64.tar.gz*oss_amd64.deb* | *oss_amd64.deb*oss-macos-arm64.tar.gz*) break ;;
+    esac
     sleep 20
 done
 
