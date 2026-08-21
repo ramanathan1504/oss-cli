@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.2.0
+
+_2026-08-21_
+
+- The board leads the page, one theme across both, and the runner's verbs on 1504 (#125)
+- A runner that answers with nothing attached, and fourteen repositories nobody asked for (#124)
+- The knowledge base, the board and the daily job, all inside one install (#123)
+- A pack is a file the tool reads, not a script it runs (#122)
+
+
 ## 2.1.2
 
 _2026-08-19_
