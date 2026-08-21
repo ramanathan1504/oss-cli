@@ -1037,13 +1037,23 @@ public final class BuiltinMemory {
             System.out.println("  no note mentions those terms (" + notes.size() + " searched)");
             return 0;
         }
-        System.out.println("  " + hits.size() + " of " + notes.size() + " note(s), by shared terms");
-        System.out.println();
+        // Ranked by passage, reported by note. Printing every passage listed the same file three
+        // times at three scores under a heading that said "note(s)" -- which reads as three
+        // separate pieces of writing when it is one, and pushes the other matches off the list.
+        Map<String, TextIndex.Hit> best = new LinkedHashMap<>();
         for (TextIndex.Hit h : hits) {
             String file = h.id().substring(0, h.id().lastIndexOf('#'));
-            System.out.printf("  %.2f  %s%n", h.score(), file);
-            if (!h.title().isBlank()) {
-                System.out.println("        " + h.title());
+            TextIndex.Hit seen = best.get(file);
+            if (seen == null || h.score() > seen.score()) {
+                best.put(file, h);
+            }
+        }
+        System.out.println("  " + best.size() + " of " + notes.size() + " note(s), by shared terms");
+        System.out.println();
+        for (Map.Entry<String, TextIndex.Hit> e : best.entrySet()) {
+            System.out.printf("  %.2f  %s%n", e.getValue().score(), e.getKey());
+            if (!e.getValue().title().isBlank()) {
+                System.out.println("        " + e.getValue().title());
             }
         }
         return 0;
@@ -1071,13 +1081,21 @@ public final class BuiltinMemory {
             if (hits.isEmpty()) {
                 return null;
             }
-            System.out.println("  " + hits.size() + " of " + noteCount + " note(s), by meaning");
-            System.out.println();
+            // Same rule as the term path: one line per note, at its best passage.
+            Map<String, Corpus.Hit> best = new LinkedHashMap<>();
             for (Corpus.Hit h : hits) {
                 String file = h.id().startsWith("note:") ? h.id().substring(5) : h.id();
-                System.out.printf("  %.2f  %s%n", h.score(), file);
-                if (!h.title().isBlank()) {
-                    System.out.println("        " + h.title());
+                Corpus.Hit seen = best.get(file);
+                if (seen == null || h.score() > seen.score()) {
+                    best.put(file, h);
+                }
+            }
+            System.out.println("  " + best.size() + " of " + noteCount + " note(s), by meaning");
+            System.out.println();
+            for (Map.Entry<String, Corpus.Hit> e : best.entrySet()) {
+                System.out.printf("  %.2f  %s%n", e.getValue().score(), e.getKey());
+                if (!e.getValue().title().isBlank()) {
+                    System.out.println("        " + e.getValue().title());
                 }
             }
             return 0;
@@ -1110,18 +1128,37 @@ public final class BuiltinMemory {
         String body = "";
     }
 
+    /**
+     * Every note in the store, however deep.
+     *
+     * <p><b>Walk, not list.</b> This listed one level, and everything that writes a note writes it
+     * into a subfolder — {@code harvest/}, {@code sessions/}, {@code imported/}, {@code gaps/}. So
+     * {@code search} found none of them: a harvest could collect a thousand items, report a
+     * thousand items, and the next search would answer "nothing filed yet". The compounding loop
+     * this whole tool is built on was open at the join.
+     *
+     * <p>The name carries the folder, so two notes with the same file name in different folders are
+     * two notes rather than one silently winning.
+     */
     private static List<Note> load() throws IOException {
         List<Note> out = new ArrayList<>();
         if (!Files.isDirectory(DIR)) {
             return out;
         }
-        try (Stream<Path> s = Files.list(DIR)) {
-            for (Path p : s.filter(f -> f.getFileName().toString().endsWith(".md"))
+        try (Stream<Path> s = Files.walk(DIR)) {
+            for (Path p : s.filter(Files::isRegularFile)
+                    .filter(f -> f.getFileName().toString().endsWith(".md"))
                     .sorted()
                     .toList()) {
                 Note n = new Note();
-                n.name = p.getFileName().toString();
-                n.body = Files.readString(p);
+                n.name = DIR.relativize(p).toString();
+                try {
+                    n.body = Files.readString(p);
+                } catch (IOException e) {
+                    // One unreadable note must not cost the other nine hundred. A synced archive
+                    // always has one that has not downloaded, and that read fails with a timeout.
+                    continue;
+                }
                 n.title = title(n.body, n.name);
                 out.add(n);
             }
