@@ -42,7 +42,7 @@ import picocli.CommandLine.Parameters;
  * against OSS-CLI at all.
  *
  * <pre>{@code
- * oss ext add ~/apache/log4j2-workout    # register whatever that repo declares
+ * oss ext add ~/projects/your-bench      # register whatever that repo declares
  * oss ext list                           # what is wired up, and is it still reachable
  * oss run review 4234                  # dispatch to the bench extension
  * oss memory file notes.md                   # dispatch to the archive

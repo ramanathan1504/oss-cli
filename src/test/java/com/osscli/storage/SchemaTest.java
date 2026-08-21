@@ -127,6 +127,23 @@ class SchemaTest {
     }
 
     @Test
+    @DisplayName("a new database monitors nothing, and names nobody")
+    void freshMonitorsNothing() throws Exception {
+        // The migrations used to seed fourteen real third-party repositories -- log4j, kafka,
+        // spark, elasticsearch and the rest -- into every fresh install, so a stranger's first
+        // `oss sync --all` fetched hundreds of megabytes from projects they had never named,
+        // against their API budget. One person's interests shipping as everybody's default is the
+        // opposite of a tool for any OSS developer, and nothing in the suite noticed for as long
+        // as it shipped.
+        try (Connection conn = DatabaseManager.getConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs = stmt.executeQuery("SELECT COUNT(*) AS n FROM monitored_repositories;")) {
+            assertTrue(rs.next());
+            assertEquals(0, rs.getInt("n"), "a fresh install must watch only what its owner adds");
+        }
+    }
+
+    @Test
     @DisplayName("the reported version is the one the migrations actually reached")
     void versionIsHonest() throws Exception {
         try (Connection conn = DatabaseManager.getConnection();

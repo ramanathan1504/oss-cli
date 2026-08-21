@@ -185,9 +185,31 @@ public class PromptCommand implements Callable<Integer> {
                                 + " Raise 'ollama.timeout_seconds' if this is routine for your hardware.");
                         escalationReason = "timeout";
                     } else {
+                        // Name the model and say what it actually did. This printed Jackson's own
+                        // message, three lines of it, naming StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION
+                        // -- an internal parser flag -- in answer to "why did my local model not
+                        // answer". A reply that ends mid-object is the common case and has a
+                        // different cause from junk: the model stopped early, which is a size or a
+                        // model-capability problem, not malformed output.
+                        String detail = e.getMessage() == null
+                                ? "no detail"
+                                : e.getMessage().split("\n")[0].strip();
+                        boolean stoppedEarly =
+                                detail.toLowerCase(java.util.Locale.ROOT).contains("end-of-input");
                         LOGGER.warn(
-                                "  ↳ Ollama response could not be parsed — building expert prompt. ({})",
-                                e.getMessage());
+                                "  ↳ {} {} — building expert prompt. ({})",
+                                modelName,
+                                stoppedEarly
+                                        ? "stopped before it finished the answer"
+                                        : "did not return the JSON this asked for",
+                                detail);
+                        if (stoppedEarly) {
+                            // `oss setup`, because that is the command that actually writes
+                            // ollama.model.guidance. Naming a flag that does not exist is the
+                            // failure this repository keeps a note about.
+                            LOGGER.warn("       A larger guidance model answers this size of context:"
+                                    + " oss setup, and set the guidance model.");
+                        }
                         escalationReason = "parse_error";
                     }
                     needsEscalation = true;

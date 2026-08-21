@@ -74,7 +74,7 @@ A JVM property (`-Doss.claude.base_url=…`) wins over both, for a single run. A
 **Sync fetches issues that are still open, and only those changed since its last run.** A closed issue therefore never arrives this way — `sync` reports `Open Issues Saved: 0` and nothing changes, however many times it is run. Reach for it by number instead:
 
 ```bash
-oss issue 4129 --repo apache/logging-log4j2
+oss issue 4129 --repo owner/name
 ```
 
 That fetches the issue whatever its state and **keeps it**, so `chat`, `prompt` and the rest can use it afterwards. Which matters more than it sounds: a closed issue is the kind you go back to read, because it is closed on account of having been resolved and the resolution is the interesting part.
@@ -414,7 +414,7 @@ oss codex chat 4129            # escalate to OpenAI instead of Gemini
 
 ```
 ── What went into this answer ──
-  ✔ The issue as filed              #4129 in apache/logging-log4j2
+  ✔ The issue as filed              #4129 in owner/name
   ✔ Your own prior work             22 passages (~5750 tokens) of 32 that matched
         1 issue · 16 notes · 5 related issues
   ✔ Answered by                     Gemini
@@ -795,7 +795,7 @@ as filed, the conversation in order with who said what and when, and how it ende
 reads those headings and a harvest with its own layout would write notes the rest of the tool cannot
 read.
 
-`digest` is the difference between an index and an answer. `map` tells you which notes mention log4j;
+`digest` is the difference between an index and an answer. `map` tells you which notes mention a topic;
 `digest` reads them and says what was solved, putting **the public record above private reasoning** and
 labelling each — what was agreed on a thread and what was reasoned in a conversation are different
 kinds of evidence, and merging them reads as one account when it is two.
@@ -829,14 +829,14 @@ it what you are trying to learn, is a file — `~/.oss-cli/kb.json`:
 ```json
 {
   "archive": "~/Documents/notes",
-  "topics":  { "log4j": ["log4j", "appender", "layout"] },
-  "yardsticks": { "log4j": ["Appenders", "Layouts", "Filters", "Lookups", "Garbage-free logging"] }
+  "topics":  { "caching": ["cache", "eviction", "ttl"] },
+  "yardsticks": { "caching": ["Eviction policies", "Invalidation", "Warmup", "Metrics", "Distributed caches"] }
 }
 ```
 
 **A yardstick is the outside opinion, and it is the point of `coverage`.** Counting your own notes
-can only report what you have written: an archive with nothing on Lookups will happily report all
-of its Log4j notes as Log4j notes and call that complete. The yardstick is what the technology's
+can only report what you have written: an archive with nothing on invalidation will happily report
+all of its caching notes as caching notes and call that complete. The yardstick is what the technology's
 own manual documents, so an area nobody wrote about scores `○ nothing` instead of being invisible.
 
 Three grades, and the floors are deliberate: an area needs **3 mentions in a note** before that note
@@ -947,9 +947,9 @@ is **data the tool reads**, not a program it runs:
 
 ```json
 {
-  "name": "log4j",
-  "description": "Apache Log4j across a version x config x app matrix, on real JVMs",
-  "useWhen": { "repository": "apache/logging-log4j2", "files": ["log4j-core/pom.xml"] },
+  "name": "yourproject",
+  "description": "Your project across a version x config x app matrix, on real JVMs",
+  "useWhen": { "repository": "owner/name", "files": ["core/pom.xml"] },
   "versions": ["2.24.1", "2.25.5", "2.26.1"],
   "defaultVersion": "2.26.1",
   "apps": ["core-java", "db", "network"],
@@ -992,7 +992,7 @@ something real; a `memory` remembers. Both are declared by an `oss-ext.json` at 
 repository and called as child processes, so an extension can be written in anything.
 
 ```bash
-oss ext add ~/apache/log4j2-workout    # register whatever that repo declares
+oss ext add ~/projects/your-bench      # register whatever that repo declares
 oss ext list                           # what is wired up, and is it still reachable
 ```
 

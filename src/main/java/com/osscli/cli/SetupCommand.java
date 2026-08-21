@@ -288,7 +288,7 @@ public class SetupCommand implements Callable<Integer> {
         LOGGER.info("Nothing here is required. OSS-CLI works with none of it.");
 
         registerOptionalExtension(
-                scanner, "bench", "a repo that RUNS things (real apps, real JVMs) — e.g. ~/apache/log4j2-workout");
+                scanner, "bench", "a repo that RUNS things (real apps, real JVMs) — e.g. ~/projects/your-bench");
         registerOptionalExtension(
                 scanner, "kb", "a repo that REMEMBERS (files and indexes notes) — e.g. ~/knowledge-creator");
 
@@ -301,7 +301,7 @@ public class SetupCommand implements Callable<Integer> {
         LOGGER.info("\n--- Upstream writes ---");
         LOGGER.info("  Refused by default, everywhere, and there is no setting to change that.");
         LOGGER.info("  To permit ONE write, name the repository on the command line:");
-        LOGGER.info("    oss run hub {} apache/logging-log4j2", UpstreamGuard.APPROVE_FLAG);
+        LOGGER.info("    oss run hub {} owner/name", UpstreamGuard.APPROVE_FLAG);
         LOGGER.info("  You are still asked to confirm, every time, at the terminal.");
 
         // 13. What is on, and what is simply not configured.
