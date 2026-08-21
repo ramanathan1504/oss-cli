@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.3.0
+
+_2026-08-21_
+
+- Four commands that could not print their own usage (#144)
+- An error that was right, and sent you looking for a verb that does not exist (#142)
+
+
 ## 2.2.5
 
 _2026-08-21_
