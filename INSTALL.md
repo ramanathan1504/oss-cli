@@ -13,15 +13,15 @@ You install the core once. Everything else is optional and attaches later.
 
 | Need | Why | Check |
 |---|---|---|
-| **Java 17+** | the CLI is a Java jar | `java -version` |
-| **Homebrew** | how the core installs | `brew --version` |
-| GitHub token | reading repositories | `gh auth status`, or macOS Keychain |
+| **A GitHub token** | reading repositories — **the only hard requirement** | `gh auth status`, or macOS Keychain |
+| Homebrew | *optional* — the easiest way in. Every release also ships a self-contained archive you can unpack anywhere | `brew --version` |
+| Java 17+ | *only if you run the plain `.jar`.* The macOS, Linux and Windows archives carry their own runtime, built with `jlink`, so nothing needs a JDK installed | `java -version` |
 | Embedding model | *optional* — search by meaning. About 22 MB, runs in-process, fetched once by `oss model --fetch` | `oss model` |
 | Ollama | *optional* — local verdicts and guidance. Nothing indexes or searches through it | `ollama list` |
 | Cloud API key | *optional* — escalation past the local budget | — |
 | Maven 3.9+ | *only* to build from source | `mvn -v` |
 
-Nothing below the first two rows is required. OSS-CLI works with none of it.
+Only the first row is required. OSS-CLI works with none of the rest.
 
 > The two operations that take real time — `oss model --fetch`, and the vector
 > index `sync` builds for a repository — print a live status line with elapsed

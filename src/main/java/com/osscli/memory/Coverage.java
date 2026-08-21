@@ -17,7 +17,6 @@
 package com.osscli.memory;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -26,7 +25,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.stream.Stream;
 
 /**
  * What the notes cover, measured against something outside them.
@@ -105,18 +103,14 @@ public final class Coverage {
             return areas.stream().map(a -> new Area(a, 0, 0, "")).toList();
         }
 
-        try (Stream<Path> files = Files.walk(archive)) {
-            for (Path note : files.filter(Files::isRegularFile)
-                    .filter(p -> p.getFileName().toString().endsWith(".md"))
-                    .toList()) {
-                String text;
-                try {
-                    text = Files.readString(note, StandardCharsets.UTF_8).toLowerCase(Locale.ROOT);
-                } catch (IOException e) {
-                    // One unreadable note must not end the measurement; an archive of a thousand
-                    // files will always have one that is not text.
-                    continue;
-                }
+        // Through ArchiveNotes, which puts a deadline on every read. This used to call readString
+        // directly, and on an archive that lives in iCloud and has been evicted, every one of those
+        // is a download: `oss memory map` sat for over two minutes printing nothing.
+        lastWalk = ArchiveNotes.walk(archive);
+        {
+            for (ArchiveNotes.Note read : lastWalk.notes()) {
+                Path note = read.path();
+                String text = read.lowercaseText();
                 for (String area : areas) {
                     int hits = count(text, area.toLowerCase(Locale.ROOT));
                     if (hits < MENTION_FLOOR) {
@@ -144,6 +138,21 @@ public final class Coverage {
     }
 
     /** Non-overlapping occurrences, which is what "mentions" means to a person counting them. */
+    /**
+     * What the last walk could not read.
+     *
+     * <p>Returned out of band because {@code map} and {@code score} each return the thing they
+     * measured, and neither shape has room for "and 816 notes were skipped". A count nobody prints
+     * is the same as no count, and this is exactly the number a reader needs to know whether the
+     * measurement covered their archive or a fraction of it.
+     */
+    private static ArchiveNotes.Walk lastWalk;
+
+    /** The last walk's warning, or empty. Read straight after calling {@link #map} or {@link #score}. */
+    public static String lastWarning() {
+        return lastWalk == null ? "" : lastWalk.warning();
+    }
+
     private static int count(String haystack, String needle) {
         if (needle.isBlank()) {
             return 0;
@@ -164,16 +173,11 @@ public final class Coverage {
         if (!Files.isDirectory(archive) || topics.isEmpty()) {
             return out;
         }
-        try (Stream<Path> files = Files.walk(archive)) {
-            for (Path note : files.filter(Files::isRegularFile)
-                    .filter(p -> p.getFileName().toString().endsWith(".md"))
-                    .toList()) {
-                String text;
-                try {
-                    text = Files.readString(note, StandardCharsets.UTF_8).toLowerCase(Locale.ROOT);
-                } catch (IOException e) {
-                    continue;
-                }
+        lastWalk = ArchiveNotes.walk(archive);
+        {
+            for (ArchiveNotes.Note read : lastWalk.notes()) {
+                Path note = read.path();
+                String text = read.lowercaseText();
                 for (Map.Entry<String, List<String>> topic : topics.entrySet()) {
                     int hits = 0;
                     for (String term : topic.getValue()) {

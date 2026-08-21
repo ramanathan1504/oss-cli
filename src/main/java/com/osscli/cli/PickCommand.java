@@ -5,8 +5,10 @@ import com.osscli.model.RepoIssue;
 import com.osscli.retrieval.Corpus;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -69,7 +71,25 @@ public class PickCommand implements Callable<Integer> {
                 return 0;
             }
 
-            List<Scored> scored = new ArrayList<>();
+            // Read the issue vectors sync already wrote, rather than making them again.
+            //
+            // This loop used to hand every open issue's text to profile.search(), which embeds the
+            // query: one ONNX inference per issue, 15,935 of them on a real store. It ran for a
+            // hundred seconds in silence and then took the JVM with it -- SIGSEGV inside
+            // onnxruntime's thread pool, mid-MatMul, on an 8 GB machine. Reproduced on the
+            // installed 2.2.0, not in a test, which is the only place a native crash shows up.
+            //
+            // sync embeds every issue it stores, so the vector is already on disk. Reading it makes
+            // the inference count zero for anything synced, and the answer is identical because it
+            // is literally the same vector.
+            Map<String, double[]> vectors = new HashMap<>();
+            if (profile.bySimilarity()) {
+                for (com.osscli.model.IssueEmbedding e : com.osscli.storage.SqliteStorage.loadAllEmbeddings()) {
+                    vectors.put(e.repository() + "#" + e.issueNumber(), e.vector());
+                }
+            }
+
+            List<RepoIssue> candidates = new ArrayList<>();
             for (RepoIssue ri : all) {
                 Issue i = ri.issue();
                 if (!"open".equalsIgnoreCase(i.state())) {
@@ -81,14 +101,43 @@ public class PickCommand implements Callable<Integer> {
                 if (repo != null && !repo.isBlank() && !ri.repository().equalsIgnoreCase(repo.trim())) {
                     continue;
                 }
-                String text = (i.title() == null ? "" : i.title()) + " " + (i.body() == null ? "" : i.body());
-                List<Corpus.Hit> hits = profile.search(text, 3);
+                candidates.add(ri);
+            }
+
+            // Anything past a second says what it is doing. This said nothing for a hundred
+            // seconds, which is indistinguishable from a hang -- and on the run that crashed, it
+            // was indistinguishable from a hang right up until the JVM died.
+            com.osscli.ui.Live live =
+                    com.osscli.ui.Live.start("scoring " + candidates.size() + " open items against your profile");
+
+            List<Scored> scored = new ArrayList<>();
+            int embedded = 0;
+            int done = 0;
+            for (RepoIssue ri : candidates) {
+                Issue i = ri.issue();
+                double[] q = vectors.get(ri.repository() + "#" + i.number());
+                List<Corpus.Hit> hits;
+                if (q != null) {
+                    hits = profile.searchByVector(q, 3);
+                } else {
+                    // Not synced with this model. Embedding it here is what used to be done for
+                    // every issue; doing it for the few that need it is the difference between a
+                    // handful of inferences and fifteen thousand.
+                    String text = (i.title() == null ? "" : i.title()) + " " + (i.body() == null ? "" : i.body());
+                    hits = profile.search(text, 3);
+                    embedded++;
+                }
+                if (++done % 500 == 0) {
+                    live.step("scored " + done + " of " + candidates.size());
+                }
                 if (hits.isEmpty()) {
                     continue;
                 }
                 double s = hits.stream().mapToDouble(Corpus.Hit::score).sum();
                 scored.add(new Scored(ri, s, hits));
             }
+            live.done(candidates.size() + " scored"
+                    + (embedded > 0 ? ", " + embedded + " embedded here (the rest were already vectors)" : ""));
 
             if (scored.isEmpty()) {
                 System.out.println("Nothing in the backlog overlaps what you have written about.");

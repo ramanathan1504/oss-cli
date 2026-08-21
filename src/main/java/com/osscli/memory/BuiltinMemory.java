@@ -343,8 +343,40 @@ public final class BuiltinMemory {
             harvestSessions();
         }
         com.osscli.schedule.DailyJob.record(true, written + " item(s) for " + user);
-        System.out.println("  oss memory index      reads them into the corpus");
+        embedWhatWasWritten();
         return 0;
+    }
+
+    /**
+     * Turn what harvest just wrote into vectors, in the same run.
+     *
+     * <p>Otherwise the daily job is a machine that writes notes nobody can find. Only the embedding
+     * step makes a note reachable by {@code chat}, {@code guide}, {@code pick} and {@code prompt},
+     * and the scheduled command is {@code oss memory harvest} — so a laptop could harvest every
+     * morning for a month and answer from none of it. Measured before this: 23 PR reviews on disk,
+     * 19 embedded, the four newest invisible.
+     *
+     * <p>Only the built-in store, which is where harvest writes. The folders in {@code drive.paths}
+     * stay {@code sync --me}'s job: they can be an archive that streams from the cloud, and a
+     * background job is the worst possible place to start downloading 800 files.
+     *
+     * <p>Not acting unasked. It indexes the notes this command created, on the run that created
+     * them, with the model that already ships — no network, no download, nothing fetched.
+     */
+    private static void embedWhatWasWritten() {
+        com.osscli.retrieval.LocalEmbedder embedder =
+                com.osscli.retrieval.Embeddings.ifPresent(m -> System.out.println("  " + m));
+        if (embedder == null) {
+            // The floor still holds: the notes are on disk and `memory search` finds them by term.
+            // Saying which half you have beats implying you have both.
+            System.out.println("  no embedding model, so these are searchable by term and not by meaning");
+            System.out.println("  oss model --fetch     22 MB, once");
+            return;
+        }
+        System.out.println("  indexing what was written…");
+        com.osscli.retrieval.NoteIndexer.index(
+                java.util.List.of(DIR.toString()), embedder, com.osscli.retrieval.Embeddings.MODEL);
+        System.out.println("  indexed — chat, guide, pick and prompt can see them now");
     }
 
     /**
@@ -492,6 +524,25 @@ public final class BuiltinMemory {
         }
     }
 
+    /**
+     * Print a warning only when there is one.
+     *
+     * <p>An archive that streams from the cloud is skipped rather than waited for, and the number
+     * skipped is the difference between "your archive has nothing on Lookups" and "we could not
+     * read your archive". Silence there would let the first be read for the second.
+     */
+    private static String alreadySaid = "";
+
+    private static void say(String warning) {
+        // Once. `coverage` scores per technology, so a kb.json naming three would otherwise print
+        // the same paragraph three times, which reads as three separate problems.
+        if (!warning.isBlank() && !warning.equals(alreadySaid)) {
+            alreadySaid = warning;
+            System.out.println();
+            System.out.println(warning);
+        }
+    }
+
     /** Dispatch a verb. Returns a process exit code. */
     public static int run(String verb, List<String> args) {
         try {
@@ -530,6 +581,25 @@ public final class BuiltinMemory {
         }
     }
 
+    /**
+     * How many notes have vectors.
+     *
+     * <p>Counted from the table {@code sync --me} writes, because that is the one that decides
+     * whether a note can be found by meaning. A count from anywhere else would be a count of
+     * something else.
+     */
+    private static long embeddedNotes() {
+        try (java.sql.Connection c = com.osscli.storage.DatabaseManager.getConnection();
+                java.sql.Statement st = c.createStatement();
+                java.sql.ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM personal_chat_memory;")) {
+            return rs.next() ? rs.getLong(1) : 0;
+        } catch (Exception e) {
+            // A store that cannot answer this is not a reason to fail the health check; the rest of
+            // it is still worth printing.
+            return 0;
+        }
+    }
+
     /** The verbs the built-in store can answer, so a caller can ask before falling back to it. */
     public static boolean supports(String verb) {
         return VERBS.contains(verb);
@@ -562,6 +632,9 @@ public final class BuiltinMemory {
                 System.out.println("      … and " + (e.getValue().size() - 5) + " more");
             }
         }
+        // Last, not first. Sixteen topics of listing scroll a warning off the top of the terminal,
+        // and a caveat nobody sees is the same as a caveat nobody wrote.
+        say(Coverage.lastWarning());
         return 0;
     }
 
@@ -586,6 +659,7 @@ public final class BuiltinMemory {
         }
         for (Map.Entry<String, List<String>> tech : pack.yardsticks().entrySet()) {
             List<Coverage.Area> areas = Coverage.score(pack.archive(), tech.getValue());
+            say(Coverage.lastWarning());
             long covered =
                     areas.stream().filter(a -> a.grade().equals("covered")).count();
             long thin = areas.stream().filter(a -> a.grade().equals("thin")).count();
@@ -630,6 +704,7 @@ public final class BuiltinMemory {
         Files.createDirectories(into);
         for (Map.Entry<String, List<String>> tech : pack.yardsticks().entrySet()) {
             List<Coverage.Area> areas = Coverage.score(pack.archive(), tech.getValue());
+            say(Coverage.lastWarning());
             Path note = into.resolve("gaps-" + slug(tech.getKey()) + ".md");
             Files.writeString(note, gapNote(tech.getKey(), areas), StandardCharsets.UTF_8);
             long missing =
@@ -898,6 +973,31 @@ public final class BuiltinMemory {
                 items > 0 ? Check.Status.OK : Check.Status.WARN,
                 items + " item(s)",
                 items > 0 ? "" : "oss memory harvest --sessions"));
+
+        // Written is not the same as searchable, and nothing said which you had.
+        //
+        // Only `sync --me` turns a note into a vector. `harvest` writes markdown -- so does `file`,
+        // so does an archive extension, so does a Claude Code session filing a PR review into the
+        // archive -- and until the embedding step runs, none of it reaches `chat`, `guide`, `pick`
+        // or `prompt`. The daily job runs `memory harvest` and stops there, so a machine can
+        // harvest every morning for a month and answer from none of it.
+        //
+        // Measured on this store when the check was written: 23 PR reviews on disk, 19 embedded.
+        // The four newest -- the ones you would actually ask about -- were invisible to every
+        // command that answers.
+        long onDisk = countNotes(archive) + countNotes(DIR);
+        long embedded = embeddedNotes();
+        if (onDisk > 0) {
+            long missing = Math.max(0, onDisk - embedded);
+            out.add(new Check(
+                    "searchable",
+                    missing == 0 ? Check.Status.OK : Check.Status.WARN,
+                    embedded + " of " + onDisk + " note(s) are vectors",
+                    missing == 0
+                            ? ""
+                            : missing + " written but not embedded yet — oss sync --me indexes them;"
+                                    + " until then they answer by term and not by meaning"));
+        }
 
         String last = com.osscli.schedule.DailyJob.lastRun();
         if (last == null) {

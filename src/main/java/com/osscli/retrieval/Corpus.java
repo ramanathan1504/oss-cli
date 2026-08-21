@@ -146,10 +146,38 @@ public final class Corpus {
         return embedder != null ? bySimilarity(query, limit) : byTerms(query, limit);
     }
 
+    /**
+     * The same search, when the caller already has the query's vector.
+     *
+     * <p>{@code pick} scores the whole open backlog against your profile, and it did that by
+     * handing each issue's text to {@link #search} -- one ONNX inference per issue, 15,935 of them
+     * on a real store. It took over a hundred seconds and then killed the JVM outright: SIGSEGV
+     * inside onnxruntime's thread pool, mid-MatMul, on a machine with 8 GB and no room to spare.
+     *
+     * <p>Those vectors already exist. {@code sync} embeds every issue it stores, so the query
+     * vector for an issue can be read rather than recomputed, and the inference count for a run of
+     * {@code pick} goes from thousands to zero.
+     */
+    public List<Hit> searchByVector(double[] query, int limit) throws IOException {
+        if (docs.isEmpty() || query == null) {
+            return List.of();
+        }
+        return rank(query, limit);
+    }
+
+    /** True when this corpus compares by meaning, so a caller knows whether a vector is worth having. */
+    public boolean bySimilarity() {
+        return embedder != null;
+    }
+
     // ------------------------------------------------------------------ meaning ---
 
     private List<Hit> bySimilarity(String query, int limit) throws IOException {
-        double[] q = embedder.embed(query);
+        return rank(embedder.embed(query), limit);
+    }
+
+    /** Compare one query vector against every document. Shared, so the two entry points cannot drift. */
+    private List<Hit> rank(double[] q, int limit) throws IOException {
         double floor = floor();
         List<Hit> out = new ArrayList<>();
         for (Doc d : docs) {

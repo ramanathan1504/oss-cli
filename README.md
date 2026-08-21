@@ -72,23 +72,30 @@ Every capability is a layer, and each is optional. The tool reports which layers
 
 | You have | You get |
 |---|---|
-| A GitHub token only | Sync, issue tracking, PR facts, commits, diffs, CI state, and convention checks |
+| A GitHub token only | Sync, issue tracking, PR facts, commits, diffs, CI state, convention checks — and `oss run detect / build / test`, which reads the build file your project already has |
 | ...plus the embedding model | Semantic search, vector indexing, duplicate detection |
 | ...plus a local model | Local answers and PR verdicts |
 | ...plus a cloud API key | Escalation when local context or confidence is not enough |
 | ...plus your own notes | Your history and past reasoning blended into retrieval |
-| ...plus a `pack.json` | The built-in engine runs *your* applications across *your* versions |
+| ...plus a `pack.json` | The built-in engine runs *your* applications across *your* versions — `oss run init` writes the first draft of one |
 | ...plus a `kb.json` | The knowledge base points at your own archive, with your topics and yardsticks |
 
 A brand-new user with none of the optional pieces still gets working commands. Missing layers print one line saying what they would add and how to enable them — never a hard failure.
 
 ---
 
-## 🛠 Prerequisites
+## 🛠 What you need
 
-* **Java 17**
-* **Apache Maven**
+**A GitHub token. That is the whole list.**
+
+The published archives carry their own Java runtime — built with `jlink`, one per
+platform — so installing does not mean installing a JDK first. This README used to
+open by asking for Java 17 and Maven, which is a fine answer for a Java developer
+and the wrong one for everybody else, and it contradicted the promise the Homebrew
+formula makes.
+
 * **A GitHub token** — the only hard requirement
+* **Java 17 and Maven** — *only if you build from source.* See [DEVELOPING.md](DEVELOPING.md)
 * **The embedding model** *(optional)* — all-MiniLM-L6-v2, quantised to about 22 MB, Apache-2.0. It runs inside this process; there is no server to install. `oss model --fetch` puts it under `~/.oss-cli/models`, once. Nothing fetches it on your behalf, and until it is there everything that would search by meaning searches by shared terms instead.
 * **Ollama** *(optional)* — local text *generation* only: guidance, triage verdicts and PR verdicts. Nothing indexes or searches through it. Models are your choice; defaults are `llama3.2:3b` and `qwen2.5:0.5b`.
 * **A cloud API key** *(optional)* — any major provider, for escalation
@@ -130,41 +137,56 @@ Retrieval prefers knowledge without discarding reference: reference passages sti
 
 ---
 
-## 🚀 Setup & Installation
+## 🚀 Install
 
-1. **Compile the Project:**
-   ```bash
-   mvn clean package
-   ```
+```bash
+brew install ramanathan1504/oss-cli/oss
+oss setup
+```
 
-2. **Run the Interactive Wizard:**
-   Securely registers your GitHub token, any cloud API keys, local model names, and note folder paths into the SQLite `system_config` table.
-   ```bash
-   oss setup
-   ```
+`setup` is an interactive wizard: it registers your GitHub token, any cloud API
+keys, local model names and note folder paths into the SQLite `system_config`
+table. Nothing is required beyond the token — every prompt after it may be
+skipped.
 
-3. **Install Global Command (macOS/Linux):**
-   ```bash
-   sudo nano /usr/local/bin/oss
-   # Paste: java -jar /absolute/path/to/target/oss-cli-2.2.0.jar "$@"
-   sudo chmod +x /usr/local/bin/oss
-   ```
+Not on Homebrew? Every release carries a self-contained archive for macOS, Linux
+and Windows, and a plain jar for anyone who would rather bring their own Java:
+[releases](https://github.com/ramanathan1504/oss-cli/releases). Full details,
+including what lands where, are in [INSTALL.md](INSTALL.md).
+
+Building from source is [DEVELOPING.md](DEVELOPING.md) — that is the path that
+needs Java 17 and Maven.
 
 ---
 
-## ⏱ Background Automation (macOS Launchd)
+## ⏱ Running it on a schedule, if you want that
 
-The project includes a background daemon (`osscli-master.sh`) that automatically syncs repositories, runs AI severity assessments, rebuilds the vector index, generates weekly reports, sends native desktop notifications for new Hidden Critical threats, and performs automated vault backups.
+This section used to describe `osscli-master.sh` and a `.plist` you edited by
+hand. Neither is in this repository — the script had been deleted and the
+instructions outlived it, which is worse than no instructions: they send a
+reader looking for a file that is not there.
 
-1. Configure `osscli-master.sh` with your correct paths.
-2. Load the macOS `.plist` scheduler:
-   ```bash
-   launchctl load ~/Library/LaunchAgents/osscli.plist
-   ```
-3. Monitor the background service logs:
-   ```bash
-   tail -f ~/.oss-cli/logs/oss-cli.log
-   ```
+The tool installs its own, on the platform you are on — launchd, a systemd user
+timer, or a scheduled task — and **nothing installs itself unasked**:
+
+```bash
+oss memory schedule --install            # harvest your own work daily, 09:15
+oss memory schedule --install --at 07:00 # or whenever suits you
+oss memory schedule                      # what is installed, and is it LOADED
+oss memory schedule --uninstall
+
+oss serve --install                      # the board on :1504 at login
+oss serve --uninstall
+```
+
+A missed run is caught up rather than skipped. `oss memory doctor` answers the
+question a file-based check cannot: whether the schedule is **loaded** rather
+than merely installed — the state a dead job sits in while everything on disk
+looks correct.
+
+```bash
+tail -f ~/.oss-cli/logs/oss-cli.log
+```
 
 ---
 
@@ -266,7 +288,8 @@ oss restore /path/to/sa_brain_backup_20260627_104000.zip
 
 ## 🖥 Desktop UI (Roadmap)
 
-A Tauri-based desktop application (Rust + React) is planned, providing a Warp/Cursor-style interface:
+A Tauri-based desktop application (Rust + React) has been **sketched, not started**.
+No code for it exists in this repository. The shape it would take:
 
 | Panel | Content |
 |---|---|
@@ -278,19 +301,30 @@ A Tauri-based desktop application (Rust + React) is planned, providing a Warp/Cu
 
 ## 💾 Database
 
-The tool uses a zero-configuration SQLite database (`data/issue_intelligence.db`) with an **automatic, non-destructive migration engine**. Schema changes are applied safely at application boot without dropping existing data.
+A zero-configuration SQLite database (`~/.oss-cli/data/issue_intelligence.db`) with an
+**automatic, non-destructive migration engine**: schema changes are applied at boot
+without dropping anything. A fresh database runs the real migrations rather than
+being stamped at the current version, and it starts **empty** — no repository is
+monitored until you add one with `oss sync --add owner/name`.
+
+An older binary meeting a store a newer one has migrated **refuses to run** rather
+than reading a schema it does not understand; `doctor`, `--version` and `--help`
+still work, because taking away the command that explains the refusal is not a fix.
 
 ---
 
-## 📐 New Architecture Modules
+## 📐 What is built, and what is not
 
-Planned and in-progress work:
+This section used to be headed "planned and in-progress" and listed things that
+shipped releases ago. A roadmap that never moves is read as a description of the
+product, so it is split here:
 
-* Retrieval pipeline (9 context source types)
-* Prompt Builder engine and template structure
-* Context organizer, written by the local generation model
-* Streaming JSON API contract
-* Tauri desktop UI architecture
-* Plugin interface for future data sources
-* Database schema additions (`prompt_history`, `prompt_context_chunks`)
-* 8-milestone implementation roadmap
+**Built.** The retrieval pipeline and its context sources; the prompt builder and
+its templates; the context organiser written by the local model; `prompt_history`
+and `prompt_context_chunks` in the schema; the extension interface (`oss-ext.json`,
+attached by path, written in any language); the built-in runner and the built-in
+knowledge base.
+
+**Not built, and not currently being worked on.** A Tauri desktop application, and
+a streaming JSON API contract. They are ideas, not commitments — if either matters
+to you, say so in an issue rather than waiting.
