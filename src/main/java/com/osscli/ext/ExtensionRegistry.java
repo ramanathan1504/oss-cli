@@ -91,6 +91,25 @@ public class ExtensionRegistry {
      * is not a rule anyone would predict.
      */
     public static Extension resolve(Extension.Kind kind, String name) {
+        return resolve(kind, name, null);
+    }
+
+    /**
+     * Resolve, preferring an extension built for the subject in hand.
+     *
+     * <p>Without this, two registered runners meant an error -- "name the one you mean" -- even when
+     * only one of them was built for the repository being worked on and the other could not have
+     * produced anything but a confident answer about the wrong thing. The registry knew both names
+     * and nothing about what either was for.
+     *
+     * <p>Preference, never invention. A subject that narrows the field to one resolves; a subject
+     * that narrows it to several still refuses, listing the narrowed set rather than all of them,
+     * because the remaining ambiguity is real and picking "the first registered" is not a rule
+     * anybody could predict. A subject matching nothing changes the answer not at all.
+     *
+     * @param subject the repository being worked on, or null when there is none
+     */
+    public static Extension resolve(Extension.Kind kind, String name, String subject) {
         if (name != null && !name.isBlank()) {
             Extension found = byName(name)
                     .orElseThrow(() ->
@@ -102,6 +121,11 @@ public class ExtensionRegistry {
             return found;
         }
         List<Extension> candidates = ofKind(kind);
+        if (subject != null && !subject.isBlank()) {
+            candidates = prefer(
+                    candidates,
+                    supporting(subject).stream().map(Extension::getName).toList());
+        }
         if (candidates.isEmpty()) {
             throw new IllegalArgumentException(
                     "no " + kind.lower() + " extension is registered -- add one with: oss ext add <path-to-repo>");
@@ -113,6 +137,46 @@ public class ExtensionRegistry {
                     + ") -- name the one you mean with --" + kind.lower() + " <name>");
         }
         return candidates.get(0);
+    }
+
+    /**
+     * Narrow candidates to those built for the subject, or leave them alone.
+     *
+     * <p>Separated from {@link #resolve} because resolve needs a registry file and a database to
+     * say anything at all, and the rule being applied here is worth checking on its own: narrowing
+     * to one resolves, narrowing to none changes nothing, and narrowing to several is still
+     * several. Preference, never invention.
+     */
+    static List<Extension> prefer(List<Extension> candidates, List<String> supporterNames) {
+        List<Extension> preferred = candidates.stream()
+                .filter(e -> supporterNames.contains(e.getName()))
+                .toList();
+        return preferred.isEmpty() ? candidates : preferred;
+    }
+
+    /**
+     * The extensions declaring support for one subject.
+     *
+     * <p>Matched by {@link Attachments#match}, not by a rule of its own. Two spellings of "does this
+     * bench belong to that repository" would drift, and the half that drifted would be whichever one
+     * the reader was not looking at -- {@code ext list} showing a bench nested under a repository
+     * that {@code resolve} then declines to pick for it.
+     */
+    public static List<Extension> supporting(String subject) {
+        List<Extension> out = new ArrayList<>();
+        if (subject == null || subject.isBlank()) {
+            return out;
+        }
+        for (Extension ext : all()) {
+            String declared = ext.getSupports();
+            if (declared == null || declared.isBlank()) {
+                continue;
+            }
+            if (Attachments.match(declared, List.of(subject)).equalsIgnoreCase(subject)) {
+                out.add(ext);
+            }
+        }
+        return out;
     }
 
     /**
