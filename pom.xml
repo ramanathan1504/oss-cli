@@ -69,7 +69,28 @@
         <dependency>
             <groupId>com.microsoft.onnxruntime</groupId>
             <artifactId>onnxruntime</artifactId>
-            <version>1.29.0</version>
+            <!--
+              PINNED. Do not bump without re-embedding the corpus first.
+
+              1.29 runs the same model and does not produce the same vectors. Measured by embedding
+              30 real passages from a live store with both runtimes: cosine between the two
+              versions of the SAME text is 0.9978 median, 0.9930 worst, and 25 of 30 fall below
+              0.999. That is a kernel difference in a quantised model, not rounding.
+
+              Nothing would catch the mix. Every vector is stored with the model that produced it
+              and every read filters on that — but the model name is identical here, so vectors
+              written by 1.22 and queried by 1.29 compare as though they share a space they do not
+              quite share. This repository's own rule: vectors from different models are never
+              comparable, and 384 dimensions on both sides means the shape check cannot see it.
+
+              1.29 also ships no osx-x64 native, so it drops Intel Macs (see LocalEmbedder's
+              unsupportedPlatformNote, which stays as the guard for when this does move).
+
+              Moving to it is a deliberate operation, not a version bump: re-embed every passage,
+              every note and every issue in one pass, and put the runtime in the provenance so the
+              next one is detectable.
+            -->
+            <version>1.22.0</version>
         </dependency>
 
         <!--
