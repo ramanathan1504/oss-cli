@@ -78,8 +78,38 @@ public final class LocalEmbedder implements AutoCloseable {
             OrtSession session = env.createSession(MODEL.toString(), new OrtSession.SessionOptions());
             return new LocalEmbedder(env, session, new WordPiece(VOCAB));
         } catch (Exception e) {
-            throw new IOException("could not load the local model: " + e.getMessage(), e);
+            throw new IOException(
+                    "could not load the local model: " + e.getMessage()
+                            + unsupportedPlatformNote(
+                                    System.getProperty("os.name", ""), System.getProperty("os.arch", "")),
+                    e);
         }
+    }
+
+    /**
+     * Why it may not load on this machine, when the machine is the reason.
+     *
+     * <p>onnxruntime 1.29 ships no {@code osx-x64} native. The 1.22 jar carried a 35.7 MB
+     * {@code libonnxruntime.dylib} for Intel Macs; the 1.29 jar has none, so on that hardware the
+     * loader fails with a message about a missing library, which reads as a broken install.
+     *
+     * <p>It is not broken and it is not fixable here — upstream dropped the platform. What the
+     * reader needs is the difference between "something is wrong with my setup" and "this hardware
+     * no longer has a build", because only one of those is worth an hour of their evening. Search
+     * still works by term, which is the floor this tool is built on.
+     */
+    static String unsupportedPlatformNote(String osName, String arch) {
+        boolean mac = osName.toLowerCase(java.util.Locale.ROOT).contains("mac");
+        boolean intel = arch.equals("x86_64") || arch.equals("amd64");
+        if (!mac || !intel) {
+            return "";
+        }
+        return System.lineSeparator()
+                + "       onnxruntime ships no Intel-Mac build after 1.22, so there is no library here"
+                + System.lineSeparator()
+                + "       to load. Nothing is misconfigured. Search still answers by term, and the"
+                + System.lineSeparator()
+                + "       cloud engines are unaffected: oss claude, oss gemini, oss codex.";
     }
 
     /** Download to a temporary file and move into place, so an interrupted fetch is never loaded. */
