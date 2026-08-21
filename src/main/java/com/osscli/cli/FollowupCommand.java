@@ -119,11 +119,35 @@ public class FollowupCommand implements Callable<Integer> {
                 System.out.println("  oss followup --record <pr> --repo owner/name --verdict take");
                 return 0;
             }
+            // Same silence as hub, same cause: an API call per row. A single row is quick and
+            // needs no line about itself; a ledger of seventeen is three quarters of a minute.
+            com.osscli.ui.Live live =
+                    only != null ? null : com.osscli.ui.Live.start("checking " + rows.size() + " recorded review(s)");
+            int checked = 0;
             for (ReviewLedger.Row r : rows) {
                 if (only != null && r.pr != only) {
                     continue;
                 }
+                checked++;
+                if (live != null) {
+                    live.step(checked + " of " + rows.size() + " — " + r.repo + "#" + r.pr);
+                }
                 report(r);
+            }
+            if (live != null) {
+                live.done(checked + " checked");
+            }
+            if (only != null && checked == 0) {
+                // `oss followup 4249` printed nothing and exited 0 -- the filter matched no row and
+                // the loop body simply never ran. Silence with a success code is the worst answer
+                // available: it reads as "there is nothing to say about that pull request", when
+                // what is true is "you never recorded one". The board already had this sentence;
+                // the command it runs did not.
+                System.out.println("  nothing recorded for #" + only + " — this lists what you have reviewed.");
+                System.out.println();
+                System.out.println("  oss followup --record " + only + " --repo owner/name --verdict take");
+                System.out.println("  oss followup                 every recorded review, one line each");
+                return 1;
             }
             if (com.osscli.github.Reachability.seen()) {
                 // Every row printed the bare word "unreachable", which reads as a fact about those

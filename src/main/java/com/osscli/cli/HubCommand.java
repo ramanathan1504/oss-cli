@@ -59,10 +59,17 @@ public class HubCommand implements Callable<Integer> {
         List<Item> theirs = new ArrayList<>();
         int unreachable = 0;
 
+        // One API call per recorded review, and nothing said until all of them are back: 44 seconds
+        // of blank terminal on a 17-row ledger, measured on the installed build. The rule this
+        // repository states is that anything slower than a second reports what it is doing, and a
+        // command that reads a network in a loop is the case the rule was written for.
+        com.osscli.ui.Live live = com.osscli.ui.Live.start("reading " + rows.size() + " recorded review(s)");
+        int checked = 0;
         for (ReviewLedger.Row r : rows) {
             if (repo != null && !repo.isBlank() && !r.repo.equalsIgnoreCase(repo.trim())) {
                 continue;
             }
+            live.step(++checked + " of " + rows.size() + " — " + r.repo + "#" + r.pr);
             JsonNode pull = api("/repos/" + r.repo + "/pulls/" + r.pr);
             if (pull == null) {
                 unreachable++;
@@ -92,6 +99,7 @@ public class HubCommand implements Callable<Integer> {
         yours.sort(Comparator.comparing((Item i) -> i.lastAt).reversed());
         theirs.sort(Comparator.comparing((Item i) -> i.lastAt).reversed());
 
+        live.done(checked + " read");
         System.out.println();
         print("Waiting on you", yours, true);
         if (all) {
