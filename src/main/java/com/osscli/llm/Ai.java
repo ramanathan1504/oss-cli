@@ -102,13 +102,16 @@ public final class Ai {
 
         /** The credential this engine needs, if any, and whether it is actually present. */
         public boolean hasCredential() {
+            // find*, not get*. The get* family throws when the key is absent -- correct for a caller
+            // about to make a request, and a crash for one asking whether it can. This is a
+            // predicate; it answers false.
             switch (this) {
                 case CLAUDE:
-                    return present(CredentialManager.getClaudeKey());
+                    return present(CredentialManager.findClaudeKey());
                 case GEMINI:
-                    return present(CredentialManager.getGeminiKey());
+                    return present(CredentialManager.findGeminiKey());
                 case OPENAI:
-                    return present(CredentialManager.getOpenAiKey());
+                    return present(CredentialManager.findOpenAiKey());
                 default:
                     return true;
             }

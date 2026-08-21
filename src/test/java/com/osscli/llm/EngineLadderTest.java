@@ -16,6 +16,7 @@
  */
 package com.osscli.llm;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -94,6 +95,23 @@ class EngineLadderTest {
         Ai.select(List.of(Ai.Engine.BUILTIN, Ai.Engine.OLLAMA));
         assertTrue(Ai.escalationPath().isEmpty());
         assertFalse(Ai.mayEscalate(), "nothing here leaves the machine");
+    }
+
+    @Test
+    @DisplayName("asking whether a key exists is never itself an error")
+    void askingForAKeyDoesNotThrow() {
+        // This is what CI caught and this machine could not: `hasCredential` read
+        // `CredentialManager.getClaudeKey()`, which THROWS when the key is absent, so the question
+        // "can this engine answer?" raised "Anthropic API Key is missing. Run 'oss setup'" and
+        // logged it at ERROR -- on every machine that simply had no key, which is every runner and
+        // most new installs. It passed here only because this machine happens to have one.
+        for (Ai.Engine engine : Ai.Engine.values()) {
+            assertDoesNotThrow(engine::hasCredential, engine + " must answer, not raise");
+            assertDoesNotThrow(() -> Ai.routeFor(engine), engine + " must resolve a route, not raise");
+        }
+        Ai.select(List.of(Ai.Engine.CLAUDE, Ai.Engine.GEMINI, Ai.Engine.OPENAI));
+        assertDoesNotThrow(Ai::escalationPath);
+        assertDoesNotThrow(Ai::missingCredentials);
     }
 
     @Test
