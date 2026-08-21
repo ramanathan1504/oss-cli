@@ -82,6 +82,63 @@ class BoardPageTest {
     }
 
     @Test
+    @DisplayName("a slow question does not take the whole page down with it")
+    void oneAskDoesNotBlockTheRest() throws Exception {
+        // Measured against the released 2.2.0: with the default executor -- one dispatcher thread,
+        // requests answered in order -- the board fired `hub` as it loaded, `hub` shelled out to a
+        // command that takes tens of seconds against ten repositories, and the PAGE ITSELF never
+        // arrived. A service that cannot serve its own HTML while answering reads as hung.
+        com.sun.net.httpserver.HttpServer server =
+                com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress(0), 0);
+        java.util.concurrent.CountDownLatch slowStarted = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        server.createContext("/slow", x -> {
+            slowStarted.countDown();
+            try {
+                release.await(10, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            x.sendResponseHeaders(200, -1);
+            x.close();
+        });
+        server.createContext("/quick", x -> {
+            x.sendResponseHeaders(204, -1);
+            x.close();
+        });
+        // The same executor the service uses. Built here rather than reached into, because what is
+        // being asserted is the behaviour a pool gives, not the fact that a field was set.
+        server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(6));
+        server.start();
+        try {
+            int port = server.getAddress().getPort();
+            new Thread(() -> get(port, "/slow")).start();
+            assertTrue(slowStarted.await(5, java.util.concurrent.TimeUnit.SECONDS), "the slow request never began");
+
+            // With one thread this blocks until /slow finishes. With a pool it answers now.
+            assertEquals(204, get(port, "/quick"), "a second request must not queue behind a slow one");
+        } finally {
+            release.countDown();
+            server.stop(0);
+        }
+    }
+
+    private static int get(int port, String path) {
+        try {
+            java.net.HttpURLConnection c = (java.net.HttpURLConnection) java.net
+                    .URI
+                    .create("http://localhost:" + port + path)
+                    .toURL()
+                    .openConnection();
+            c.setConnectTimeout(3000);
+            c.setReadTimeout(3000);
+            return c.getResponseCode();
+        } catch (java.io.IOException e) {
+            return -1;
+        }
+    }
+
+    @Test
     @DisplayName("what a command prints about starting up is not shown as its answer")
     void startupChatterIsStripped() {
         String out = "Initializing local SQLite database connection...\n\n  WAITING ON YOU\n    #4229 changes";
