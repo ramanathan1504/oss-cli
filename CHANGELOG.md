@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.2.2
+
+_2026-08-21_
+
+- Forty seconds of blank terminal, and an answer that was silence (#132)
+- Nudged the site before the release was finished (#131)
+
+
 ## 2.2.1
 
 _2026-08-21_
