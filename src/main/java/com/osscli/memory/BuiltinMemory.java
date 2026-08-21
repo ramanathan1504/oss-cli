@@ -343,8 +343,40 @@ public final class BuiltinMemory {
             harvestSessions();
         }
         com.osscli.schedule.DailyJob.record(true, written + " item(s) for " + user);
-        System.out.println("  oss memory index      reads them into the corpus");
+        embedWhatWasWritten();
         return 0;
+    }
+
+    /**
+     * Turn what harvest just wrote into vectors, in the same run.
+     *
+     * <p>Otherwise the daily job is a machine that writes notes nobody can find. Only the embedding
+     * step makes a note reachable by {@code chat}, {@code guide}, {@code pick} and {@code prompt},
+     * and the scheduled command is {@code oss memory harvest} — so a laptop could harvest every
+     * morning for a month and answer from none of it. Measured before this: 23 PR reviews on disk,
+     * 19 embedded, the four newest invisible.
+     *
+     * <p>Only the built-in store, which is where harvest writes. The folders in {@code drive.paths}
+     * stay {@code sync --me}'s job: they can be an archive that streams from the cloud, and a
+     * background job is the worst possible place to start downloading 800 files.
+     *
+     * <p>Not acting unasked. It indexes the notes this command created, on the run that created
+     * them, with the model that already ships — no network, no download, nothing fetched.
+     */
+    private static void embedWhatWasWritten() {
+        com.osscli.retrieval.LocalEmbedder embedder =
+                com.osscli.retrieval.Embeddings.ifPresent(m -> System.out.println("  " + m));
+        if (embedder == null) {
+            // The floor still holds: the notes are on disk and `memory search` finds them by term.
+            // Saying which half you have beats implying you have both.
+            System.out.println("  no embedding model, so these are searchable by term and not by meaning");
+            System.out.println("  oss model --fetch     22 MB, once");
+            return;
+        }
+        System.out.println("  indexing what was written…");
+        com.osscli.retrieval.NoteIndexer.index(
+                java.util.List.of(DIR.toString()), embedder, com.osscli.retrieval.Embeddings.MODEL);
+        System.out.println("  indexed — chat, guide, pick and prompt can see them now");
     }
 
     /**

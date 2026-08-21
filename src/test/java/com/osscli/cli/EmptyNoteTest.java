@@ -31,15 +31,15 @@ class EmptyNoteTest {
         // Found in a real corpus: six 0-byte files, each with a full 8,059-byte vector, each the
         // embedding of the empty string — so identical to one another and equidistant from every
         // query. They matched everything at the same score and crowded out real passages.
-        assertFalse(SyncCommand.worthIndexing(""));
-        assertFalse(SyncCommand.worthIndexing("   \n\t  \n"));
-        assertFalse(SyncCommand.worthIndexing(null));
+        assertFalse(com.osscli.retrieval.NoteIndexer.worthIndexing(""));
+        assertFalse(com.osscli.retrieval.NoteIndexer.worthIndexing("   \n\t  \n"));
+        assertFalse(com.osscli.retrieval.NoteIndexer.worthIndexing(null));
     }
 
     @Test
     @DisplayName("a note with anything in it still is")
     void contentIsIndexed() {
-        assertTrue(SyncCommand.worthIndexing("a"));
-        assertTrue(SyncCommand.worthIndexing("# heading\n\nsome notes about appenders\n"));
+        assertTrue(com.osscli.retrieval.NoteIndexer.worthIndexing("a"));
+        assertTrue(com.osscli.retrieval.NoteIndexer.worthIndexing("# heading\n\nsome notes about appenders\n"));
     }
 }
