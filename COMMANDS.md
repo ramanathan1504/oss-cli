@@ -865,10 +865,27 @@ oss memory schedule --uninstall
 A missed run is caught up rather than skipped: a laptop that was closed at 09:15 harvests when it
 wakes. The job exits when it is done — it is not a service, and nothing here keeps it alive.
 
-`oss memory doctor` is the other half of that, and it answers the three questions `oss doctor`
-cannot: is the archive reachable, did the last run succeed, and is the schedule **loaded** rather
-than merely installed. That last distinction is where a dead job hides — the file is still on disk,
-so anything checking for the file reports that everything is fine.
+`oss memory doctor` is the other half of that, and it answers the questions `oss doctor` cannot: is
+the archive reachable, did the last run succeed, is the schedule **loaded** rather than merely
+installed, and **is anything in the archive outside the folders that index it**. The schedule
+distinction is where a dead job hides — the file is still on disk, so anything checking for the file
+reports that everything is fine.
+
+That last one is a gap you cannot see from either end. `kb.json` names an archive; `drive.paths`
+lists the folders `sync --me` walks; a note in the tree but under no listed folder is read by
+nothing and found by nothing. Measured on one machine: 153 notes — the archive root, `Personal/`,
+`Blog/` — indexed by nothing and reported by nothing until this check existed.
+
+```
+[ warn ] not indexed — 153 note(s) in the archive are outside drive.paths
+         nothing reads those folders, so nothing can find them — oss setup,
+         or point drive.paths at the archive itself
+```
+
+It counts against what `sync --me` actually reads rather than against the whole archive. The first
+version of this check compared vector rows to every note under `kb.json`'s archive, which are
+different sets, so it warned after a flawless sync — and a warning that cannot be cleared is one
+people learn to skip.
 
 A fresh install reads as a warning, not a failure. The archive folder appears when you file the
 first note, and telling a new user their working install is broken is worse than saying nothing.
