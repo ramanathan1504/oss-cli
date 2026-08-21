@@ -18,6 +18,7 @@ package com.osscli.cli;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.osscli.memory.VoiceProfile;
 import com.osscli.model.RepoProfile;
 import com.osscli.profile.RepoProfileBuilder;
 import com.osscli.storage.SqliteStorage;
@@ -55,8 +56,16 @@ public class ProfileCommand implements Callable<Integer> {
             description = "Re-read the repository even if a profile is already stored")
     private boolean rebuild;
 
+    @Option(
+            names = {"--me"},
+            description = "Profile how YOU write, from text you authored, instead of a repository")
+    private boolean me;
+
     @Override
     public Integer call() throws Exception {
+        if (me) {
+            return profileMe();
+        }
         if (repository == null) {
             repository = SqliteStorage.loadConfig("default.repository");
             if (repository == null || repository.isBlank()) {
@@ -118,5 +127,31 @@ public class ProfileCommand implements Callable<Integer> {
 
     private String orUnknown(String s) {
         return s == null || s.isBlank() ? "unknown" : s;
+    }
+
+    /**
+     * How the user writes, measured and filed as markdown.
+     *
+     * <p>Written to the memory directory rather than only printed, because everything else this
+     * tool knows lives there as a file that can be read, corrected and indexed. A voice profile the
+     * user cannot open and disagree with is one they have to take on trust.
+     */
+    private Integer profileMe() throws Exception {
+        VoiceProfile profile = VoiceProfile.ofThisMachine();
+        java.nio.file.Path out = com.osscli.AppPaths.BASE_DIR.resolve("memory").resolve("voice.md");
+        java.nio.file.Files.createDirectories(out.getParent());
+        java.nio.file.Files.writeString(out, profile.markdown());
+
+        System.out.println(profile.markdown());
+        System.out.println("  filed at " + out);
+        if (!profile.confident()) {
+            // Loud, and specific about the remedy. The corpus being full of prose is exactly what
+            // makes this failure quiet: 1,874 notes on disk and almost none of them the user's.
+            System.out.println();
+            System.out.println("  Only text you authored counts — harvested threads and generated");
+            System.out.println("  notes are somebody else's voice, including this tool's own.");
+            System.out.println("  Nothing is added to a prompt until there are " + VoiceProfile.ENOUGH + ".");
+        }
+        return 0;
     }
 }

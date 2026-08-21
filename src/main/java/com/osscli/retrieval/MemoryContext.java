@@ -91,9 +91,25 @@ public final class MemoryContext {
      */
     private static String attached() {
         try {
-            return Attachments.forPrompt();
+            return Attachments.forPrompt() + voice();
         } catch (Exception e) {
             LOGGER.debug("attachment block skipped: {}", e.toString());
+            return "";
+        }
+    }
+
+    /**
+     * How the reader writes, when enough of their writing exists to say.
+     *
+     * <p>Empty below the threshold rather than hedged, and that is the whole discipline of it: a
+     * corpus can be full of prose and hold almost none of the user's, so a voice inferred from
+     * whatever is lying around is the tool's own voice handed back as theirs.
+     */
+    private static String voice() {
+        try {
+            return com.osscli.memory.VoiceProfile.ofThisMachine().forPrompt();
+        } catch (Exception e) {
+            LOGGER.debug("voice block skipped: {}", e.toString());
             return "";
         }
     }
