@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.2.3
+
+_2026-08-21_
+
+- The manual said three questions; there are four (#135)
+- A warning that could never clear, over a gap that was real (#134)
+
+
 ## 2.2.2
 
 _2026-08-21_
