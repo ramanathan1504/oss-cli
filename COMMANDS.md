@@ -770,9 +770,13 @@ oss memory index              # read it into the corpus
 oss memory search "…"         # find it again, by meaning
 oss memory map                # which notes touch which topic
 oss memory coverage           # what you have covered, and what you have not
+oss memory gaps               # file the missing half as a note you can search
 oss memory harvest            # pull your own public work on GitHub into the archive
+oss memory harvest --sessions # …and the Claude Code / codex / gemini transcripts on this machine
 oss memory digest             # what you actually worked out, per topic
 oss memory import <folder>    # a chat product's data export, redacted
+oss memory schedule --install # run the harvest daily, at a time you pick
+oss memory doctor             # is any of this actually working
 ```
 
 `harvest` is the one verb here that needs the network. It searches for everything you were
@@ -796,9 +800,20 @@ read.
 labelling each — what was agreed on a thread and what was reasoned in a conversation are different
 kinds of evidence, and merging them reads as one account when it is two.
 
-`import` is for the products that keep nothing on your machine. Claude Code, codex and gemini write
-their sessions to disk, so `harvest` can go and get them; ChatGPT, Claude.ai and AI Studio do not, so
-the only route in is the export you download. **Secrets are redacted rather than dropped** — a real
+`harvest --sessions` reads the transcripts the CLIs on this machine already wrote — Claude Code,
+codex and gemini each keep every session on disk. That is the half of the record that never reaches
+GitHub: the reasoning, the wrong turn taken first, the command that finally worked. It needs no
+network and no token, so it works on a machine that has neither. `--sessions-only` skips the GitHub
+half entirely.
+
+Each transcript is **budgeted, not concatenated** — the newest turns of the newest sessions, with
+the path to the full file — and anything read past the cap is counted and reported. Only the two
+speakers are kept; tool calls and their output are skipped, which is both the bulk of a transcript
+and where the keys and file contents are. What is left is redacted anyway: a real run over this
+machine's own transcripts replaced two sets of database credentials and a password.
+
+`import` is for the products that keep nothing on your machine. ChatGPT, Claude.ai and AI Studio
+write nothing here, so the only route in is the export you download. **Secrets are redacted rather than dropped** — a real
 export carried AWS keys and tokens in seven conversations whose troubleshooting was worth keeping —
 and the original download is never modified. Files that are not text are counted, not silently
 skipped, because an export is mostly screenshots and silence would read as loss.
@@ -828,6 +843,35 @@ Three grades, and the floors are deliberate: an area needs **3 mentions in a not
 counts for it — one passing use of a word is not knowledge of the subject — and **3 notes** before it
 grades `● covered` rather than `◐ thin`. A single long note that returns to a term forty times is
 one afternoon's reading; three notes that each come back to it is a subject you have worked in.
+
+`gaps` writes the same measurement down instead of printing it. `coverage` scrolls away; the half
+worth keeping is the short list — the areas scoring nothing — and as a note it is retrievable, it
+joins the corpus, and next month's run can be compared against it. It claims only what a count can
+support: an area with no notes is a thing not written down yet.
+
+### Running it daily, if you want that
+
+Nothing here schedules itself. `oss memory schedule --install` asks the operating system to run
+`oss memory harvest` once a day — launchd on macOS, a systemd user timer on Linux, a scheduled task
+on Windows — and `--uninstall` takes it away again:
+
+```bash
+oss memory schedule                      # what is installed, and is the system holding it
+oss memory schedule --install            # every day at 09:15
+oss memory schedule --install --at 07:00 # or whenever suits you
+oss memory schedule --uninstall
+```
+
+A missed run is caught up rather than skipped: a laptop that was closed at 09:15 harvests when it
+wakes. The job exits when it is done — it is not a service, and nothing here keeps it alive.
+
+`oss memory doctor` is the other half of that, and it answers the three questions `oss doctor`
+cannot: is the archive reachable, did the last run succeed, and is the schedule **loaded** rather
+than merely installed. That last distinction is where a dead job hides — the file is still on disk,
+so anything checking for the file reports that everything is fine.
+
+A fresh install reads as a warning, not a failure. The archive folder appears when you file the
+first note, and telling a new user their working install is broken is worse than saying nothing.
 
 Matching is literal and case-insensitive on purpose. A model deciding whether a note is "about" an
 area turns a measurement into an opinion, and makes the number move when nothing was written.

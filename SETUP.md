@@ -150,6 +150,27 @@ thing in the corpus, and a single passage of it can outweigh a whole note.
   On one real setup this folder alone was 93% of the derived layer.
 - **Link indexes and graph files.** A list of links has no prose to match on.
 
+### The transcripts already on this machine
+
+`oss memory harvest --sessions` reads what Claude Code, codex and gemini wrote
+to disk — every session each of them kept. That is the half of the record that
+never reaches GitHub, and it needs no network and no token, so it works on a
+machine that has neither.
+
+It is budgeted rather than concatenated: the newest turns of the newest
+sessions, with the path to the full transcript, and whatever the cap dropped is
+counted and said out loud. Only the two speakers are kept — tool calls and their
+output are both the bulk of a transcript and where the keys and file contents
+are. What survives is redacted anyway. On one real machine a first run replaced
+two sets of database credentials and a password, in conversations whose
+troubleshooting was the part worth keeping.
+
+`oss memory schedule --install` runs the whole harvest daily if you want that,
+and nothing installs it for you. `oss memory doctor` says whether it worked —
+including whether the job is **loaded** rather than merely installed, which is
+the state a dead scheduled job sits in while every file-based check reports
+that everything is fine.
+
 ### Harvesting whole repositories, and what that changes
 
 A harvester usually collects the threads you were involved in. The companion

@@ -1,11 +1,11 @@
 package com.osscli.serve;
 
 import com.osscli.AppPaths;
+import com.osscli.schedule.Platforms;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Locale;
 import java.util.stream.Collectors;
 
 /**
@@ -34,34 +34,20 @@ final class Autostart {
 
     private Autostart() {}
 
-    enum Platform {
-        MAC,
-        LINUX,
-        WINDOWS,
-        UNKNOWN;
-
-        static Platform detect() {
-            String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
-            if (os.contains("mac") || os.contains("darwin")) {
-                return MAC;
-            }
-            if (os.contains("win")) {
-                return WINDOWS;
-            }
-            // Everything else with a POSIX shell is treated as Linux-like. systemd --user is
-            // present on every mainstream desktop distribution, and the failure when it is not is
-            // reported rather than guessed at.
-            if (os.contains("nux") || os.contains("nix") || os.contains("aix") || os.contains("bsd")) {
-                return LINUX;
-            }
-            return UNKNOWN;
-        }
+    /**
+     * The shared platform detection, named locally so the switches below stay readable.
+     *
+     * <p>It used to be a second enum with a second copy of the os.name rules. Two copies of "what
+     * kind of machine is this" is how one job learns about a platform and the other does not.
+     */
+    private static Platforms.Platform platform() {
+        return Platforms.Platform.detect();
     }
 
     /** Where the unit/plist/marker lives, so uninstall and status can find it. */
     static Path descriptor() {
         String home = System.getProperty("user.home");
-        return switch (Platform.detect()) {
+        return switch (platform()) {
             case MAC -> Path.of(home, "Library", "LaunchAgents", LABEL + ".plist");
             case LINUX -> Path.of(home, ".config", "systemd", "user", UNIT + ".service");
             // Windows keeps its definition inside the Task Scheduler rather than in a file we own,
@@ -76,47 +62,14 @@ final class Autostart {
         return Files.exists(descriptor());
     }
 
-    /**
-     * A name for this program that survives an upgrade, or null if there is not one.
-     *
-     * <p>Recording the resolved jar was the obvious thing and it is wrong, because the path it
-     * resolves to is a versioned directory. Installed from Homebrew, the agent came out pinned to
-     * {@code /opt/homebrew/Cellar/oss/1.11.10/libexec/lib/oss.jar} — and the very next
-     * {@code brew upgrade} deletes that directory. The service then fails at every login into a log
-     * nobody reads, which is precisely how a sibling launch agent stayed dead for four days.
-     *
-     * <p>A launcher on {@code PATH} is the stable handle: Homebrew re-points
-     * {@code /opt/homebrew/bin/oss} on every upgrade, and a shim in {@code ~/.local/bin} is chosen
-     * by its owner and stays put. Whatever {@code oss} means when typed is what the service should
-     * run.
-     *
-     * <p>Falls back to the jar when there is no launcher — a jar run directly from a build tree has
-     * no stable name, and a pinned path still beats no service at all.
-     */
+    /** The stable name for this program — one lookup, shared with the daily job. */
     static Path launcher() {
-        String path = System.getenv("PATH");
-        if (path == null || path.isBlank()) {
-            return null;
-        }
-        boolean windows = Platform.detect() == Platform.WINDOWS;
-        for (String dir : path.split(java.io.File.pathSeparator)) {
-            if (dir.isBlank()) {
-                continue;
-            }
-            for (String name : windows ? new String[] {"oss.bat", "oss.cmd", "oss.exe"} : new String[] {"oss"}) {
-                Path candidate = Path.of(dir, name);
-                if (Files.isExecutable(candidate) && !Files.isDirectory(candidate)) {
-                    return candidate;
-                }
-            }
-        }
-        return null;
+        return Platforms.launcher();
     }
 
     /** How to start this program, preferring the name that outlives a version. */
     static List<String> startCommand(Path jvm, Path jar) {
-        Path stable = launcher();
-        return stable != null ? List.of(stable.toString()) : List.of(jvm.toString(), "-jar", jar.toString());
+        return Platforms.startCommand(jvm, jar);
     }
 
     /**
@@ -130,8 +83,9 @@ final class Autostart {
      * unrelated to anything anyone did.
      */
     static String plistFor(List<String> start, int port, Path out, Path err) {
-        String plistArgs =
-                start.stream().map(a -> "<string>" + xml(a) + "</string>").collect(Collectors.joining());
+        String plistArgs = start.stream()
+                .map(a -> "<string>" + Platforms.xml(a) + "</string>")
+                .collect(Collectors.joining());
         return """
                 <?xml version="1.0" encoding="UTF-8"?>
                 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" \
@@ -150,26 +104,7 @@ final class Autostart {
                   <key>StandardOutPath</key><string>%s</string>
                   <key>StandardErrorPath</key><string>%s</string>
                 </dict></plist>
-                """.formatted(LABEL, plistArgs, port, xml(out.toString()), xml(err.toString()));
-    }
-
-    /**
-     * XML-escapes a value going into the plist.
-     *
-     * <p>Every path here comes from the filesystem, and {@code &}, {@code <} and {@code >} are all
-     * legal in one. Interpolated raw, a home directory like {@code /Users/R&D} produces a plist that
-     * is not XML -- and launchd does not complain when you install it, it declines to start the job
-     * at the next boot, which is the furthest possible point from the mistake.
-     *
-     * <p>The existing test does parse the plist as XML rather than grepping it, which is the right
-     * check; it was only ever given paths that could not break it. {@code plutil -lint}, Apple's own
-     * parser, rejected all four of the ones with an ampersand in them.
-     */
-    private static String xml(String value) {
-        return value.replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;");
+                """.formatted(LABEL, plistArgs, port, Platforms.xml(out.toString()), Platforms.xml(err.toString()));
     }
 
     /** The systemd user unit, for the same reason. */
@@ -189,34 +124,10 @@ final class Autostart {
                 [Install]
                 WantedBy=default.target
                 """.formatted(
-                        start.stream().map(Autostart::unitArg).collect(Collectors.joining(" ")),
+                        start.stream().map(Platforms::unitArg).collect(Collectors.joining(" ")),
                         port,
-                        unitValue(out.toString()),
-                        unitValue(err.toString()));
-    }
-
-    /**
-     * One ExecStart argument, quoted the way systemd expects.
-     *
-     * <p>ExecStart is split on whitespace, so an unquoted install path containing a space is read as
-     * a command plus arguments. systemd-analyze on a path like {@code /Users/a b/oss} reports
-     * {@code Command /Users/a is not executable} -- and at boot that is a service that installs
-     * cleanly and never starts. The Windows command has quoted its arguments since it was written,
-     * for exactly this reason; this one did not, because no machine here could run it to find out.
-     */
-    private static String unitArg(String value) {
-        return "\"" + unitValue(value).replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
-    }
-
-    /**
-     * A literal value in a unit file.
-     *
-     * <p>{@code %} introduces a specifier to systemd -- {@code %h} is the user's home, {@code %i}
-     * the instance name -- so a path containing one is silently rewritten into a different path. A
-     * literal percent is written as two.
-     */
-    private static String unitValue(String value) {
-        return value.replace("%", "%%");
+                        Platforms.unitValue(out.toString()),
+                        Platforms.unitValue(err.toString()));
     }
 
     /** What the Task Scheduler is asked to run. */
@@ -231,7 +142,7 @@ final class Autostart {
      * @return a human sentence describing what happened, or null if the platform is unsupported
      */
     static String install(Path jvm, Path jar, int port) throws IOException {
-        Platform platform = Platform.detect();
+        Platforms.Platform platform = platform();
         Path out = AppPaths.BASE_DIR.resolve("logs").resolve("serve.out.log");
         Path err = AppPaths.BASE_DIR.resolve("logs").resolve("serve.err.log");
         Files.createDirectories(out.getParent());
@@ -246,8 +157,8 @@ final class Autostart {
                 Files.writeString(p, plist);
                 // bootout first, so install doubles as "apply a change" -- without it, editing the
                 // port and re-installing leaves the old agent running on the old one.
-                exec("launchctl", "bootout", "gui/" + uid() + "/" + LABEL);
-                int rc = exec("launchctl", "bootstrap", "gui/" + uid(), p.toString());
+                Platforms.exec("launchctl", "bootout", "gui/" + Platforms.uid() + "/" + LABEL);
+                int rc = Platforms.exec("launchctl", "bootstrap", "gui/" + Platforms.uid(), p.toString());
                 return rc == 0 ? "launchd agent installed: " + p : null;
             }
             case LINUX -> {
@@ -255,15 +166,15 @@ final class Autostart {
                 Path p = descriptor();
                 Files.createDirectories(p.getParent());
                 Files.writeString(p, unit);
-                exec("systemctl", "--user", "daemon-reload");
-                int rc = exec("systemctl", "--user", "enable", "--now", UNIT + ".service");
+                Platforms.exec("systemctl", "--user", "daemon-reload");
+                int rc = Platforms.exec("systemctl", "--user", "enable", "--now", UNIT + ".service");
                 if (rc != 0) {
                     return null;
                 }
                 // Without lingering, a user service stops at logout -- which looks like it randomly
                 // dies. Best-effort: it needs privileges that may not be there, and the service
                 // still works within a session without it.
-                exec("loginctl", "enable-linger", System.getProperty("user.name", ""));
+                Platforms.exec("loginctl", "enable-linger", System.getProperty("user.name", ""));
                 return "systemd user service installed: " + p;
             }
             case WINDOWS -> {
@@ -271,8 +182,8 @@ final class Autostart {
                 // inspected with the tools an administrator already has, and does not depend on a
                 // shell being launched.
                 String cmd = taskCommandFor(start, port);
-                exec("schtasks", "/delete", "/tn", TASK, "/f");
-                int rc = exec("schtasks", "/create", "/tn", TASK, "/tr", cmd, "/sc", "onlogon", "/f");
+                Platforms.exec("schtasks", "/delete", "/tn", TASK, "/f");
+                int rc = Platforms.exec("schtasks", "/create", "/tn", TASK, "/tr", cmd, "/sc", "onlogon", "/f");
                 if (rc != 0) {
                     return null;
                 }
@@ -290,13 +201,13 @@ final class Autostart {
     /** Remove it. Reports whether anything was there to remove. */
     static boolean uninstall() throws IOException {
         boolean had = isInstalled();
-        switch (Platform.detect()) {
-            case MAC -> exec("launchctl", "bootout", "gui/" + uid() + "/" + LABEL);
+        switch (platform()) {
+            case MAC -> Platforms.exec("launchctl", "bootout", "gui/" + Platforms.uid() + "/" + LABEL);
             case LINUX -> {
-                exec("systemctl", "--user", "disable", "--now", UNIT + ".service");
-                exec("systemctl", "--user", "daemon-reload");
+                Platforms.exec("systemctl", "--user", "disable", "--now", UNIT + ".service");
+                Platforms.exec("systemctl", "--user", "daemon-reload");
             }
-            case WINDOWS -> exec("schtasks", "/delete", "/tn", TASK, "/f");
+            case WINDOWS -> Platforms.exec("schtasks", "/delete", "/tn", TASK, "/f");
             case UNKNOWN -> {
                 // nothing was ever installed
             }
@@ -309,29 +220,5 @@ final class Autostart {
     static String unsupportedAdvice(int port) {
         return "no supported autostart on this platform (" + System.getProperty("os.name") + ").\n"
                 + "  Start it yourself with:  oss serve --no-open --port " + port;
-    }
-
-    private static String uid() {
-        try {
-            Process p = new ProcessBuilder("id", "-u").start();
-            String s = new String(p.getInputStream().readAllBytes()).trim();
-            p.waitFor();
-            return s.isEmpty() ? "501" : s;
-        } catch (Exception e) {
-            return "501";
-        }
-    }
-
-    private static int exec(String... cmd) {
-        try {
-            return new ProcessBuilder(List.of(cmd))
-                    .redirectErrorStream(true)
-                    .start()
-                    .waitFor();
-        } catch (Exception e) {
-            // A missing launchctl/systemctl/schtasks is reported by the caller as "install failed",
-            // which is the truth, rather than as a stack trace nobody can act on.
-            return -1;
-        }
     }
 }

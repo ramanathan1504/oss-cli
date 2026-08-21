@@ -63,6 +63,16 @@ public final class Surface {
     public static Surface current() {
         Map<String, TreeSet<String>> commands = new TreeMap<>();
         collect(new CommandLine(new RootCommand()), "", commands);
+
+        // The built-in memory's verbs are a promise too, and picocli cannot see them: they arrive
+        // as passthrough parameters, so `oss memory digest` is invisible to the walk above while
+        // being exactly as scriptable as any flag. Removing one would have broken somebody's daily
+        // job with the guard reporting no change at all. Recorded as a pseudo-command so the
+        // existing rule -- an entry that disappears is a major -- covers them with no new machinery.
+        // Named within the character set fromJson reads. Angle brackets round-tripped to nothing:
+        // the entry was written, then silently dropped on the way back in, so the guard compared a
+        // surface that had the verbs against one that never did.
+        commands.put("memory builtin-verbs", new TreeSet<>(com.osscli.memory.BuiltinMemory.VERBS));
         return new Surface(DatabaseManager.currentSchemaVersion(), commands);
     }
 

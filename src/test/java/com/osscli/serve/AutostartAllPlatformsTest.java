@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.osscli.schedule.Platforms;
 import java.nio.file.Path;
 import java.util.List;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -233,7 +234,7 @@ class AutostartAllPlatformsTest {
 
         // Guessing a mechanism on an unknown system is how something gets written to a path nobody
         // reads and reported as installed.
-        assertEquals(Autostart.Platform.UNKNOWN, Autostart.Platform.detect());
+        assertEquals(Platforms.Platform.UNKNOWN, Platforms.Platform.detect());
     }
 
     @Test
@@ -241,17 +242,17 @@ class AutostartAllPlatformsTest {
     void platformDetection() {
         for (String mac : List.of("Mac OS X", "Darwin", "mac os x")) {
             pretend(mac);
-            assertEquals(Autostart.Platform.MAC, Autostart.Platform.detect(), mac);
+            assertEquals(Platforms.Platform.MAC, Platforms.Platform.detect(), mac);
             restoreOs();
         }
         for (String linux : List.of("Linux", "FreeBSD", "AIX", "SunOS unix")) {
             pretend(linux);
-            assertEquals(Autostart.Platform.LINUX, Autostart.Platform.detect(), linux);
+            assertEquals(Platforms.Platform.LINUX, Platforms.Platform.detect(), linux);
             restoreOs();
         }
         for (String win : List.of("Windows 10", "Windows Server 2022")) {
             pretend(win);
-            assertEquals(Autostart.Platform.WINDOWS, Autostart.Platform.detect(), win);
+            assertEquals(Platforms.Platform.WINDOWS, Platforms.Platform.detect(), win);
             restoreOs();
         }
     }

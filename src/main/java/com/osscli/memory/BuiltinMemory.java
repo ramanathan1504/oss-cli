@@ -44,8 +44,8 @@ public final class BuiltinMemory {
      * it: {@code oss memory} with no verb has nothing else to offer when no archive is attached.
      * Stated once, so the switch, the error text and the listing cannot disagree.
      */
-    public static final List<String> VERBS =
-            List.of("file", "search", "index", "map", "coverage", "harvest", "digest", "import");
+    public static final List<String> VERBS = List.of(
+            "file", "search", "index", "map", "coverage", "gaps", "harvest", "digest", "import", "schedule", "doctor");
 
     private BuiltinMemory() {}
 
@@ -265,7 +265,16 @@ public final class BuiltinMemory {
      * the review notes learned after six copies of one review accumulated in a real archive.
      */
     private static int harvest(List<String> args) throws IOException {
-        String user = args.isEmpty() ? configuredUser() : args.get(0).strip();
+        // The local transcripts are a separate source with a separate failure mode: they need no
+        // network and no token, so they must not be behind the check for either.
+        boolean wantsSessions = args.contains("--sessions");
+        boolean onlySessions = wantsSessions && args.contains("--sessions-only");
+        if (onlySessions) {
+            return harvestSessions();
+        }
+
+        List<String> rest = args.stream().filter(a -> !a.startsWith("--")).toList();
+        String user = rest.isEmpty() ? configuredUser() : rest.get(0).strip();
         if (user == null || user.isBlank()) {
             System.err.println("error  whose work? oss memory harvest <github-username>");
             System.err.println("       or set one once: oss setup  (github.username)");
@@ -285,6 +294,9 @@ public final class BuiltinMemory {
         } catch (Exception e) {
             System.err.println("error  could not reach GitHub: " + e.getMessage());
             System.err.println("       harvest is the one verb here that needs the network.");
+            // Recorded, so that a scheduled run failing every morning is visible to a command
+            // somebody types rather than only to a log nobody opens.
+            com.osscli.schedule.DailyJob.record(false, "could not reach GitHub: " + e.getMessage());
             return 1;
         }
 
@@ -326,7 +338,56 @@ public final class BuiltinMemory {
                     "  %d match in total — GitHub's search stops at %d, newest first%n",
                     result.totalAvailable(), com.osscli.github.GitHubClient.SEARCH_LIMIT);
         }
+        if (wantsSessions) {
+            System.out.println();
+            harvestSessions();
+        }
+        com.osscli.schedule.DailyJob.record(true, written + " item(s) for " + user);
         System.out.println("  oss memory index      reads them into the corpus");
+        return 0;
+    }
+
+    /**
+     * Collect the sessions the CLIs on this machine already wrote.
+     *
+     * <p>Separate from the GitHub half on purpose: this one needs no network, no token and no
+     * account, so a machine with none of those still gets something out of {@code harvest}. It is
+     * also the half nobody else has — GitHub holds the outcome of the work, these hold the working.
+     */
+    static int harvestSessions() throws IOException {
+        Path home = Path.of(System.getProperty("user.home", "."));
+        List<Path> transcripts = Sessions.discover(home);
+        if (transcripts.isEmpty()) {
+            System.out.println("  no local CLI sessions found under ~/.claude, ~/.codex or ~/.gemini");
+            return 0;
+        }
+
+        Path into = DIR.resolve("sessions");
+        Files.createDirectories(into);
+        int considered = Math.min(transcripts.size(), Sessions.MAX_SESSIONS);
+        int written = 0;
+        int empty = 0;
+        for (Path file : transcripts.subList(0, considered)) {
+            Sessions.Session session = Sessions.read(file);
+            if (!session.worthKeeping()) {
+                empty++;
+                continue;
+            }
+            Files.writeString(
+                    into.resolve(Sessions.nameFor(session)), Sessions.noteFor(session), StandardCharsets.UTF_8);
+            written++;
+        }
+
+        System.out.printf("  wrote %d session note(s) into %s%n", written, into);
+        if (empty > 0) {
+            System.out.printf("  %d transcript(s) held no prose worth keeping — tool calls only%n", empty);
+        }
+        if (transcripts.size() > considered) {
+            // Said out loud, because this is the shape of the bug the GitHub search had: a cap
+            // reported as a total reads as completeness.
+            System.out.printf(
+                    "  %d transcript(s) found in all — the newest %d were read%n", transcripts.size(), considered);
+        }
         return 0;
     }
 
@@ -451,6 +512,12 @@ public final class BuiltinMemory {
                     return digest(args);
                 case "import":
                     return importExport(args);
+                case "gaps":
+                    return gaps();
+                case "schedule":
+                    return schedule(args);
+                case "doctor":
+                    return doctor();
                 default:
                     System.err.println("error  built-in memory has no verb \"" + verb + "\"");
                     System.err.println("       it knows: " + String.join(", ", VERBS));
@@ -534,6 +601,364 @@ public final class BuiltinMemory {
             }
         }
         return 0;
+    }
+
+    // --------------------------------------------------------------------- gaps ---
+
+    /**
+     * Write down what the notes do not cover.
+     *
+     * <p>{@code coverage} prints the scorecard and it scrolls away. The list that matters is the
+     * short one — the areas scoring nothing — and it is only useful if it survives the terminal:
+     * filed as a note, it is retrievable, it goes into the corpus, and next month's run can be
+     * compared against it.
+     *
+     * <p>Nothing here is a judgement about the reader. An area with no notes is a thing not written
+     * down yet, which is the only claim the count can support.
+     */
+    private static int gaps() throws IOException {
+        KnowledgePack pack = KnowledgePack.load();
+        if (pack.yardsticks().isEmpty()) {
+            System.out.println("  no yardstick declared, so nothing can be missing from it.");
+            System.out.println();
+            System.out.println("  A yardstick is what a technology's own manual documents:");
+            System.out.println("  kb.json:  {\"yardsticks\": {\"log4j\": [\"Appenders\", \"Layouts\", \"Lookups\"]}}");
+            System.out.println("  " + AppPaths.BASE_DIR.resolve("kb.json"));
+            return 0;
+        }
+        Path into = DIR.resolve("gaps");
+        Files.createDirectories(into);
+        for (Map.Entry<String, List<String>> tech : pack.yardsticks().entrySet()) {
+            List<Coverage.Area> areas = Coverage.score(pack.archive(), tech.getValue());
+            Path note = into.resolve("gaps-" + slug(tech.getKey()) + ".md");
+            Files.writeString(note, gapNote(tech.getKey(), areas), StandardCharsets.UTF_8);
+            long missing =
+                    areas.stream().filter(a -> a.grade().equals("nothing")).count();
+            long thin = areas.stream().filter(a -> a.grade().equals("thin")).count();
+            System.out.printf(
+                    "  %-16s %d of %d documented areas have nothing, %d are thin -> %s%n",
+                    tech.getKey(), missing, areas.size(), thin, note.getFileName());
+        }
+        System.out.println("  oss memory index      makes them searchable with everything else");
+        return 0;
+    }
+
+    /**
+     * The gap report for one technology.
+     *
+     * <p>Package-private so a test reads the real one rather than restating its rules and then
+     * agreeing with itself.
+     */
+    static String gapNote(String tech, List<Coverage.Area> areas) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("# ").append(tech).append(" — what is not written down\n\n");
+        sb.append("Measured ")
+                .append(LocalDate.now(ZoneOffset.UTC))
+                .append(" against the areas declared in kb.json.\n");
+        sb.append("An area with no notes is a thing not written down yet — that is the whole claim.\n\n");
+
+        List<String> nothing = areas.stream()
+                .filter(a -> a.grade().equals("nothing"))
+                .map(Coverage.Area::name)
+                .toList();
+        List<Coverage.Area> thin =
+                areas.stream().filter(a -> a.grade().equals("thin")).toList();
+        List<Coverage.Area> covered =
+                areas.stream().filter(a -> a.grade().equals("covered")).toList();
+
+        sb.append("## Nothing at all (").append(nothing.size()).append(")\n\n");
+        if (nothing.isEmpty()) {
+            sb.append("Every declared area has at least one note.\n");
+        } else {
+            nothing.forEach(n -> sb.append("- ").append(n).append('\n'));
+        }
+
+        sb.append("\n## Thin — one or two notes (").append(thin.size()).append(")\n\n");
+        if (thin.isEmpty()) {
+            sb.append("None.\n");
+        } else {
+            thin.forEach(a -> sb.append("- ")
+                    .append(a.name())
+                    .append(" — ")
+                    .append(a.notes())
+                    .append(" note(s), strongest: ")
+                    .append(a.strongest().isBlank() ? "—" : a.strongest())
+                    .append('\n'));
+        }
+
+        sb.append("\n## Covered (").append(covered.size()).append(")\n\n");
+        if (covered.isEmpty()) {
+            sb.append("None yet.\n");
+        } else {
+            covered.forEach(a -> sb.append("- ")
+                    .append(a.name())
+                    .append(" — ")
+                    .append(a.notes())
+                    .append(" notes, ")
+                    .append(a.mentions())
+                    .append(" mentions\n"));
+        }
+        return sb.toString();
+    }
+
+    // ----------------------------------------------------------------- schedule ---
+
+    /**
+     * Offer to run the harvest daily — and only when asked.
+     *
+     * <p>The harvest is worth having on a clock: what it collects accumulates whether or not anyone
+     * remembers to type it, and the value of a knowledge base is a function of how little you have
+     * to think about feeding it. But a job that installed itself the first time the tool ran would
+     * be the same broken promise as an unrequested download, so this is a verb.
+     */
+    private static int schedule(List<String> args) throws IOException {
+        boolean install = args.contains("--install");
+        boolean uninstall = args.contains("--uninstall");
+        if (install && uninstall) {
+            System.err.println("error  --install and --uninstall are opposites; pick one");
+            return 2;
+        }
+
+        int hour = com.osscli.schedule.DailyJob.DEFAULT_HOUR;
+        int minute = com.osscli.schedule.DailyJob.DEFAULT_MINUTE;
+        int at = args.indexOf("--at");
+        if (at >= 0) {
+            if (at + 1 >= args.size()) {
+                System.err.println("error  --at needs a time: oss memory schedule --install --at 09:15");
+                return 2;
+            }
+            int[] parsed = parseTime(args.get(at + 1));
+            if (parsed == null) {
+                System.err.println(
+                        "error  --at wants HH:MM in 24-hour time, e.g. 09:15 — got \"" + args.get(at + 1) + "\"");
+                return 2;
+            }
+            hour = parsed[0];
+            minute = parsed[1];
+        }
+
+        if (uninstall) {
+            boolean had = com.osscli.schedule.DailyJob.uninstall();
+            System.out.println(had ? "  removed the daily harvest" : "  there was no daily harvest installed");
+            return 0;
+        }
+        if (!install) {
+            return scheduleStatus();
+        }
+
+        Path jar = ownJar();
+        String said = com.osscli.schedule.DailyJob.install(
+                Path.of(System.getProperty("java.home"), "bin", "java"), jar, hour, minute);
+        if (said == null) {
+            // Refused rather than half-done. Writing a definition into a directory nothing reads
+            // and calling it installed is the failure mode this whole file exists to avoid.
+            System.err.println("  could not install it — " + com.osscli.schedule.DailyJob.unsupportedAdvice());
+            return 1;
+        }
+        System.out.printf("  %s%n", said);
+        System.out.printf("  it will run  oss memory harvest  every day at %02d:%02d%n", hour, minute);
+        System.out.println("  oss memory doctor     tells you whether it is working");
+        System.out.println("  oss memory schedule --uninstall   removes it");
+        return 0;
+    }
+
+    /** {@code HH:MM}, or null when it is not one. */
+    static int[] parseTime(String raw) {
+        if (raw == null || !raw.matches("\\d{1,2}:\\d{2}")) {
+            return null;
+        }
+        String[] parts = raw.split(":");
+        int h = Integer.parseInt(parts[0]);
+        int m = Integer.parseInt(parts[1]);
+        // 24:00 and 09:70 parse as numbers and are not times. launchd accepts them and then never
+        // fires, which is indistinguishable from an install that did not happen.
+        return (h > 23 || m > 59) ? null : new int[] {h, m};
+    }
+
+    private static int scheduleStatus() {
+        boolean installed = com.osscli.schedule.DailyJob.isInstalled();
+        System.out.printf("  daily harvest : %s%n", installed ? "installed" : "not installed");
+        if (installed) {
+            System.out.printf("  definition    : %s%n", com.osscli.schedule.DailyJob.descriptor());
+            System.out.printf(
+                    "  loaded        : %s%n",
+                    com.osscli.schedule.DailyJob.running()
+                            ? "yes"
+                            : "no — the file is there but the system is not holding it");
+        } else {
+            System.out.println("  oss memory schedule --install            every day at 09:15");
+            System.out.println("  oss memory schedule --install --at 07:00 or whenever suits you");
+        }
+        return 0;
+    }
+
+    /** Where this program is, for a scheduler that needs an absolute answer. */
+    private static Path ownJar() {
+        try {
+            return Path.of(BuiltinMemory.class
+                    .getProtectionDomain()
+                    .getCodeSource()
+                    .getLocation()
+                    .toURI());
+        } catch (Exception e) {
+            // Only used when no launcher is on PATH; a missing answer there is reported by install.
+            return Path.of("oss.jar");
+        }
+    }
+
+    // ------------------------------------------------------------------- doctor ---
+
+    /**
+     * Is the memory actually working — not "is it configured".
+     *
+     * <p>{@code oss doctor} answers everything about the install and nothing about this: whether the
+     * archive is reachable, whether the scheduled harvest is succeeding, whether the job is even
+     * loaded. A sibling tool's daily job failed for four days into a log nobody read, and the reason
+     * nobody read it is that no command asked.
+     */
+    /** One line of the health report: what was checked, how it came out, and what to do about it. */
+    public record Check(String name, Status status, String detail, String advice) {
+
+        public enum Status {
+            OK("  ok  "),
+            WARN(" warn "),
+            FAIL(" fail ");
+
+            private final String label;
+
+            Status(String label) {
+                this.label = label;
+            }
+
+            public String label() {
+                return label;
+            }
+        }
+    }
+
+    /**
+     * The health of the memory, as values rather than as printed lines.
+     *
+     * <p>Returned rather than printed so a test can call <em>this</em> instead of restating the
+     * rules and then agreeing with itself. Every rule below is one that is easy to get backwards,
+     * and getting one backwards means telling somebody their working install is broken or their
+     * broken one is fine.
+     */
+    public static List<Check> health(KnowledgePack pack) {
+        List<Check> out = new ArrayList<>();
+        Path archive = pack.archive();
+        boolean reachable = Files.isDirectory(archive);
+        // A fresh install has no ~/.oss-cli/memory yet, and that is not a fault -- it is what
+        // "nothing filed yet" looks like. Reporting it as a failure would greet every new user with
+        // a red line about a folder they were never asked to make. A folder somebody DID name in
+        // kb.json and that is missing is a different matter: for a synced archive it means the
+        // archive has not downloaded, and that is worth acting on.
+        boolean configured = !archive.equals(KnowledgePack.DEFAULT_ARCHIVE);
+        if (reachable) {
+            out.add(new Check("archive", Check.Status.OK, archive.toString(), ""));
+            long notes = countNotes(archive);
+            out.add(new Check(
+                    "notes",
+                    notes > 0 ? Check.Status.OK : Check.Status.WARN,
+                    notes + " markdown file(s)",
+                    notes > 0 ? "" : "oss memory file <path.md>   puts the first one there"));
+        } else if (configured) {
+            out.add(new Check(
+                    "archive",
+                    Check.Status.FAIL,
+                    archive.toString(),
+                    "kb.json names this folder and it is not there right now — "
+                            + "a synced archive that has not downloaded looks exactly like this"));
+        } else {
+            out.add(new Check(
+                    "archive",
+                    Check.Status.WARN,
+                    archive.toString(),
+                    "nothing filed yet — this folder appears when you file the first note: "
+                            + "oss memory file <path.md>"));
+        }
+
+        long items = countNotes(DIR.resolve("harvest")) + countNotes(DIR.resolve("sessions"));
+        out.add(new Check(
+                "harvested",
+                items > 0 ? Check.Status.OK : Check.Status.WARN,
+                items + " item(s)",
+                items > 0 ? "" : "oss memory harvest --sessions"));
+
+        String last = com.osscli.schedule.DailyJob.lastRun();
+        if (last == null) {
+            out.add(new Check("last run", Check.Status.WARN, "never recorded", ""));
+        } else {
+            String[] parts = last.split("\t", 3);
+            boolean ok = parts.length > 0 && "ok".equals(parts[0]);
+            out.add(new Check(
+                    "last run",
+                    ok ? Check.Status.OK : Check.Status.FAIL,
+                    (parts.length > 1 ? parts[1] : "?") + (parts.length > 2 ? " · " + parts[2] : ""),
+                    ok ? "" : com.osscli.schedule.DailyJob.errLog().toString()));
+        }
+
+        boolean installed = com.osscli.schedule.DailyJob.isInstalled();
+        boolean running = installed && com.osscli.schedule.DailyJob.running();
+        if (!installed) {
+            out.add(new Check("schedule", Check.Status.WARN, "not installed", "oss memory schedule --install"));
+        } else if (running) {
+            out.add(new Check(
+                    "schedule",
+                    Check.Status.OK,
+                    "loaded, " + com.osscli.schedule.DailyJob.descriptor().getFileName(),
+                    ""));
+        } else {
+            // The gap between "the file is on disk" and "the system is holding it" is exactly where
+            // a dead agent hides: a check for the file alone reports everything as fine.
+            out.add(new Check(
+                    "schedule",
+                    Check.Status.FAIL,
+                    "installed but NOT loaded",
+                    com.osscli.schedule.DailyJob.descriptor().toString()));
+        }
+        return out;
+    }
+
+    /**
+     * Is the memory actually working — not "is it configured".
+     *
+     * <p>{@code oss doctor} answers everything about the install and nothing about this: whether the
+     * archive is reachable, whether the scheduled harvest is succeeding, whether the job is even
+     * loaded. A sibling tool's daily job failed for four days into a log nobody read, and the reason
+     * nobody read it is that no command asked.
+     */
+    private static int doctor() {
+        System.out.println();
+        System.out.println("  oss memory doctor");
+        System.out.println("  ─────────────────────────────────────────────────────────────");
+        List<Check> checks = health(KnowledgePack.load());
+        for (Check c : checks) {
+            System.out.printf("  [%s] %s — %s%n", c.status().label(), c.name(), c.detail());
+            if (!c.advice().isBlank()) {
+                System.out.println("           " + c.advice());
+            }
+        }
+        System.out.println("  ─────────────────────────────────────────────────────────────");
+        // Reported, not thrown. A health check that exits non-zero on a warning turns "you have not
+        // filed anything yet" into a failed command in somebody's shell prompt.
+        long bad = checks.stream().filter(c -> c.status() == Check.Status.FAIL).count();
+        System.out.println(bad == 0 ? "  Nothing is broken." : "  " + bad + " thing(s) need attention.");
+        return 0;
+    }
+
+    /** Markdown files under a folder, or zero when it is not there. Never throws for an absent one. */
+    static long countNotes(Path folder) {
+        if (!Files.isDirectory(folder)) {
+            return 0L;
+        }
+        try (Stream<Path> walk = Files.walk(folder)) {
+            return walk.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().endsWith(".md"))
+                    .count();
+        } catch (IOException e) {
+            return 0L;
+        }
     }
 
     // --------------------------------------------------------------------- file ---

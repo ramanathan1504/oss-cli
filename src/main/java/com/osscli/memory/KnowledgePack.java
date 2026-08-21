@@ -76,6 +76,18 @@ public final class KnowledgePack {
     }
 
     /**
+     * A pack naming a particular archive, without a file to read it from.
+     *
+     * <p>Exists so the health check can be tested against a folder a test made, rather than against
+     * whatever happens to be on the machine running it. A test that can only assert about the real
+     * archive either asserts nothing or asserts something that is true today.
+     */
+    public static KnowledgePack of(
+            Path archive, Map<String, List<String>> topics, Map<String, List<String>> yardsticks) {
+        return new KnowledgePack(archive, topics, yardsticks);
+    }
+
+    /**
      * The configuration in force, which may be no configuration at all.
      *
      * <p>Never throws for an absent file. A missing {@code kb.json} is the normal state, and a

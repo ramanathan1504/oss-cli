@@ -122,6 +122,12 @@ oss bench followup --since 4234
 oss kb doctor
 ```
 
+The built-in memory answers the same health question with nothing attached:
+
+```bash
+oss memory doctor       # archive reachable? last run? is the schedule loaded?
+```
+
 | Command | Does |
 |---|---|
 | `ext add <path>` | attach, or update an existing entry of the same name |
