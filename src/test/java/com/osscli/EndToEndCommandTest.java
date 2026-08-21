@@ -110,6 +110,18 @@ class EndToEndCommandTest {
     }
 
     @Test
+    @DisplayName("followup on a pull request you never recorded says so instead of nothing")
+    void followupOnAnUnrecordedPr() {
+        // It printed nothing and exited 0. Silence with a success code reads as "there is nothing
+        // to say about that pull request", when what is true is "you never recorded one" -- and
+        // those are opposite answers to someone deciding whether to go and review it.
+        Cli.Result r = Cli.run("followup", "999999");
+
+        assertNotEquals(0, r.exitCode(), "an empty answer must not report success:\n" + r.all());
+        assertTrue(r.says("nothing recorded"), "and must say which it is:\n" + r.all());
+    }
+
+    @Test
     @DisplayName("an unknown command is refused, not ignored")
     void unknownCommandFails() {
         Cli.Result r = Cli.run("definitely-not-a-command");
