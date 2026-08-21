@@ -16,6 +16,7 @@
  */
 package com.osscli.cli;
 
+import com.osscli.ext.Attachments;
 import com.osscli.ext.Extension;
 import com.osscli.ext.ExtensionRegistry;
 import com.osscli.ext.ExtensionRunner;
@@ -106,29 +107,60 @@ public class ExtCommand implements Callable<Integer> {
                 System.out.println();
                 System.out.println("  oss ext add <repo>     a repo with an oss-ext.json at its root");
                 System.out.println("  kinds: runner (executes something real) · memory (remembers)");
+                System.out.println("  \"supports\": \"owner/name\" in that manifest files it under one");
+                System.out.println("                         repository you follow, instead of all of them");
                 return 0;
             }
-            System.out.printf("%-14s %-6s %-9s %s%n", "NAME", "KIND", "STATE", "VERBS");
-            for (Extension e : all) {
-                boolean ok = ExtensionRunner.isReachable(e);
-                boolean stale = ExtensionRegistry.isStale(e);
-                System.out.printf(
-                        "%-14s %-6s %-9s %s%n",
-                        e.getName(),
-                        e.kind().lower(),
-                        !ok ? "MISSING" : stale ? "STALE" : "ok",
-                        String.join(", ", e.getVerbs().keySet()));
-                if (!ok) {
-                    // Naming the path it expected is the difference between "something is wrong"
-                    // and a one-line fix; a moved checkout is the common cause.
-                    System.out.println("               expected: " + e.execPath());
+
+            // Grouped by subject rather than listed flat. A flat table said three runners were
+            // equally applicable to fourteen repositories, which is true of none of them.
+            System.out.printf("%-16s %-7s %-9s %s%n", "  NAME", "KIND", "STATE", "VERBS");
+            int bare = 0;
+            for (Attachments.Pack pack : Attachments.tree()) {
+                if (!pack.supported()) {
+                    bare++;
+                    continue;
                 }
-                if (stale) {
-                    System.out.println("               " + Extension.MANIFEST
-                            + " changed on disk since it was registered — oss ext refresh " + e.getName());
+                System.out.println(pack.name() + (pack.followed() ? "" : "   (not a repository you follow)"));
+                for (Extension e : pack.supporters()) {
+                    row(e);
                 }
             }
+            List<Extension> everywhere = Attachments.unattached();
+            if (!everywhere.isEmpty()) {
+                System.out.println("every subject   (no \"supports\" declared)");
+                for (Extension e : everywhere) {
+                    row(e);
+                }
+            }
+            if (bare > 0) {
+                // Counted, not listed. Hiding them would read as "these are all you follow"; naming
+                // fourteen repositories with nothing attached would bury the ones that have something.
+                System.out.println();
+                System.out.println("  " + bare + " more repository(ies) followed, nothing attached.");
+            }
             return 0;
+        }
+
+        /** One extension, with the state only a live check can know. */
+        private static void row(Extension e) {
+            boolean ok = ExtensionRunner.isReachable(e);
+            boolean stale = ExtensionRegistry.isStale(e);
+            System.out.printf(
+                    "  └─ %-13s %-7s %-9s %s%n",
+                    e.getName(),
+                    e.kind().lower(),
+                    !ok ? "MISSING" : stale ? "STALE" : "ok",
+                    String.join(", ", e.getVerbs().keySet()));
+            if (!ok) {
+                // Naming the path it expected is the difference between "something is wrong"
+                // and a one-line fix; a moved checkout is the common cause.
+                System.out.println("     expected: " + e.execPath());
+            }
+            if (stale) {
+                System.out.println("     " + Extension.MANIFEST
+                        + " changed on disk since it was registered — oss ext refresh " + e.getName());
+            }
         }
     }
 

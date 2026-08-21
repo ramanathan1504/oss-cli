@@ -102,13 +102,16 @@ public final class Ai {
 
         /** The credential this engine needs, if any, and whether it is actually present. */
         public boolean hasCredential() {
+            // find*, not get*. The get* family throws when the key is absent -- correct for a caller
+            // about to make a request, and a crash for one asking whether it can. This is a
+            // predicate; it answers false.
             switch (this) {
                 case CLAUDE:
-                    return present(CredentialManager.getClaudeKey());
+                    return present(CredentialManager.findClaudeKey());
                 case GEMINI:
-                    return present(CredentialManager.getGeminiKey());
+                    return present(CredentialManager.findGeminiKey());
                 case OPENAI:
-                    return present(CredentialManager.getOpenAiKey());
+                    return present(CredentialManager.findOpenAiKey());
                 default:
                     return true;
             }
@@ -214,13 +217,20 @@ public final class Ai {
      * appends rather than replacing.
      */
     /**
-     * Whether the engine should be reached through the provider's own command-line tool.
+     * Whether {@code --cli} was typed, forcing the provider's own command-line tool.
      *
-     * <p>Set by {@code --cli} on the prefix, never inferred. An engine that answers from a
-     * subscription instead of API credit is a different account, a different harness -- the tools
-     * can read files -- and a different answer to "whose model saw my code". The prefix already
-     * exists so that question is settled by the line you typed; choosing the transport silently,
-     * because the API happened to be out of credit, would take that back.
+     * <p>This flag is still never inferred, and the reason has not changed: an engine answering
+     * from a subscription instead of API credit is a different account, a different harness -- the
+     * tools can read files -- and a different answer to "whose model saw my code". Choosing that
+     * transport silently <em>because the API was out of credit</em> would take that back, so a key
+     * that exists and fails still fails, and {@link ApiFailure} names the tool rather than reaching
+     * for it.
+     *
+     * <p><b>Having no key at all is a different situation, and {@link #routeFor} treats it as
+     * one.</b> There is no account to switch away from, no bill to move, and nothing ambiguous
+     * about the intent: {@code oss claude review} with an installed, logged-in {@code claude} and
+     * no {@code ANTHROPIC_API_KEY} used to be a dead end that a flag you had to already know about
+     * was the only way out of. Now the tool answers and says, before it does, which rung replied.
      */
     private static boolean viaCli = false;
 
@@ -253,22 +263,95 @@ public final class Ai {
         return engines().stream().anyMatch(Engine::isExternal);
     }
 
-    /** The external engines to try, in the order typed, skipping any whose key is missing. */
+    /**
+     * How an external engine will actually be reached.
+     *
+     * <p>Two routes exist to the same three providers and they are not interchangeable: the HTTP
+     * API bills a key, the provider's own tool answers on the subscription it is logged in to.
+     * Which one runs used to be decided entirely by whether {@code --cli} was typed, so an engine
+     * with a tool installed and no key was simply unreachable.
+     */
+    public enum Route {
+        /** The provider's HTTP API, against a key. */
+        API,
+        /** The provider's own command-line tool, against the subscription it is signed in to. */
+        CLI,
+        /** Neither. No key, and no tool on the PATH. */
+        NONE
+    }
+
+    /**
+     * The rung this engine can answer on, or {@link Route#NONE} when it cannot answer at all.
+     *
+     * <p>Order: an explicit {@code --cli} wins, because it was typed. Otherwise a key is preferred
+     * -- it is the cheaper, narrower harness, and it is what the reader almost certainly meant by
+     * naming the engine. Only with no key does the installed tool answer, and {@link Cloud} says
+     * so out loud before it does.
+     *
+     * <p>An absent tool under {@code --cli} deliberately still routes to {@link Route#CLI}: the
+     * flag was typed, and {@link CliClient} refuses with the binary's name and the way back, which
+     * is a better answer than this method quietly reporting the engine unreachable.
+     */
+    public static Route routeFor(Engine engine) {
+        boolean external = engine != null && engine.isExternal();
+        return route(viaCli, external, external && engine.hasCredential(), external && cliInstalled(engine));
+    }
+
+    /**
+     * The decision itself, with nothing to look up.
+     *
+     * <p>Separated from {@link #routeFor} because the inputs it needs are a keychain and a PATH:
+     * asked as a whole, this answers differently on the machine that wrote it (where {@code claude}
+     * is installed) than on a CI runner (where it is not), and a rule that can only be tested on
+     * one of them is a rule nobody can check. Here all eight combinations are a table.
+     */
+    static Route route(boolean forcedCli, boolean external, boolean hasKey, boolean toolInstalled) {
+        if (!external) {
+            return Route.NONE;
+        }
+        if (forcedCli) {
+            return Route.CLI;
+        }
+        if (hasKey) {
+            return Route.API;
+        }
+        return toolInstalled ? Route.CLI : Route.NONE;
+    }
+
+    /**
+     * Whether the provider's tool is on the PATH.
+     *
+     * <p>A one second timeout because nothing is executed -- the check resolves a filename against
+     * the PATH -- but the constructor asks for one and a value that could ever be waited on should
+     * not be generous.
+     */
+    private static boolean cliInstalled(Engine engine) {
+        CliClient.Spec spec = CliClient.specFor(engine);
+        return spec != null && new CliClient(spec, 1).available();
+    }
+
+    /**
+     * The external engines to try, in the order typed, skipping any that cannot answer.
+     *
+     * <p>"Cannot answer" is now both routes missing, not the key alone. Filtering on the key was
+     * what made an installed, logged-in tool invisible to escalation: the engine was dropped here,
+     * so nothing downstream ever got the chance to use it.
+     */
     public static List<Engine> escalationPath() {
         List<Engine> out = new ArrayList<>();
         for (Engine e : engines()) {
-            if (e.isExternal() && e.hasCredential()) {
+            if (e.isExternal() && routeFor(e) != Route.NONE) {
                 out.add(e);
             }
         }
         return out;
     }
 
-    /** Named but unusable: the prefix was typed and the key is not there. */
+    /** Named but unusable: the prefix was typed, and there is neither a key nor a tool. */
     public static List<Engine> missingCredentials() {
         List<Engine> out = new ArrayList<>();
         for (Engine e : engines()) {
-            if (e.needsKey() && !e.hasCredential()) {
+            if (e.needsKey() && routeFor(e) == Route.NONE) {
                 out.add(e);
             }
         }

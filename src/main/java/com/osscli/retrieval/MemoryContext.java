@@ -16,6 +16,7 @@
  */
 package com.osscli.retrieval;
 
+import com.osscli.ext.Attachments;
 import com.osscli.model.PromptContextChunk;
 import java.util.ArrayList;
 import java.util.List;
@@ -54,13 +55,19 @@ public final class MemoryContext {
      * fail, exactly as it would for a user who has connected no notes at all.
      */
     public static String forIssue(long issueNumber, String repository) {
+        // Orientation first, and it survives every failure below. What is attached to this machine
+        // is true whether or not the corpus can be read, and a model that has never been told a
+        // bench exists cannot offer to run one -- it can only guess, or stay silent and look as if
+        // there was nothing to offer.
+        String attached = attached();
+
         List<PromptContextChunk> chunks;
         try {
             chunks = ContextRetriever.retrieve(issueNumber, repository);
         } catch (Exception e) {
             LOGGER.warn("  ⚠ Could not retrieve past work: {}", e.getMessage());
             LOGGER.warn("    Answering from the issue alone.");
-            return "";
+            return attached;
         }
 
         List<PromptContextChunk> included = new ArrayList<>();
@@ -71,7 +78,24 @@ public final class MemoryContext {
         }
 
         report(chunks.size(), included);
-        return render(included);
+        return attached + render(included);
+    }
+
+    /**
+     * What is attached, or an empty string.
+     *
+     * <p>Never throws, for the same reason nothing else here does: a decoration that can fail the
+     * command it decorates is worse than one that is absent. Bounded by {@link Attachments} itself
+     * -- an unbudgeted block is what produced a 19 MB prompt, and this one is on the same side of
+     * that lesson as the rest of this class.
+     */
+    private static String attached() {
+        try {
+            return Attachments.forPrompt();
+        } catch (Exception e) {
+            LOGGER.debug("attachment block skipped: {}", e.toString());
+            return "";
+        }
     }
 
     /**

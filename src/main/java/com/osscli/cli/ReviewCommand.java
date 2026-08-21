@@ -529,7 +529,12 @@ public class ReviewCommand implements Callable<Integer> {
     private String escalationProvider() {
         List<com.osscli.llm.Ai.Engine> path = com.osscli.llm.Ai.escalationPath();
         for (com.osscli.llm.Ai.Engine missing : com.osscli.llm.Ai.missingCredentials()) {
-            LOGGER.warn("  ⚠ {} was named and has no key configured — 'oss setup'.", missing.typed());
+            // Both halves named. This list now means neither route exists, so advice that mentions
+            // only the key would send someone to `oss setup` when installing their provider's tool
+            // -- which they may already have for other work -- was equally an answer.
+            LOGGER.warn(
+                    "  ⚠ {} was named and has neither a key nor its command-line tool — 'oss setup', or install the tool and sign in.",
+                    missing.typed());
         }
         if (path.isEmpty()) {
             return null;

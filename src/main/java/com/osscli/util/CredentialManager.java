@@ -120,6 +120,31 @@ public class CredentialManager {
         return requireKey(getKey("ANTHROPIC_API_KEY", "anthropic_api_key"), "Anthropic API Key", "anthropic_api_key");
     }
 
+    /**
+     * The key if it is configured, or null — asking is never an error.
+     *
+     * <p>{@link #getClaudeKey()} and its siblings throw when the key is absent, which is right for a
+     * caller about to make a request and wrong for one deciding whether it can. {@code
+     * Ai.Engine.hasCredential} was the second kind and used the first kind: it read
+     * {@code present(getClaudeKey())} — a null check that could never run, because the throw came
+     * first. So "do you have an Anthropic key?" answered by raising <em>"Anthropic API Key is
+     * missing. Run 'oss setup'"</em>, logged at ERROR, on every machine that simply did not have
+     * one. The dead null check is what the author meant; this is it, spelled so it happens.
+     */
+    public static String findClaudeKey() {
+        return getKey("ANTHROPIC_API_KEY", "anthropic_api_key");
+    }
+
+    /** As {@link #findClaudeKey()}, for Gemini. */
+    public static String findGeminiKey() {
+        return getKey("GEMINI_API_KEY", "gemini_api_key");
+    }
+
+    /** As {@link #findClaudeKey()}, for OpenAI. */
+    public static String findOpenAiKey() {
+        return getKey("OPENAI_API_KEY", "openai_api_key");
+    }
+
     private static String requireKey(String key, String displayName, String keychainName) {
         if (key == null) {
             String error = String.format("%s is missing. Run 'oss setup' to register it.", displayName);

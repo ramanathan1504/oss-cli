@@ -120,6 +120,24 @@ public class Extension {
     private List<String> axes = List.of();
 
     /**
+     * The pack this extension supports, or null when it supports everything equally.
+     *
+     * <p>A bench is built for a subject. The one this was written against executes Log4j
+     * configurations against real Log4j; pointing it at a Kafka issue would produce a confident
+     * answer about nothing. Until now nothing recorded that, so every attached runner looked
+     * equally applicable to every repository in the corpus, and choosing between them was the
+     * reader's job every single time.
+     *
+     * <p>Deliberately a free string rather than a checked reference. The pack it names is usually a
+     * repository being followed -- {@code apache/logging-log4j2} -- and then OSS-CLI can say so, but
+     * an author may equally name a subject that spans several, and a manifest that fails to load
+     * because a repository has not been synced <em>yet</em> would make attaching things depend on
+     * the order they were done in. Where it matches nothing, {@link Attachments} says that out loud
+     * rather than dropping the extension.
+     */
+    private String supports;
+
+    /**
      * Verbs that write somewhere outward-facing, and so must be confirmed before they run.
      *
      * <p>Declared by the extension because only the extension knows. OSS-CLI cannot tell from the
@@ -208,6 +226,14 @@ public class Extension {
 
     public void setVerbs(Map<String, String> verbs) {
         this.verbs = verbs == null ? new LinkedHashMap<>() : verbs;
+    }
+
+    public String getSupports() {
+        return supports;
+    }
+
+    public void setSupports(String supports) {
+        this.supports = supports;
     }
 
     public List<String> getAxes() {
