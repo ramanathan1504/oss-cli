@@ -105,7 +105,7 @@ public class TriageCommand implements Callable<Integer> {
         String authorName = target.user() != null ? target.user().login() : "unknown";
         String memberBadge = target.isOrgMember() ? " [Member]" : "";
 
-        LOGGER.info("[METADATA]%n");
+        LOGGER.info("[METADATA]");
         LOGGER.info("  Title:      {}", target.title());
         LOGGER.info("  Author:     {}{}", authorName, memberBadge);
         LOGGER.info("  Labels:     {}", labelsStr);
@@ -123,7 +123,7 @@ public class TriageCommand implements Callable<Integer> {
             }
         }
 
-        LOGGER.info("[SEVERITY ASSESSMENT]%n");
+        LOGGER.info("[SEVERITY ASSESSMENT]");
         LOGGER.info("  • V1 Rule Score: {} ({})", v1Analysis.score(), v1Analysis.severity());
         if (targetAi != null) {
             LOGGER.info(
@@ -144,7 +144,7 @@ public class TriageCommand implements Callable<Integer> {
             }
         }
 
-        LOGGER.info("[BACKLOG OVERLAP]%n");
+        LOGGER.info("[BACKLOG OVERLAP]");
         if (targetVector == null) {
             LOGGER.info("  No vector embedding found. Run 'duplicates' first to check for overlaps.");
         } else {
@@ -182,7 +182,7 @@ public class TriageCommand implements Callable<Integer> {
         }
 
         // D. Ecosystem / JIRA Bridges
-        LOGGER.info("[ECOSYSTEM / JIRA BRIDGES]%n");
+        LOGGER.info("[ECOSYSTEM / JIRA BRIDGES]");
         List<JiraBridgeLink> filteredBridges =
                 jiraBridges.stream().filter(b -> b.localNumber() == issueNumber).toList();
 
@@ -199,7 +199,7 @@ public class TriageCommand implements Callable<Integer> {
         }
 
         // E. Action Log & Recommendation Logic
-        LOGGER.info("[RECOMMENDED ACTION LOG]%n");
+        LOGGER.info("[RECOMMENDED ACTION LOG]");
         List<String> actions = new ArrayList<>();
 
         // Logic check: Hidden Critical

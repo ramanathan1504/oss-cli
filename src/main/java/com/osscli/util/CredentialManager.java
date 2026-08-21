@@ -23,8 +23,24 @@ public class CredentialManager {
     private static final Logger LOGGER = LogManager.getLogger(CredentialManager.class);
 
     private static String getKey(String envVar, String keychainName) {
-        String key = System.getenv(envVar);
-        if (key != null && !clean(key).isEmpty()) return clean(key);
+        return getKey(new String[] {envVar}, keychainName);
+    }
+
+    /**
+     * The first of several environment variables that is set, then the keychain.
+     *
+     * <p>More than one name because a credential can have more than one conventional spelling, and
+     * the tool should not be the one insisting. {@code GH_TOKEN} is the GitHub CLI's own variable,
+     * so somebody who has authenticated with {@code gh} very likely has it and not
+     * {@code GITHUB_TOKEN} -- and {@code oss doctor} already reported that as fine while this method
+     * ignored it. A green health check followed by "GitHub Token is missing" on the next command is
+     * worse than either answer on its own.
+     */
+    private static String getKey(String[] envVars, String keychainName) {
+        for (String envVar : envVars) {
+            String key = System.getenv(envVar);
+            if (key != null && !clean(key).isEmpty()) return clean(key);
+        }
 
         try {
             if (System.getProperty("os.name").toLowerCase().contains("mac")) {
@@ -69,7 +85,27 @@ public class CredentialManager {
     }
 
     public static String getGitHubToken() {
-        return requireKey(getKey("GITHUB_TOKEN", "github_token"), "GitHub Token", "github_token");
+        return requireKey(
+                getKey(new String[] {"GITHUB_TOKEN", "GH_TOKEN"}, "github_token"), "GitHub Token", "github_token");
+    }
+
+    /**
+     * Where the GitHub token came from, or null when there is genuinely none.
+     *
+     * <p>For {@code doctor}, which must not answer this by reading the environment itself. It did,
+     * and so reported "not in GITHUB_TOKEN or GH_TOKEN" to everybody who had let {@code oss setup}
+     * put the token in the keychain -- which is the path {@code setup} offers first. Every command
+     * that reads GitHub then worked perfectly while the health check said the token was missing and
+     * told them to go and export one. That is the same failure as the {@code GH_TOKEN} bug, pointing
+     * the other way: doctor and the method that fetches the credential have to agree, and the only
+     * way they agree is by being the same lookup.
+     */
+    public static String gitHubTokenSource() {
+        for (String envVar : new String[] {"GITHUB_TOKEN", "GH_TOKEN"}) {
+            String key = System.getenv(envVar);
+            if (key != null && !clean(key).isEmpty()) return envVar;
+        }
+        return getKey(new String[] {"GITHUB_TOKEN", "GH_TOKEN"}, "github_token") != null ? "the keychain" : null;
     }
 
     public static String getGeminiKey() {

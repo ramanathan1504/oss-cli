@@ -174,7 +174,14 @@ class CommandSweepGapsTest {
         assertTrue(BuiltinMemory.supports("search"), "search is the verb the file hint suggests");
         assertTrue(BuiltinMemory.supports("file"));
         assertTrue(BuiltinMemory.supports("index"));
-        assertFalse(BuiltinMemory.supports("harvest"), "harvest belongs to an archive, not the built-in store");
+        // harvest used to belong to an archive extension, and this asserted that it did. It is
+        // built in now, because installing oss-cli has to be enough: the half of the corpus that is
+        // your own record of your own work cannot require a second repository to collect.
+        assertTrue(BuiltinMemory.supports("harvest"), "your own work is collectable with nothing attached");
+        // digest is built in too now. map counts which notes mention a topic; digest reads them and
+        // says what was worked out -- and that needs no archive extension, only notes with a shape.
+        assertTrue(BuiltinMemory.supports("digest"), "reading your notes should not require an extension");
+        assertTrue(BuiltinMemory.supports("import"), "an export is the only route in for a chat product");
     }
 
     @Test

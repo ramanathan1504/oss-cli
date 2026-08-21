@@ -30,7 +30,9 @@ public class IssueCommand implements Callable<Integer> {
     @Parameters(index = "0", description = "Issue number")
     int number;
 
-    @Option(names = "--repo", required = true, description = "owner/name")
+    @Option(
+            names = {"-r", "--repo"},
+            description = "owner/name (default: default.repository)")
     String repo;
 
     @Option(names = "--comments", description = "Include the discussion")
@@ -38,6 +40,23 @@ public class IssueCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
+        // The same fallback as every other repository command. These two required --repo, so the
+        // form that works everywhere else -- `oss pr 4249 -r owner/name`, or a configured default
+        // and no flag at all -- failed here on the flag rather than on anything real.
+        if (repo == null || repo.isBlank()) {
+            try {
+                repo = com.osscli.storage.SqliteStorage.loadConfig("default.repository");
+            } catch (Exception e) {
+                repo = null;
+            }
+            if (repo == null || repo.isBlank()) {
+                System.err.println("error  which repository? -r owner/name");
+                System.err.println("       or set a default: oss setup  (default.repository)");
+                return 2;
+            }
+            repo = repo.strip();
+        }
+
         try {
             GitHubClient gh = new GitHubClient();
             // Null is how getJson reports a 404. See PrCommand for the same guard and why.

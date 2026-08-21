@@ -150,6 +150,27 @@ thing in the corpus, and a single passage of it can outweigh a whole note.
   On one real setup this folder alone was 93% of the derived layer.
 - **Link indexes and graph files.** A list of links has no prose to match on.
 
+### The transcripts already on this machine
+
+`oss memory harvest --sessions` reads what Claude Code, codex and gemini wrote
+to disk — every session each of them kept. That is the half of the record that
+never reaches GitHub, and it needs no network and no token, so it works on a
+machine that has neither.
+
+It is budgeted rather than concatenated: the newest turns of the newest
+sessions, with the path to the full transcript, and whatever the cap dropped is
+counted and said out loud. Only the two speakers are kept — tool calls and their
+output are both the bulk of a transcript and where the keys and file contents
+are. What survives is redacted anyway. On one real machine a first run replaced
+two sets of database credentials and a password, in conversations whose
+troubleshooting was the part worth keeping.
+
+`oss memory schedule --install` runs the whole harvest daily if you want that,
+and nothing installs it for you. `oss memory doctor` says whether it worked —
+including whether the job is **loaded** rather than merely installed, which is
+the state a dead scheduled job sits in while every file-based check reports
+that everything is fine.
+
 ### Harvesting whole repositories, and what that changes
 
 A harvester usually collects the threads you were involved in. The companion
@@ -290,6 +311,60 @@ That address is `ollama.url`, and until now it was seeded, displayed by
 said, so pointing it at another host produced a clean bill of health and a tool
 that could not reach a model.
 
+#### The three models, and which commands use which
+
+`setup` asks for each and stores them; they can be the same model, and usually are
+to start with.
+
+| config key | used by | reasonable default |
+|------------|-----------------------------------------|--------------------|
+| `ollama.model.guidance` | `oss llm review`, `guide`, `chat`, `sync --me` narratives | `qwen2.5-coder:7b` |
+| `ollama.model.triage` | `oss llm analyze` | the same |
+| `ollama.model.embedding` | nothing by default — the built-in embedder is used | *(leave empty)* |
+
+Everything Ollama-backed needs the engine named in front of it: `oss llm review 42`,
+not `oss review 42`. A daemon that happens to be running is not a request.
+
+#### Every Ollama setting
+
+| config key | what it is | default |
+|-----------------------|-------------------------------------|--------------------------|
+| `ollama.url` | where the daemon is | `http://localhost:11434` |
+| `ollama.model.guidance` | the model that writes | asked during `setup` |
+| `ollama.model.triage` | the model that scores a backlog | asked during `setup` |
+| `ollama.timeout_seconds` | how long one generation may take | built-in, shown by `doctor` |
+
+There is **no environment variable for the address** — not `OLLAMA_HOST`, which is
+Ollama's own and is not read here. It is `oss setup`, or the config key directly.
+
+#### Checking it
+
+```bash
+oss doctor
+```
+
+reports whether the daemon answers, whether the named model is actually pulled, and
+whether it **fits in memory right now**. That last one matters: Ollama does not
+refuse a model larger than your free memory — it loads it, the machine swaps, and
+everything stops responding for minutes in a way that cannot be read as an error or
+cancelled. At most half your free memory is offered to a model.
+
+```bash
+ollama list       # what is pulled
+ollama ps         # what is loaded right now
+```
+
+#### If it will not answer
+
+- **`connection refused`** — `ollama serve` is not running, or `ollama.url` points
+  somewhere else. `oss doctor` prints the address it tried.
+- **model not found** — `ollama pull <name>`; the name in `setup` must match
+  `ollama list` exactly, tag included.
+- **it hangs** — the model is probably swapping. `oss doctor` says so in advance;
+  pull a smaller one.
+- **nothing generated and no error** — check you typed `oss llm <command>`. Without
+  a prefix, no model is asked at all, and the layer report at the end says so.
+
 ### In the cloud, with a key
 
 Keys are read from the environment first, then the macOS Keychain. They are
@@ -303,15 +378,96 @@ without touching them.
 | Google    | `GEMINI_API_KEY`              | `gemini_api_key`     |
 | GitHub    | `GITHUB_TOKEN` or `GH_TOKEN`  | `github_token`       |
 
-```bash
-export ANTHROPIC_API_KEY=sk-...
+### A cloud engine without a key at all
 
-# or so it survives a new shell:
-security add-generic-password -s anthropic_api_key -a "$USER" -w
+If you already have a provider's own command-line tool installed and signed in, `--cli` reaches
+the engine through it and no API key is involved:
+
+```bash
+oss claude --cli review 4249     # Claude Code CLI, on your subscription
+oss codex --cli review 4249      # codex exec
+oss gemini --cli review 4249     # gemini CLI
 ```
 
-`setup` records which *model* to call for each provider. The key itself stays
-outside the database.
+`oss doctor` lists which of the three it can find. This is a separate account from the API key
+above — a subscription does not add API credit, and API credit does not power the CLI.
+
+**The order is: environment variable, then macOS Keychain, then an error naming the
+key.** Nothing else is consulted, and no key is ever written to the database — `oss
+setup` records which *model* to call for each provider, never the credential.
+
+### Putting a key in the environment
+
+Fine for one session, and the thing to reach for when you want *this* run to differ:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+export OPENAI_API_KEY=sk-...
+export GEMINI_API_KEY=...
+export GITHUB_TOKEN=ghp_...        # GH_TOKEN works too — it is what `gh` sets
+```
+
+To keep it, put those in `~/.zshrc` (or `~/.bashrc`). A shell profile is readable by
+anything you run, which is the trade: convenient, and not a secret store.
+
+### Putting a key in the Keychain (macOS)
+
+Survives new shells, is not in a dotfile, and is what `oss setup` tells you to run:
+
+```bash
+security add-generic-password -a "$USER" -s anthropic_api_key -w "sk-ant-..." -U
+security add-generic-password -a "$USER" -s openai_api_key    -w "sk-..."     -U
+security add-generic-password -a "$USER" -s gemini_api_key    -w "..."        -U
+security add-generic-password -a "$USER" -s github_token      -w "ghp_..."    -U
+```
+
+`-s` is the service name and **must match the table above exactly** — a key stored
+under any other name is a key nothing reads. `-U` updates an existing entry instead
+of failing. Omit `-w "..."` to be prompted instead, so the key is not in your shell
+history:
+
+```bash
+security add-generic-password -a "$USER" -s anthropic_api_key -U -w
+```
+
+Read one back, to check what is actually stored:
+
+```bash
+security find-generic-password -s anthropic_api_key -w
+```
+
+Wrapping punctuation is stripped on the way in: `<sk-ant-…>`, `"sk-ant-…"` and
+`'sk-ant-…'` all work, because documentation writes keys in angle brackets and
+shells add quotes. Only the wrapping — anything inside the key is left alone.
+
+### Checking it worked
+
+```bash
+oss setup       # reports which keys it can see, and where it found each
+oss doctor      # checks everything else at the same time
+```
+
+### Sending requests somewhere else
+
+For a gateway, a proxy or a compatible endpoint. Environment first, then stored
+config, then the provider's own API:
+
+| provider | environment | config key |
+|----------|----------------------|-------------------|
+| Anthropic | `ANTHROPIC_BASE_URL` | `claude.base_url` |
+| OpenAI | `OPENAI_BASE_URL` | `openai.base_url` |
+| Google | `GEMINI_BASE_URL` | `gemini.base_url` |
+
+An override in force is printed once per run, because a request going somewhere
+other than the provider is worth one line — the alternative is diagnosing a
+redirected client as a broken key.
+
+### Which model each provider uses
+
+`oss setup` asks, and stores the answer as `claude.model`, `openai.model` and
+`gemini.model`. The key says *who* may answer; this says *which* of their models.
+
+---
 
 Nothing is ever sent because a key exists. The engine is a word you type, in front
 of the command:

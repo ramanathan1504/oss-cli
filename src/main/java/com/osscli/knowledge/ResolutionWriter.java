@@ -94,6 +94,41 @@ public final class ResolutionWriter {
     }
 
     /**
+     * The note this material already has, or null when there is none.
+     *
+     * <p>A chat keeps its own path in {@code chat_session.note_path}, because a conversation is a
+     * session with an identity to hang it on. A review has none: it is one command, run again
+     * whenever somebody wants a fresh opinion on the same pull request — so the note is found where
+     * this writer would have put it rather than remembered.
+     *
+     * <p>Without this, every re-review filed another copy. Six notes accumulated for one pull
+     * request, three of them for the same head commit and four of them superseded, each embedded
+     * and each competing to answer the same question. That is the duplication the chat note was
+     * changed to avoid, arriving through a different door.
+     */
+    public static Path existingNote(String repository, long issueNumber, String provenanceDir, String label) {
+        try {
+            Path dir = resolveTopicDir(repository).resolveSibling(provenanceDir);
+            if (!Files.isDirectory(dir)) {
+                return null;
+            }
+            String prefix = String.format("Issue-%d-%s-", issueNumber, label);
+            try (java.util.stream.Stream<Path> files = Files.list(dir)) {
+                return files.filter(f -> f.getFileName().toString().startsWith(prefix))
+                        .filter(f -> f.getFileName().toString().endsWith(".md"))
+                        // Newest by name: the stamp is the rest of the file name, and it sorts.
+                        .max(java.util.Comparator.comparing(f -> f.getFileName().toString()))
+                        .orElse(null);
+            }
+        } catch (Exception e) {
+            // Not finding the old note is not a reason to lose the new one; the caller files a
+            // fresh copy, which is the behaviour this replaced.
+            LOGGER.debug("could not look for an existing {} note: {}", label, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
      * As {@link #record}, but rewriting {@code reuse} when a note for this material already exists.
      *
      * <p>A resumable chat is written out every time it ends, and it can end several times: talk for

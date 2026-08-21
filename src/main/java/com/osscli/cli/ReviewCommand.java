@@ -62,6 +62,9 @@ public class ReviewCommand implements Callable<Integer> {
     /** Set once the verdict came from a cloud model, so the layer summary reports the route actually taken. */
     private boolean escalated;
 
+    /** Set when a cloud call was made at all, whether or not it came back with anything. */
+    private boolean escalationAttempted;
+
     @Parameters(index = "0", description = "The pull request number to review")
     private long prNumber;
 
@@ -79,6 +82,17 @@ public class ReviewCommand implements Callable<Integer> {
             names = {"--no-verdict"},
             description = "Report the facts only, without asking a model to judge the change")
     private boolean noVerdict;
+
+    @Option(
+            names = {"--verify"},
+            description = "Build the change and re-run its tests with it reverted, in a throwaway worktree")
+    private boolean verify;
+
+    @Option(
+            names = {"--clone"},
+            paramLabel = "<path>",
+            description = "A checkout of the repository, for --verify. Never modified.")
+    private java.nio.file.Path clone;
 
     @Option(
             names = {"--no-notes"},
@@ -127,8 +141,75 @@ public class ReviewCommand implements Callable<Integer> {
         printRelatedNotes(notes);
 
         boolean verdictGiven = !noVerdict && printVerdict(ev, profile, notes);
-        printLadder(verdictGiven, conventionsChecked, !notes.isEmpty());
+        boolean verified = verify && printVerification(ev);
+        printLadder(verdictGiven, conventionsChecked, !notes.isEmpty(), verified);
         return 0;
+    }
+
+    /**
+     * Build the change and find out whether its tests mean anything.
+     *
+     * <p>The one layer that produces facts rather than opinions. Everything above reads the diff and
+     * says something about it; this compiles it, runs the tests it adds, takes the production change
+     * back out, and runs them again. A test that passes both ways is the finding -- it would have
+     * passed before the bug was fixed, which is invisible to reading and decisive to a reviewer.
+     */
+    private boolean printVerification(PrEvidence ev) {
+        List<String> changed = new ArrayList<>();
+        try {
+            for (Map<String, Object> f : readList(ev.filesJson())) {
+                changed.add(String.valueOf(f.get("filename")));
+            }
+        } catch (Exception e) {
+            LOGGER.warn("  ⚠ Could not read the file list: {}", e.getMessage());
+            return false;
+        }
+
+        LOGGER.info("");
+        LOGGER.info("── Verification (built and run, not read) ──");
+        // Two Maven runs over somebody else's repository is minutes, and this printed one line at
+        // the start of each and then nothing -- which is the case Live exists for. The rule in this
+        // repository is that anything slower than a second says what it is doing while it does it,
+        // and the newest command was the one breaking it.
+        com.osscli.review.Verifier.Report report;
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("verify")) {
+            report = com.osscli.review.Verifier.verify(clone, ev.headSha(), null, ev.baseRef(), changed, line -> {
+                live.step(line);
+                LOGGER.info("  ↳ {}", line);
+            });
+        }
+
+        if (!report.ran()) {
+            LOGGER.info("  ○ not verified — {}", report.why());
+            return false;
+        }
+        for (com.osscli.review.Verifier.Step step : report.steps()) {
+            LOGGER.info(
+                    "  {} {}{}",
+                    step.outcome() == com.osscli.review.Verifier.Outcome.PASSED ? "✔" : "✘",
+                    step.what(),
+                    step.detail().isEmpty() ? "" : " — " + step.detail());
+        }
+        LOGGER.info("");
+        for (com.osscli.review.Verifier.TestResult t : report.tests()) {
+            switch (t.verdict()) {
+                case PROVEN -> LOGGER.info("  ✔ {} — {}", t.testClass(), t.detail());
+                case PROVES_NOTHING -> {
+                    // The whole reason this layer exists.
+                    LOGGER.info("  ⚠ {} — {}", t.testClass(), t.detail());
+                    LOGGER.info("      It would have passed before the change, so it is not covering it.");
+                }
+                default -> LOGGER.info("  ○ {} — {}", t.testClass(), t.detail());
+            }
+        }
+        if (report.why() != null) {
+            LOGGER.info("  {}", report.why());
+        }
+        // Only a run that got all the way through re-running the tests may tick the ladder. It used
+        // to return true here whatever happened, so a verification that stopped at "could not revert
+        // the production change" still printed "Built and re-run with the change reverted" -- the
+        // summary contradicting the section immediately above it.
+        return report.why() == null;
     }
 
     // ── Layer 4: the user's own notes ────────────────────────────────────────
@@ -197,7 +278,11 @@ public class ReviewCommand implements Callable<Integer> {
         long addedSources = files.stream()
                 .filter(f -> "added".equals(String.valueOf(f.get("status"))))
                 .map(f -> String.valueOf(f.get("filename")))
-                .filter(p -> p.contains("/src/main/") || p.startsWith("src/"))
+                // Not "anything under src/". An API baseline is about public types, so it is main
+                // Java source or nothing -- and that filter counted 4249's changelog XML as a new
+                // source file, then told the author their changelog entry might need a baseline or
+                // export update. One implementation of "is this production source", in Verifier.
+                .filter(com.osscli.review.Verifier::isMainSource)
                 .count();
 
         if (apiGated && addedSources > 0) {
@@ -294,11 +379,18 @@ public class ReviewCommand implements Callable<Integer> {
 
             LOGGER.info("");
             if (useCloud) {
-                LOGGER.info(
-                        "  ↳ Diff is {} chars, over the {} local budget — escalating to {} with the full diff...",
-                        fullDiff.length(),
-                        LOCAL_DIFF_BUDGET,
-                        provider);
+                // Say which of the two reasons it actually was. Printing "over the local budget"
+                // for a 12k diff against a 24k budget is a sentence the reader can check and find
+                // false, and once one line is provably wrong the rest of the report is suspect.
+                if (!localReady) {
+                    LOGGER.info("  ↳ No local engine was named, so {} answers with the full diff...", provider);
+                } else {
+                    LOGGER.info(
+                            "  ↳ Diff is {} chars, over the {} local budget — escalating to {} with the full diff...",
+                            fullDiff.length(),
+                            LOCAL_DIFF_BUDGET,
+                            provider);
+                }
             } else {
                 LOGGER.info("  ↳ Asking {} for a verdict{}...", model, truncated ? " (diff truncated)" : "");
             }
@@ -345,6 +437,10 @@ public class ReviewCommand implements Callable<Integer> {
                     DIFF%s:
                     %s
 
+                    Every concern must name one of the changed files and say what is wrong in it.
+                    Naming the subject of the change ("circular reference handling") is a description
+                    of the diff, not a concern; if you have none, return an empty list.
+
                     Review THE DIFF and nothing else. The project rules and prior-work sections
                     are background: cite them only where they bear on this diff, and never review
                     them — they are not the change. Report only what the diff actually shows; if
@@ -353,7 +449,7 @@ public class ReviewCommand implements Callable<Integer> {
                     Respond in JSON with this exact structure:
                     {
                       "summary": "<what this change does, one or two sentences>",
-                      "concerns": ["<specific, actionable concern>"],
+                      "concerns": ["<one of the changed file names> — <the specific, actionable problem in it>"],
                       "questions": ["<what you would ask the author>"],
                       "confidence": <0.0 to 1.0>
                     }
@@ -370,6 +466,7 @@ public class ReviewCommand implements Callable<Integer> {
                     truncated ? " (truncated — judge only what is shown)" : "",
                     diff);
 
+            escalationAttempted = useCloud;
             String raw = useCloud ? sendToCloud(provider, prompt) : ollama.generateJson(prompt);
             if (raw == null) {
                 LOGGER.warn("  ⚠ No response from {} — the facts above are unaffected.", useCloud ? provider : model);
@@ -380,13 +477,28 @@ public class ReviewCommand implements Callable<Integer> {
             String answeredBy = useCloud ? provider : model;
 
             LOGGER.info("");
+            // "confidence 80%" is the model scoring itself, and a small one scores itself high on
+            // an answer that found nothing. Printed bare it reads as a measurement somebody took.
             LOGGER.info(
-                    "── Verdict ({}, confidence {}) ──",
+                    "── Verdict ({}, {} confidence claimed) ──",
                     answeredBy,
                     String.format("%.0f%%", node.path("confidence").asDouble(0.5) * 100));
             LOGGER.info("  {}", node.path("summary").asText(""));
 
-            printBullets("Concerns", node.path("concerns"));
+            List<String> rawConcerns = new ArrayList<>();
+            for (JsonNode c : node.path("concerns")) {
+                rawConcerns.add(c.asText(""));
+            }
+            com.osscli.review.Findings.Located located =
+                    com.osscli.review.Findings.locate(rawConcerns, changedPaths(ev));
+            printStrings("Concerns", located.concerns());
+            if (located.unlocated() > 0) {
+                LOGGER.info("");
+                LOGGER.info(
+                        "  {} concern(s) named no file in the change and are not shown — the model",
+                        located.unlocated());
+                LOGGER.info("  described the diff rather than reviewing it.");
+            }
             printBullets("Questions for the author", node.path("questions"));
 
             if (truncated) {
@@ -435,13 +547,9 @@ public class ReviewCommand implements Callable<Integer> {
     }
 
     private String sendToCloud(String provider, String prompt) throws Exception {
-        return switch (provider) {
-            case "claude" ->
-                new com.osscli.llm.ClaudeClient(configOr("claude.model", "claude-sonnet-5")).generateText(prompt);
-            case "openai" -> new com.osscli.llm.OpenAiClient(configOr("openai.model", "gpt-4o")).generateText(prompt);
-            default ->
-                new com.osscli.llm.GeminiClient(configOr("gemini.model", "gemini-2.0-flash")).generateText(prompt);
-        };
+        // One dispatch, in com.osscli.llm.Cloud. This was a switch over the same three providers as
+        // the one in PromptCommand, with different defaults for the same settings.
+        return com.osscli.llm.Cloud.generateText(com.osscli.llm.Cloud.engineNamed(provider), prompt);
     }
 
     private String configOr(String key, String fallback) throws java.sql.SQLException {
@@ -461,6 +569,33 @@ public class ReviewCommand implements Callable<Integer> {
         int start = s.indexOf('{');
         int end = s.lastIndexOf('}');
         return (start >= 0 && end > start) ? s.substring(start, end + 1) : s;
+    }
+
+    /** The paths this pull request touches, or empty when the file list cannot be read. */
+    private List<String> changedPaths(PrEvidence ev) {
+        List<String> changed = new ArrayList<>();
+        try {
+            for (Map<String, Object> f : readList(ev.filesJson())) {
+                changed.add(String.valueOf(f.get("filename")));
+            }
+        } catch (Exception e) {
+            // An unreadable file list must not lose the verdict. Findings.locate keeps every
+            // concern when it has no names to match against, because unable to judge and judged
+            // and rejected are different answers.
+            LOGGER.debug("could not read the file list for locating concerns: {}", e.getMessage());
+        }
+        return changed;
+    }
+
+    private void printStrings(String heading, List<String> items) {
+        if (items.isEmpty()) {
+            return;
+        }
+        LOGGER.info("");
+        LOGGER.info("  {}:", heading);
+        for (String item : items) {
+            LOGGER.info("    • {}", item);
+        }
     }
 
     private void printBullets(String heading, JsonNode array) {
@@ -491,8 +626,14 @@ public class ReviewCommand implements Callable<Integer> {
         appendSection(sb, "Questions", verdict.path("questions"));
         sb.append("\nHead commit: ").append(ev.headSha()).append('\n');
 
+        // Rewrite the note this pull request already has rather than filing another. Re-reviewing
+        // is normal -- after a push, with a different engine, with --verify added -- and each run
+        // used to leave a copy behind for retrieval to fight over. The head commit is inside the
+        // note, so what it reviewed is never in doubt.
+        java.nio.file.Path existing =
+                com.osscli.knowledge.ResolutionWriter.existingNote(ev.repository(), ev.prNumber(), "oss-cli", "review");
         com.osscli.knowledge.ResolutionWriter.record(
-                ev.repository(), ev.prNumber(), ev.title(), model, null, sb.toString(), "oss-cli", "review");
+                ev.repository(), ev.prNumber(), ev.title(), model, null, sb.toString(), "oss-cli", "review", existing);
     }
 
     private void appendSection(StringBuilder sb, String heading, JsonNode array) {
@@ -629,7 +770,7 @@ public class ReviewCommand implements Callable<Integer> {
      * tell the reader their notes had been weighed when they had not -- and a review is trusted precisely because of
      * what went into it.
      */
-    private void printLadder(boolean verdictGiven, boolean conventionsChecked, boolean notesUsed) {
+    private void printLadder(boolean verdictGiven, boolean conventionsChecked, boolean notesUsed, boolean verified) {
         LOGGER.info("");
         LOGGER.info("── What this review used ──");
         LOGGER.info("  ✔ Facts from GitHub");
@@ -646,6 +787,7 @@ public class ReviewCommand implements Callable<Integer> {
                                         ? "start Ollama with 'ollama serve'"
                                         : "not asked for — oss llm review " + prNumber)));
         report(escalated, "Escalation to a cloud model", whyNoEscalation());
+        report(verified, "Built and re-run with the change reverted", verify ? "could not be run" : "--verify");
     }
 
     /**
@@ -661,6 +803,12 @@ public class ReviewCommand implements Callable<Integer> {
         }
         if (com.osscli.llm.Ai.escalationPath().isEmpty()) {
             return "named, but no key configured — 'oss setup'";
+        }
+        if (escalationAttempted) {
+            // A call that was made and failed is not the same as one that was never needed. The
+            // report said "the local rung answered and the diff fit its budget" directly under a
+            // rejected API call and an empty verdict -- three lines apart, and contradicting both.
+            return "tried, and the provider refused — the message above says why";
         }
         return "the local rung answered and the diff fit its budget";
     }

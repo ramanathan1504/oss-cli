@@ -863,13 +863,23 @@ oss llm review 4249
 oss claude review 4249
 
 <span class="c"># either may, in that order</span>
-oss llm claude review 4249</pre>
+oss llm claude review 4249
+
+<span class="c"># the provider's own CLI — your subscription, no API key</span>
+oss claude --cli review 4249</pre>
 
     <p class="sub">
       <strong>May, not will.</strong> Naming an engine grants permission; it does not order a call.
       Every ask starts on the local rung — your own notes, the vector index, the deterministic
       checks — and goes out only when that rung fails a test the command states out loud, with the
       reason printed. A question your archive already answers is not worth a round trip.
+    </p>
+    <p class="sub">
+      <strong>No API credit is not a broken install.</strong> Each cloud engine has a command-line
+      tool of its own, and <code>--cli</code> reaches the engine through the one you have already
+      signed in to, billing your subscription rather than an API key. When a provider refuses a
+      call for billing and its tool is on your PATH, the error names the keystroke that recovers —
+      and never switches by itself, because whose account paid should stay the line you typed.
     </p>
     <p class="sub">
       A command that never asks a model refuses the prefix instead of ignoring it.
@@ -1099,6 +1109,11 @@ oss prompt 812</pre>
         <p>Evidence is cached against the head commit, not the pull request number. Nothing changed since last time? Instant. Someone pushed? It re-fetches on its own, with no staleness setting to get wrong.</p>
       </div>
       <div class="card">
+        <span class="k">A knowledge base, built in</span>
+        <h3>No second repository to clone</h3>
+        <p>File a note, index it, search it by meaning, see which notes touch which topic, and measure what you have covered against what a technology actually documents &mdash; all <code>oss memory</code>, all shipped. It harvests your own public work on GitHub and the Claude Code, codex and gemini transcripts already on your disk, redacting secrets rather than dropping the passage around them. <code>oss memory schedule --install</code> runs it daily if you ask; <code>oss memory doctor</code> tells you whether it worked. Pointing it at your own folder is a few lines of <code>kb.json</code>, not a checkout.</p>
+      </div>
+      <div class="card">
         <span class="k">Local-first</span>
         <h3>Your data stays put</h3>
         <p>Issues, vectors and notes live in SQLite on your disk. Retrieval and embedding run locally. Nothing leaves your machine unless you explicitly escalate a prompt to a cloud model.</p>
@@ -1110,8 +1125,8 @@ oss prompt 812</pre>
       </div>
       <div class="card">
         <span class="k">Packs</span>
-        <h3>Nothing to attach, still runs</h3>
-        <p>The common case turned out not to be a repository that drives itself but a description of your applications and versions. <code>oss run --pack &lt;dir&gt; list</code> walks one with the engine that ships inside, so a pack needs no service and no registration at all.</p>
+        <h3>A pack is a file, not a script</h3>
+        <p>A pack is a description of your applications, versions and configurations &mdash; and it is <strong>data the tool reads</strong>, not a program it runs. <code>pack.json</code>, or the same object in a <code>json</code> block inside <code>pack.md</code> so one file explains itself to a person and to the tool at once. Reading it cannot execute anything, and a pack states what it is <em>for</em>, so oss can find the right one instead of being told.</p>
       </div>
     </div>
   </div>
@@ -1130,10 +1145,12 @@ oss prompt 812</pre>
       command you would have typed, and says which one on hover — so the page can never tell
       you something the terminal would not. Work in whichever you prefer, and swap mid-task.
     </p>
+<pre class="block"><span class="c"># the board, over whatever you already follow</span>
+oss serve</pre>
 
     <div class="cards">
       <div class="card">
-        <span class="k">localhost:8787</span>
+        <span class="k">localhost:1504</span>
         <h3>What is waiting on you</h3>
         <p>Every pull request you own or review, across every project you follow, in one list. Two of its signals exist nowhere on GitHub: which reviews you wrote and never posted, and whose head has moved since you looked.</p>
       </div>

@@ -229,6 +229,7 @@ public class DoctorCommand implements Callable<Integer> {
             return embed;
         }
         ok("ollama", "reachable at " + url);
+        reportProviderClis();
 
         if (guidance != null) {
             checkOneModel("guidance model", guidance, false);
@@ -327,14 +328,17 @@ public class DoctorCommand implements Callable<Integer> {
         } else {
             ok("github username", user);
         }
-        boolean env = System.getenv("GITHUB_TOKEN") != null || System.getenv("GH_TOKEN") != null;
-        if (env) {
-            ok("github token", "found in the environment");
+        String source = com.osscli.util.CredentialManager.gitHubTokenSource();
+        if (source != null) {
+            ok("github token", "found in " + source);
         } else {
             warn(
                     "github token",
-                    "not in GITHUB_TOKEN or GH_TOKEN",
-                    "export GITHUB_TOKEN=$(gh auth token)   # needed only for 'sync'");
+                    "not in GITHUB_TOKEN, GH_TOKEN or the keychain",
+                    // Not "only for sync": GitHubClient is what review, pr, issue, prs, hub and
+                    // followup all read through, and naming one command sends somebody who cannot
+                    // review a pull request off to look at something unrelated.
+                    "export GITHUB_TOKEN=$(gh auth token)   # or 'oss setup' to store it");
         }
     }
 
@@ -463,6 +467,29 @@ public class DoctorCommand implements Callable<Integer> {
             return SqliteStorage.countRows(table);
         } catch (Exception e) {
             return 0;
+        }
+    }
+
+    /**
+     * Which provider command-line tools are installed, for {@code --cli}.
+     *
+     * <p>Reported rather than required. Each is an optional route that answers on the subscription
+     * somebody already pays for, which matters most exactly when the API account has no credit --
+     * and that is the moment a health check should already have told them the route exists.
+     */
+    private void reportProviderClis() {
+        for (com.osscli.llm.CliClient.Spec spec : java.util.List.of(
+                com.osscli.llm.CliClient.CLAUDE, com.osscli.llm.CliClient.CODEX, com.osscli.llm.CliClient.GEMINI)) {
+            String name = spec.binary() + " cli";
+            if (!new com.osscli.llm.CliClient(spec, 1).available()) {
+                ok(name, "not installed — optional, only for " + spec.engine().typed() + " --cli");
+            } else if (!spec.verified()) {
+                // Said plainly rather than reported as working: the invocation for this one was
+                // written from its documentation and never run, and a tick would claim otherwise.
+                ok(name, "installed — invocation not verified here");
+            } else {
+                ok(name, "installed — " + spec.engine().typed() + " --cli answers on that subscription");
+            }
         }
     }
 }

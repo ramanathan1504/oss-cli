@@ -115,4 +115,23 @@ class ReleaseSurfaceTest {
         assertEquals(live.commands().keySet(), reparsed.commands().keySet());
         assertTrue(live.differences(reparsed).isEmpty(), "a round trip must not invent a difference");
     }
+
+    @Test
+    @DisplayName("the built-in memory's verbs are part of the recorded surface")
+    void builtinVerbsAreRecorded() {
+        Surface live = Surface.current();
+
+        // picocli cannot see these: they arrive as passthrough parameters, so `oss memory digest`
+        // was invisible to the walk while being exactly as scriptable as any flag. Removing one
+        // would have broken somebody's daily job with the guard reporting no change at all.
+        java.util.Set<String> verbs = live.commands().get("memory builtin-verbs");
+        assertTrue(verbs != null && !verbs.isEmpty(), "the built-in verbs are not in the surface");
+        assertEquals(new java.util.TreeSet<>(com.osscli.memory.BuiltinMemory.VERBS), verbs);
+
+        // And they must survive the round trip. Written as "memory <builtin>" they did not: the
+        // parser's key charset dropped the row on the way back in, so the guard compared a surface
+        // that had the verbs against one that never did, and reported no difference.
+        Surface reparsed = Surface.fromJson(live.toJson());
+        assertEquals(verbs, reparsed.commands().get("memory builtin-verbs"), "the row did not survive fromJson");
+    }
 }

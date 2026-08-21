@@ -173,16 +173,14 @@ public class SeverityAnalyzer {
             reason.append("deadlock-body ");
         }
 
+        // Scores, it does not narrate. These three branches printed to stdout -- the issue title,
+        // a hundred characters of its body, and the final score -- from inside a pure function, so
+        // `oss critical > report.txt` collected the workings into the report and every test run
+        // printed them too. What the caller needs is already the return value.
         if (HANG.matcher(title).find()) {
             score += 80;
-            System.out.println("HANG MATCH: #" + issue.number() + " -> " + title);
             reason.append("hang ");
         } else if (HANG.matcher(body).find()) {
-            // Clean up multi-lines and truncate for terminal output
-            String bodyPreview = body.length() > 100
-                    ? body.substring(0, 100).replaceAll("\\s+", " ") + "..."
-                    : body.replaceAll("\\s+", " ");
-            System.out.println("HANG MATCH: #" + issue.number() + " (in body) -> " + bodyPreview);
             score += 60;
             reason.append("hang ");
         }
@@ -238,10 +236,6 @@ public class SeverityAnalyzer {
                 : score >= 80 ? Severity.HIGH : score >= 40 ? Severity.MEDIUM : Severity.LOW;
 
         String formattedReason = reason.toString().trim();
-
-        if (score >= 80) {
-            System.out.printf("#%d score=%d reason=%s%n", issue.number(), score, formattedReason);
-        }
 
         return new IssueAnalysis(issue, severity, score, formattedReason);
     }

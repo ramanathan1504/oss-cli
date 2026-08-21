@@ -63,7 +63,9 @@ public class FollowupCommand implements Callable<Integer> {
     @Parameters(index = "0", arity = "0..1", description = "One pull request, reported in full")
     Integer only;
 
-    @Option(names = "--repo", description = "owner/name (default: the repo already on that row)")
+    @Option(
+            names = {"-r", "--repo"},
+            description = "owner/name (default: the repo already on that row)")
     String repo;
 
     @Option(names = "--changed", description = "Only the ones that moved")

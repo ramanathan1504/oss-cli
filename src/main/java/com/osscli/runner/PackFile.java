@@ -40,15 +40,16 @@ import java.util.regex.Pattern;
  *
  * <pre>{@code
  * {
- *   "name": "log4j",
- *   "description": "Apache Log4j across a version x config x app matrix, on real JVMs",
- *   "useWhen": { "repository": "apache/logging-log4j2", "files": ["log4j-core/pom.xml"] },
+ *   "name": "yourproject",
+ *   "description": "Your project across a version x config x app matrix, on real JVMs",
+ *   "useWhen": { "repository": "owner/name", "files": ["core/pom.xml"] },
  *   "versions": ["2.24.1", "2.25.5", "2.26.1"],
  *   "defaultVersion": "2.26.1",
  *   "apps": ["core-java", "db"],
  *   "appsDir": "apps",
  *   "configsDir": "configs",
- *   "modulePath": "apps/{app}"
+ *   "modulePath": "apps/{app}",
+ *   "modulePathFor": { "nosql": "apps/db" }
  * }
  * }</pre>
  *
@@ -63,8 +64,10 @@ import java.util.regex.Pattern;
  *
  * <p>{@code modulePath} replaces the one thing in the old format that was not data: a bash function
  * from app name to directory. Almost every pack's function was one line returning a path with the
- * name in it, so it becomes a template. A pack whose layout genuinely cannot be expressed that way
- * keeps {@code pack.sh}, which still loads.
+ * name in it, so it becomes a template — and {@code modulePathFor} names the exceptions, because
+ * every real pack has one. A pack running nineteen applications out of eighteen directories, where
+ * one app is exercised through another's module, cannot be written as a template alone: it would
+ * point that app at a directory which does not exist.
  */
 public final class PackFile {
 
@@ -186,7 +189,12 @@ public final class PackFile {
      */
     public String toShell() {
         StringBuilder out = new StringBuilder();
-        out.append("# Generated from ").append(name()).append("'s pack file. Do not edit.\n");
+        // The header interpolates nothing. It used to name the pack, which put an unquoted value
+        // into the output for the one line that was not an assignment: a name containing a newline
+        // ended the comment and made its second line shell code, and a name containing a quote
+        // left the file with an unterminated string. Every value below is quoted, so the header was
+        // the only way in -- found by handing the renderer two thousand hostile names.
+        out.append("# Generated from a pack file by oss. Do not edit.\n");
         out.append("PACK_NAME=").append(quote(name())).append('\n');
         out.append("PACK_DESC=").append(quote(description())).append('\n');
         out.append("PACK_CONFIGS_DIR=")
@@ -202,12 +210,26 @@ public final class PackFile {
         array(out, "APPS", texts(json.path("apps")));
         array(out, "APPS_2X_ONLY", texts(json.path("appsNewestMajorCannotBuild")));
 
-        // The one thing that was a function. A template covers the layouts that exist; a pack whose
-        // paths cannot be written as one keeps pack.sh, which is why this is not the only format.
+        // The one thing that was a function. A template covers most layouts; the exceptions are
+        // named one by one, because they exist and a pack that has one had to keep pack.sh
+        // entirely. A real pack runs nineteen applications out of eighteen directories -- "nosql"
+        // is exercised through the "db" module and has no directory of its own -- which a single
+        // template can express only by pointing it at a directory that is not there.
         String template = json.path("modulePath").asText(json.path("appsDir").asText("apps") + "/" + APP_TOKEN);
-        out.append("pack_module_path() { printf '%s' ")
+        out.append("pack_module_path() {\n  case \"$1\" in\n");
+        JsonNode overrides = json.path("modulePathFor");
+        java.util.Iterator<String> named = overrides.fieldNames();
+        while (named.hasNext()) {
+            String app = named.next();
+            out.append("    ")
+                    .append(quote(app))
+                    .append(") printf '%s' ")
+                    .append(quote(overrides.path(app).asText()))
+                    .append(" ;;\n");
+        }
+        out.append("    *) printf '%s' ")
                 .append(quote(template).replace(APP_TOKEN, "'\"$1\"'"))
-                .append("; }\n");
+                .append(" ;;\n  esac\n}\n");
         return out.toString();
     }
 

@@ -21,6 +21,7 @@ import com.osscli.llm.Ai;
 import java.util.List;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
 /**
@@ -54,9 +55,33 @@ public abstract class EngineCommand implements Callable<Integer> {
 
     abstract Ai.Engine engine();
 
+    /**
+     * Whether {@code --cli} was typed.
+     *
+     * <p>Declared on the engines that have a command-line tool rather than here, so {@code oss llm
+     * --help} does not list a flag whose only possible outcome is an error. A prefix advertising an
+     * option it always refuses is the same lie as a tick against a layer that did not run.
+     */
+    boolean cliRequested() {
+        return false;
+    }
+
     @Override
     public Integer call() {
         Ai.add(engine());
+
+        if (cliRequested()) {
+            com.osscli.llm.CliClient.Spec spec = com.osscli.llm.CliClient.specFor(engine());
+            if (spec == null) {
+                // Ollama is already a local daemon and the built-in model runs in this process.
+                // Neither has a command-line tool to put in front of it, and quietly ignoring the
+                // flag would leave somebody believing they had changed where their code went.
+                System.err.println(
+                        "error  " + engine().typed() + " has no command-line tool — --cli means nothing here.");
+                return 2;
+            }
+            Ai.useCli(true);
+        }
 
         if (rest.isEmpty()) {
             return explain();
@@ -113,6 +138,16 @@ public abstract class EngineCommand implements Callable<Integer> {
 
     @Command(name = "claude", description = "Let Anthropic Claude answer when the local rung cannot")
     public static class Claude extends EngineCommand {
+        @Option(
+                names = "--cli",
+                description = "Answer through this provider's own command-line tool, on your subscription")
+        boolean cli;
+
+        @Override
+        boolean cliRequested() {
+            return cli;
+        }
+
         @Override
         Ai.Engine engine() {
             return Ai.Engine.CLAUDE;
@@ -121,6 +156,16 @@ public abstract class EngineCommand implements Callable<Integer> {
 
     @Command(name = "gemini", description = "Let Google Gemini answer when the local rung cannot")
     public static class Gemini extends EngineCommand {
+        @Option(
+                names = "--cli",
+                description = "Answer through this provider's own command-line tool, on your subscription")
+        boolean cli;
+
+        @Override
+        boolean cliRequested() {
+            return cli;
+        }
+
         @Override
         Ai.Engine engine() {
             return Ai.Engine.GEMINI;
@@ -131,6 +176,16 @@ public abstract class EngineCommand implements Callable<Integer> {
     // the three prefixes then read as the three assistants rather than as two brands and a company.
     @Command(name = "codex", description = "Let OpenAI answer when the local rung cannot")
     public static class Codex extends EngineCommand {
+        @Option(
+                names = "--cli",
+                description = "Answer through this provider's own command-line tool, on your subscription")
+        boolean cli;
+
+        @Override
+        boolean cliRequested() {
+            return cli;
+        }
+
         @Override
         Ai.Engine engine() {
             return Ai.Engine.OPENAI;

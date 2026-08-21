@@ -213,6 +213,25 @@ public final class Ai {
      * engine at a time rather than as a list. Order is the escalation order, which is why this
      * appends rather than replacing.
      */
+    /**
+     * Whether the engine should be reached through the provider's own command-line tool.
+     *
+     * <p>Set by {@code --cli} on the prefix, never inferred. An engine that answers from a
+     * subscription instead of API credit is a different account, a different harness -- the tools
+     * can read files -- and a different answer to "whose model saw my code". The prefix already
+     * exists so that question is settled by the line you typed; choosing the transport silently,
+     * because the API happened to be out of credit, would take that back.
+     */
+    private static boolean viaCli = false;
+
+    public static void useCli(boolean cli) {
+        viaCli = cli;
+    }
+
+    public static boolean viaCli() {
+        return viaCli;
+    }
+
     public static void add(Engine engine) {
         List<Engine> next = new ArrayList<>(requested);
         next.add(engine);

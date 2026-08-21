@@ -157,6 +157,82 @@ public class GitHubClient {
         };
     }
 
+    /**
+     * How many results a search will collect before it stops.
+     *
+     * <p>GitHub's search API caps at a thousand however it is asked, so this is the ceiling rather
+     * than a choice. What matters is that the caller is told when it was reached.
+     */
+    public static final int SEARCH_LIMIT = 1_000;
+
+    /** What a search found, and how much of it there was. */
+    public record Found(List<Issue> items, int totalAvailable) {
+
+        /** Whether the answer is a page of the answer. */
+        public boolean truncated() {
+            return totalAvailable > items.size();
+        }
+    }
+
+    /**
+     * Every result a search matches, up to the API's own ceiling.
+     *
+     * <p>This sent no {@code per_page} and read one page, so it returned <b>thirty</b> results
+     * whatever matched — and said nothing about it. A profile built from
+     * {@code author:<you> type:pr is:merged} was therefore built from thirty pull requests, and a
+     * harvest of {@code involves:<you>} collected thirty items out of 1,218. Neither reported a
+     * cap, so both read as "this is everything you have done".
+     *
+     * <p>A truncation that does not announce itself is worse than a smaller number: the reader
+     * acts on it as a total.
+     */
+    public Found search(String query) throws IOException, InterruptedException {
+        List<Issue> all = new ArrayList<>();
+        int total = 0;
+        for (int page = 1; all.size() < SEARCH_LIMIT; page++) {
+            String url = apiBase() + "/search/issues?per_page=100&page=" + page + "&q="
+                    + java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8);
+            java.net.http.HttpResponse<String> response = searchOnce(url);
+            Map<?, ?> body = MAPPER.readValue(response.body(), Map.class);
+            if (total == 0 && body.get("total_count") instanceof Number n) {
+                total = n.intValue();
+            }
+            List<?> items = (List<?>) body.get("items");
+            if (items == null || items.isEmpty()) {
+                break;
+            }
+            String itemsJson = MAPPER.writeValueAsString(items);
+            all.addAll(MAPPER.readValue(
+                    itemsJson, MAPPER.getTypeFactory().constructCollectionType(List.class, Issue.class)));
+            if (items.size() < 100) {
+                break;
+            }
+        }
+        return new Found(List.copyOf(all), Math.max(total, all.size()));
+    }
+
+    /** One page of a search, or a described failure. */
+    private java.net.http.HttpResponse<String> searchOnce(String urlString) throws IOException, InterruptedException {
+        java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                .uri(java.net.URI.create(urlString))
+                .header("Authorization", "Bearer " + token)
+                .header("Accept", "application/vnd.github+json")
+                .GET()
+                .timeout(java.time.Duration.ofSeconds(20))
+                .build();
+        java.net.http.HttpResponse<String> response;
+        try {
+            response = httpClient.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+        } catch (IOException e) {
+            throw Reachability.asFailure(e);
+        }
+        if (response.statusCode() != 200) {
+            throw new IOException(
+                    "GitHub Search API failed with status code " + response.statusCode() + ": " + response.body());
+        }
+        return response;
+    }
+
     public List<Issue> searchIssuesAndPrs(String query) throws IOException, InterruptedException {
         String urlString = apiBase() + "/search/issues?q="
                 + java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8);

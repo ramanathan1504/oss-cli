@@ -56,6 +56,22 @@ import picocli.CommandLine.Option;
  * repository and pastes the path. Nothing is uploaded, nothing is copied, and the extension stays
  * where it is and keeps being an ordinary repository.
  *
+ * <p><b>Why the board is here and not in a bench.</b> It was in one, and it was right to be: the
+ * review ledger, the pull-request state and the triage results all lived in a Log4j bench, and a
+ * page there was the only way to see them. The core had none of it, so a board in the core would
+ * have had nothing to draw.
+ *
+ * <p>That stopped being true. The ledger moved here, and the corpus grew to fifteen thousand issues
+ * across ten repositories — at which point the bench's page was reading a smaller copy of what this
+ * already held, three repositories where the core had ten. A board over one project's playground
+ * can only ever see that playground.
+ *
+ * <p>So it moved, by the rule that moved follow-up before it: <i>being inside a Log4j bench meant a
+ * capability that works against any repository could only be reached by attaching that bench.</i>
+ * What stays in a bench is what a bench can uniquely answer — does this actually work, on a real
+ * JVM, across versions and configurations. No amount of corpus replaces running the thing. And
+ * nothing that posts came across, because a browser has no terminal to confirm an outward write at.
+ *
  * <p>Three decisions worth stating, because each is a thing this deliberately does NOT do:
  *
  * <ul>
@@ -118,12 +134,25 @@ public class ServeCommand implements Callable<Integer> {
             server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
         } catch (IOException e) {
             System.err.println("error  could not listen on port " + port + ": " + e.getMessage());
-            System.err.println("       Another instance may already be serving. Try --port <n>.");
+            // "Another instance may already be serving" was a guess, and on the machine this was
+            // found on it was the wrong one: `oss run hub` defaults to this same port, so the thing
+            // holding it was another surface of this tool rather than a second copy of this one.
+            // Asking what is there costs one request to loopback and turns a guess into a fact.
+            String occupant = whoIsOn(port);
+            if (occupant != null) {
+                System.err.println("       " + occupant + " is already on http://localhost:" + port + "/");
+                System.err.println("       Leave it, or serve this alongside it: --port " + (port + 1));
+            } else {
+                System.err.println("       Something else holds that port. Try --port " + (port + 1) + ".");
+            }
             return 1;
         }
 
         server.createContext("/", this::handlePage);
         server.createContext("/api/extensions", this::handleList);
+        server.createContext("/api/questions", this::handleQuestions);
+        server.createContext("/api/rows", this::handleRows);
+        server.createContext("/api/ask", this::handleAsk);
         server.createContext("/api/attach", this::handleAttach);
         server.createContext("/api/detach", this::handleDetach);
         server.setExecutor(null);
@@ -144,6 +173,44 @@ public class ServeCommand implements Callable<Integer> {
 
     // ---------------------------------------------------------------- handlers ---
 
+    /**
+     * What is answering on a port, named from its own page.
+     *
+     * <p>Only ever loopback, and only after this process has already failed to bind it: the port is
+     * in use by something on this machine and the question is what. A title is enough to tell one
+     * surface of this tool from another -- {@code oss run hub} serves "oss run hub" and this serves
+     * "oss" -- and enough to say "something else" honestly when it is neither.
+     */
+    static String whoIsOn(int port) {
+        try {
+            java.net.HttpURLConnection c = (java.net.HttpURLConnection) java.net
+                    .URI
+                    .create("http://localhost:" + port + "/")
+                    .toURL()
+                    .openConnection();
+            c.setConnectTimeout(1500);
+            c.setReadTimeout(1500);
+            c.setRequestMethod("GET");
+            String body;
+            try (java.io.InputStream in = c.getInputStream()) {
+                byte[] head = in.readNBytes(4096);
+                body = new String(head, java.nio.charset.StandardCharsets.UTF_8);
+            }
+            return titleOf(body);
+        } catch (Exception e) {
+            // Not answering, not HTTP, or refusing us. Either way there is nothing to name.
+            return null;
+        }
+    }
+
+    /** The document title, as a name for whatever is serving. */
+    static String titleOf(String html) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                        "<title>\\s*([^<]{1,60}?)\\s*</title>", java.util.regex.Pattern.CASE_INSENSITIVE)
+                .matcher(html == null ? "" : html);
+        return m.find() ? "\"" + m.group(1) + "\"" : null;
+    }
+
     private void handlePage(HttpExchange x) throws IOException {
         if (!"/".equals(x.getRequestURI().getPath())) {
             send(x, 404, "text/plain", "not found");
@@ -154,6 +221,171 @@ public class ServeCommand implements Callable<Integer> {
 
     private void handleList(HttpExchange x) throws IOException {
         sendJson(x, 200, Map.of("extensions", snapshot()));
+    }
+
+    /**
+     * The reviewed pull requests, as rows a page can hang a question on.
+     *
+     * <p>Read from the same ledger {@code oss followup} and {@code oss hub} read, not from a second
+     * copy of the logic — one implementation, so the page and the command cannot drift apart.
+     *
+     * <p>Rows rather than text because the question goes <b>where it is asked</b>: "seen this?"
+     * belongs on every row, and "since I reviewed" only where a verdict exists, since anywhere else
+     * it would answer about nothing.
+     */
+    private void handleRows(HttpExchange x) throws IOException {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (com.osscli.review.ReviewLedger.Row r : com.osscli.review.ReviewLedger.read()) {
+            rows.add(Map.of(
+                    "repo", r.repo,
+                    "pr", r.pr,
+                    "verdict", r.verdict,
+                    "reviewed", r.reviewed,
+                    "author", r.author,
+                    "posted", r.posted,
+                    "note", r.note,
+                    // A verdict is what makes "since I reviewed" answerable at all.
+                    "hasVerdict", hasVerdict(r.verdict)));
+        }
+        sendJson(x, 200, Map.of("rows", rows));
+    }
+
+    /**
+     * Whether a row was actually reviewed.
+     *
+     * <p>The ledger writes {@code "none"} for a row that has been recorded but not judged, so a
+     * blank check alone would draw "since I reviewed" on rows where there is no verdict for
+     * "since" to be measured from — a button that answers about nothing.
+     */
+    static boolean hasVerdict(String verdict) {
+        return verdict != null && !verdict.isBlank() && !"none".equals(verdict.strip());
+    }
+
+    /** The questions this page can ask, with the sentence each one answers. */
+    private void handleQuestions(HttpExchange x) throws IOException {
+        sendJson(x, 200, Map.of("questions", questionsPayload()));
+    }
+
+    /**
+     * The questions as the page receives them.
+     *
+     * <p>{@code runs} is the command spelled the way somebody would type it, because it is shown in
+     * the hover beside what the button asks — a reader can then run the same thing in a terminal
+     * and get the same answer, which is the claim the whole page rests on.
+     */
+    static List<Map<String, Object>> questionsPayload() {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Askable.Question q : Askable.all()) {
+            out.add(Map.of(
+                    "key",
+                    q.key(),
+                    "asks",
+                    q.asks(),
+                    "runs",
+                    "oss " + String.join(" ", q.argv()),
+                    "arg",
+                    q.arg() == null ? "" : q.arg()));
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * Run one question and return what came back.
+     *
+     * <p>The page never reimplements a command; it runs one and shows the output, so the two cannot
+     * disagree. Only keys on {@link Askable} are runnable, and nothing on that table writes — which
+     * is what makes dispatching from a browser defensible at all, given a browser has no terminal
+     * to confirm an outward write at.
+     */
+    private void handleAsk(HttpExchange x) throws IOException {
+        Map<String, String> params = query(x.getRequestURI().getRawQuery());
+        Askable.Question q = Askable.byKey(params.get("q"));
+        if (q == null) {
+            // Not "unknown question": the page posts a key, and anything not on the table must not
+            // become a command line.
+            sendJson(x, 400, Map.of("error", "not a question this page can ask"));
+            return;
+        }
+
+        List<String> argv = new ArrayList<>(ownExecutable());
+        argv.addAll(q.argv());
+        if (q.needsArgument()) {
+            String given = params.getOrDefault("arg", "").strip();
+            if (given.isEmpty()) {
+                sendJson(x, 400, Map.of("error", "that question needs " + q.arg()));
+                return;
+            }
+            argv.add(given);
+        }
+
+        try {
+            Process p = new ProcessBuilder(argv).redirectErrorStream(true).start();
+            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            if (!p.waitFor(q.timeoutSeconds(), java.util.concurrent.TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+                sendJson(x, 200, Map.of("output", "", "note", "gave up after " + q.timeoutSeconds() + "s"));
+                return;
+            }
+            sendJson(
+                    x,
+                    200,
+                    Map.of(
+                            "output",
+                            out.strip(),
+                            "note",
+                            out.isBlank() ? q.empty() : "",
+                            "runs",
+                            "oss " + String.join(" ", q.argv())));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            sendJson(x, 500, Map.of("error", "interrupted"));
+        }
+    }
+
+    /**
+     * How to invoke this program again.
+     *
+     * <p>The running jar, not whatever {@code oss} the PATH offers: a page served by this build must
+     * ask this build, or the answers belong to a different version from the one being looked at.
+     */
+    static List<String> ownExecutable() {
+        try {
+            String jar = java.nio.file.Path.of(ServeCommand.class
+                            .getProtectionDomain()
+                            .getCodeSource()
+                            .getLocation()
+                            .toURI())
+                    .toString();
+            String javaBin = java.nio.file.Path.of(System.getProperty("java.home"), "bin", "java")
+                    .toString();
+            if (jar.endsWith(".jar")) {
+                return List.of(javaBin, "-jar", jar);
+            }
+        } catch (Exception e) {
+            // Running from classes rather than a jar, or a code source we cannot resolve. The
+            // installed command is the honest fallback; it may be a different build, which is why
+            // it is the fallback rather than the first choice.
+            System.err.println("  (could not locate the running jar: " + e.getMessage() + ")");
+        }
+        return List.of("oss");
+    }
+
+    /** Query parameters, decoded, with no assumption that any of them are present. */
+    static Map<String, String> query(String raw) {
+        Map<String, String> out = new LinkedHashMap<>();
+        if (raw == null || raw.isBlank()) {
+            return out;
+        }
+        for (String pair : raw.split("&")) {
+            int eq = pair.indexOf('=');
+            if (eq <= 0) {
+                continue;
+            }
+            out.put(
+                    java.net.URLDecoder.decode(pair.substring(0, eq), StandardCharsets.UTF_8),
+                    java.net.URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8));
+        }
+        return out;
     }
 
     private void handleAttach(HttpExchange x) throws IOException {
@@ -389,9 +621,40 @@ public class ServeCommand implements Callable<Integer> {
             .note{color:var(--mut);font-size:12.5px;margin-top:26px;border-top:1px solid var(--line);
                   padding-top:14px}
             .doc h1{font-size:19px} .doc h2{font-size:16px} .doc h3{font-size:14px}
+            /* Asking and doing must not look alike. Everything else on this page changes
+               something; these only read, and the dashed outline is the difference a reader can
+               see before they click rather than after. */
+            .asks{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+            .ask{background:none;border:1px dashed var(--line);color:var(--mut);border-radius:6px;
+                 padding:6px 11px;font:inherit;font-size:13px;cursor:pointer}
+            .ask:hover{border-color:var(--acc);color:var(--fg)}
+            .ask[aria-busy="true"]{opacity:.55;cursor:progress}
+            .out{white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+                 font-size:12.5px;line-height:1.55;color:var(--fg);background:var(--card);
+                 border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-top:4px;
+                 max-height:420px;overflow:auto}
+            .ranby{color:var(--mut);font-size:12px;margin:6px 0 0}
+            .rw{display:flex;align-items:baseline;gap:10px;padding:8px 0;
+                border-bottom:1px solid var(--line);flex-wrap:wrap}
+            .rw .pr{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:var(--mut)}
+            .rw .rp{font-size:13px}
+            .rw .vd{font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;
+                    border:1px solid var(--line);border-radius:999px;padding:1px 8px;color:var(--mut)}
+            .rw .sp{flex:1}
             </style></head><body><div class="wrap">
             <h1>oss</h1>
             <div class="sub">One core that knows. A <b>runner</b> runs something real; a <b>memory</b> remembers.</div>
+
+            <div class="grp">board</div>
+            <div class="asks" id="board"></div>
+            <div id="rows"></div>
+            <div class="out" id="boardout">reading the ledger…</div>
+            <p class="ranby" id="boardran"></p>
+
+            <div class="grp">ask</div>
+            <div class="asks" id="asks"></div>
+            <div class="out" id="askout" hidden></div>
+            <p class="ranby" id="askran"></p>
 
             <div class="grp">palette</div>
             <div id="list"></div>
@@ -437,6 +700,73 @@ public class ServeCommand implements Callable<Integer> {
                 ${e.writes&&e.writes.length?' · <b>writes outward:</b> '+e.writes.map(esc).join(', '):''}</div>
               </div>`).join('');
             }
+            // The page never reimplements a command. Every button below runs one and shows the
+            // output, so the two cannot disagree -- and nothing reachable from here writes.
+            const BOARD=['hub','pick'];
+            function ask(q,arg,outEl,ranEl,btn){
+              const url='api/ask?q='+encodeURIComponent(q)+(arg?'&arg='+encodeURIComponent(arg):'');
+              if(btn){btn.setAttribute('aria-busy','true')}
+              outEl.hidden=false; outEl.textContent='asking…';
+              return fetch(url).then(r=>r.json()).then(d=>{
+                outEl.textContent=d.error?d.error:(d.output||d.note||'');
+                if(ranEl){ranEl.textContent=d.runs?('ran  '+d.runs):''}
+              }).catch(e=>{outEl.textContent=String(e)})
+               .finally(()=>{if(btn){btn.removeAttribute('aria-busy')}});
+            }
+            // The question goes where it is asked. "Seen this?" belongs on every row; "since I
+            // reviewed" only where a verdict exists, because anywhere else it answers about nothing.
+            function rows(){
+              return fetch('api/rows').then(r=>r.json()).then(d=>{
+                const host=document.getElementById('rows');
+                host.textContent='';
+                d.rows.forEach(r=>{
+                  const el=document.createElement('div'); el.className='rw';
+                  const pr=document.createElement('span'); pr.className='pr'; pr.textContent='#'+r.pr;
+                  const rp=document.createElement('span'); rp.className='rp'; rp.textContent=r.repo;
+                  const vd=document.createElement('span'); vd.className='vd'; vd.textContent=r.verdict;
+                  const sp=document.createElement('span'); sp.className='sp';
+                  el.append(pr,rp,vd,sp);
+
+                  const seen=document.createElement('button');
+                  seen.className='ask'; seen.textContent='Seen this?';
+                  seen.title='Have I worked this out before? Searches your own notes and synced issues by meaning.';
+                  seen.onclick=()=>ask('search',r.repo+' '+r.pr,
+                      document.getElementById('boardout'),document.getElementById('boardran'),seen);
+                  el.append(seen);
+
+                  if(r.hasVerdict){
+                    const since=document.createElement('button');
+                    since.className='ask'; since.textContent='Since I reviewed';
+                    since.title='What the author did after your verdict.';
+                    since.onclick=()=>ask('followup-one',String(r.pr),
+                        document.getElementById('boardout'),document.getElementById('boardran'),since);
+                    el.append(since);
+                  }
+                  host.append(el);
+                });
+              }).catch(()=>{});
+            }
+            function questions(){
+              return fetch('api/questions').then(r=>r.json()).then(d=>{
+                const board=document.getElementById('board'), asks=document.getElementById('asks');
+                d.questions.forEach(q=>{
+                  const b=document.createElement('button');
+                  b.className='ask'; b.textContent=q.key; b.title=q.asks+'\n\nruns:  '+q.runs;
+                  const onBoard=BOARD.includes(q.key);
+                  b.onclick=()=>{
+                    const arg=q.arg?prompt(q.asks,''):null;
+                    if(q.arg&&!arg){return}
+                    ask(q.key,arg,document.getElementById(onBoard?'boardout':'askout'),
+                        document.getElementById(onBoard?'boardran':'askran'),b);
+                  };
+                  (onBoard?board:asks).appendChild(b);
+                });
+                // The board is what the page opens on, so it answers without being asked.
+                rows();
+                return ask('hub',null,document.getElementById('boardout'),
+                           document.getElementById('boardran'),null);
+              });
+            }
             function load(){fetch('api/extensions').then(r=>r.json())
               .then(d=>draw(d.extensions))}
             function attach(){
@@ -461,6 +791,7 @@ public class ServeCommand implements Callable<Integer> {
                   draw(d.extensions);});
             });
             load();
+            questions();
             </script></body></html>
             """;
 }

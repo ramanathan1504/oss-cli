@@ -234,7 +234,15 @@ public class OnboardCommand implements Callable<Integer> {
                     sourceName,
                     doc);
 
-            JsonNode node = MAPPER.readTree(ollama.generateJson(prompt));
+            // generateJson returns whatever the daemon put in "response", which is null when it
+            // put nothing there. ReviewCommand checks this and says so; here it reached readTree.
+            String answer = ollama.generateJson(prompt);
+            if (answer == null || answer.isBlank()) {
+                LOGGER.warn("  ⚠ No build steps written — the model returned nothing.");
+                LOGGER.warn("    The documents above are unaffected; they were read, not generated.");
+                return false;
+            }
+            JsonNode node = MAPPER.readTree(answer);
 
             boolean any = printCommands("Build it", node.path("build"))
                     | printCommands("Test it", node.path("test"))

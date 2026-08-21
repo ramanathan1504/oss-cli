@@ -33,6 +33,7 @@ import java.util.zip.ZipInputStream;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
 @Command(
@@ -46,6 +47,56 @@ public class RestoreCommand implements Callable<Integer> {
     @Parameters(index = "0", description = "The path to the backup .zip file")
     private String backupFilePath;
 
+    @Option(names = "--force", description = "Replace an existing store without asking")
+    boolean force;
+
+    /**
+     * Whether there is nothing here worth asking about.
+     *
+     * <p>A fresh machine is the case restore exists for, and stopping to ask there would put a
+     * prompt in front of the one path that has nothing to lose.
+     */
+    static boolean mayReplaceWithoutAsking(long existingBytes) {
+        return existingBytes == 0;
+    }
+
+    /**
+     * Whether an existing store may be replaced.
+     *
+     * <p>True without asking when there is no store yet. Otherwise the size of what is about to be
+     * overwritten is stated and the answer has to be typed, at a terminal -- and no terminal means
+     * refuse, because cron, CI and a launchd agent all look like that and none of them can decide
+     * this.
+     */
+    private boolean confirmReplacement() {
+        Path db = AppPaths.BASE_DIR.resolve("data").resolve("issue_intelligence.db");
+        long bytes = 0;
+        try {
+            bytes = Files.exists(db) ? Files.size(db) : 0;
+        } catch (Exception e) {
+            bytes = 0;
+        }
+        if (mayReplaceWithoutAsking(bytes)) {
+            return true;
+        }
+
+        LOGGER.warn("This will overwrite the store that is already here:");
+        LOGGER.warn("  database  {}  ({} MB)", db, bytes / (1024 * 1024));
+        LOGGER.warn("  a restore writes over these files; there is no undo and no copy is kept.");
+
+        java.io.Console console = System.console();
+        if (console == null) {
+            LOGGER.error("Refusing: no terminal to confirm at. Pass --force if you meant it.");
+            return false;
+        }
+        String answer = console.readLine("Replace it? type the word yes: ");
+        boolean ok = answer != null && answer.strip().equalsIgnoreCase("yes");
+        if (!ok) {
+            LOGGER.info("Left alone.");
+        }
+        return ok;
+    }
+
     @Override
     public Integer call() throws Exception {
         Path zipPath = Paths.get(backupFilePath);
@@ -53,6 +104,19 @@ public class RestoreCommand implements Callable<Integer> {
             LOGGER.error(
                     "Invalid backup file: {}. Please provide a valid .zip backup archive.", zipPath.toAbsolutePath());
             return 1;
+        }
+
+        // Restoring over a store that already has something in it is the one irreversible thing
+        // this command does: the archive is written straight over the files, so an older backup
+        // unpacked onto a newer corpus takes the newer one with it and leaves nothing to go back
+        // to. On a fresh machine there is nothing to lose and nothing is asked -- which is the
+        // case restore is usually run for.
+        //
+        // The rest of this repository already holds this line: the upstream guard stops to ask
+        // before posting a single comment, and backup refuses outright rather than warning. Only
+        // the command that can replace the whole corpus asked nothing at all.
+        if (!force && !confirmReplacement()) {
+            return 2;
         }
 
         // Restore relative to BASE_DIR, not to data/. A backup now carries reviews/ and memory/
@@ -132,7 +196,7 @@ public class RestoreCommand implements Callable<Integer> {
             LOGGER.info("==================================================");
             LOGGER.info("✔ Restoration completed successfully!");
             LOGGER.info("  1. Your database, vectors, and memory are fully restored.");
-            LOGGER.info("  2. Your local models and Google Drive paths were preserved.");
+            LOGGER.info("  2. Your local models and note folders were preserved.");
             LOGGER.info("==================================================");
 
         } catch (Exception e) {

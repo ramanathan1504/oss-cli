@@ -395,7 +395,17 @@ public class SyncCommand implements Callable<Integer> {
         LOGGER.info("Querying GitHub Search API for merged contributions...");
 
         GitHubClient client = new GitHubClient();
-        List<Issue> mergedPrs = client.searchIssuesAndPrs(searchQuery);
+        GitHubClient.Found found = client.search(searchQuery);
+        List<Issue> mergedPrs = found.items();
+        // A profile built from a page is not a profile of the person. This used to read one page
+        // -- thirty pull requests, whatever the true number -- and describe them as the history.
+        if (found.truncated()) {
+            LOGGER.warn(
+                    "  ↳ {} match in total; GitHub's search returns at most {}, newest first. "
+                            + "The profile is built from those.",
+                    found.totalAvailable(),
+                    GitHubClient.SEARCH_LIMIT);
+        }
 
         // A. Crawl Diffs and Generate PR Summaries
         if (mergedPrs.isEmpty()) {
@@ -498,15 +508,27 @@ public class SyncCommand implements Callable<Integer> {
             }
         }
 
-        // B. Sync Google Drive AI Studio Logs (The Ingestion Engine - Always Runs)
-        if (drivePathsStr != null && !drivePathsStr.trim().isEmpty()) {
-            LOGGER.info("Scanning Google Drive paths recursively for AI Studio logs...");
-            String[] paths = drivePathsStr.split(",");
+        // B. Ingest the note folders: the built-in store, plus anything in drive.paths.
+        //
+        // The built-in store is FIRST and unconditional, and that is the whole point. Without it
+        // the compounding stopped one step short of being useful: `memory harvest` wrote notes,
+        // `memory search` found them by term -- and `chat`, `guide`, `pick` and `prompt`, every
+        // command that actually answers from the corpus, never saw one of them. On a fresh install
+        // drive.paths is empty, so this entire step was skipped and the corpus could not grow from
+        // the user's own work at all. The loop only closed here because an archive extension
+        // happened to write into a folder somebody had configured.
+        //
+        // This is not acting unasked: it reads the store this tool filled, on the run the user
+        // typed. Nothing is fetched and nothing is downloaded.
+        List<String> noteFolders = noteFolders(drivePathsStr);
+        {
+            LOGGER.info("Scanning your note folders ({}) recursively...", noteFolders.size());
+            List<String> paths = noteFolders;
 
             for (String path : paths) {
                 java.nio.file.Path localPath = java.nio.file.Paths.get(path.trim());
                 if (!java.nio.file.Files.exists(localPath)) {
-                    LOGGER.warn("Google Drive directory does not exist locally: {}", localPath.toAbsolutePath());
+                    LOGGER.warn("Note folder does not exist locally: {}", localPath.toAbsolutePath());
                     continue;
                 }
 
@@ -555,6 +577,20 @@ public class SyncCommand implements Callable<Integer> {
                             continue;
                         }
                         String rawContent = new String(fileBytes, java.nio.charset.StandardCharsets.UTF_8);
+
+                        // An empty note is not a note. Embedding one produces the vector of the
+                        // empty string -- a fixed value, identical for every such file -- so a
+                        // handful of 0-byte placeholders become a cluster that matches every query
+                        // at the same score and crowds real passages out of the results. Six of
+                        // them were sitting in a real corpus, indistinguishable in the table from
+                        // notes with something in them.
+                        //
+                        // ResolutionWriter already refuses to file a blank note. This is the same
+                        // rule on the way in.
+                        if (!worthIndexing(rawContent)) {
+                            LOGGER.debug("    ↳ Skipping '{}': no content to index.", fileName);
+                            continue;
+                        }
 
                         // Scrub BEFORE anything else touches it. Everything downstream -- the
                         // cache comparison, the embedding, the passages, the stored row -- must
@@ -680,13 +716,16 @@ public class SyncCommand implements Callable<Integer> {
                     }
                 } catch (Exception e) {
                     LOGGER.error(
-                            "Failed to scan Google Drive directory recursively '{}': {}",
+                            "Failed to scan note folder recursively '{}': {}",
                             localPath.toAbsolutePath(),
                             e.getMessage());
                 }
             }
-        } else {
-            LOGGER.info("No Google Drive paths configured for AI log ingestion. Skipping this step.");
+        }
+        if (noteFolders.size() == 1) {
+            // Said rather than silent. With nothing in drive.paths the built-in store is the whole
+            // note layer, which is the normal state of a fresh install and not a misconfiguration.
+            LOGGER.info("  ↳ Only the built-in store was read. oss setup adds your own folders.");
         }
 
         // C. Update the sync timestamp in SQLite on success
@@ -707,5 +746,44 @@ public class SyncCommand implements Callable<Integer> {
         LOGGER.info(
                 "Personal Sync completed successfully. Your complete developer footprint and AI logs are cached locally!");
         return 0;
+    }
+
+    /**
+     * Whether a file has anything worth embedding.
+     *
+     * <p>The vector of an empty string is a fixed value, so every empty note embeds to the same
+     * point and the whole set matches any query at one score. Six 0-byte files were doing exactly
+     * that in a real corpus, sitting in the table looking like notes.
+     */
+    static boolean worthIndexing(String content) {
+        return content != null && !content.isBlank();
+    }
+    /**
+     * Every folder whose notes belong in the corpus.
+     *
+     * <p>The built-in store is first and unconditional, and that is the whole point. Without it the
+     * compounding stopped one step short of being useful: {@code memory harvest} wrote notes,
+     * {@code memory search} found them by term — and {@code chat}, {@code guide}, {@code pick} and
+     * {@code prompt}, every command that actually answers from the corpus, never saw one of them.
+     *
+     * <p>On a fresh install {@code drive.paths} is empty, so this entire step was skipped and the
+     * corpus could not grow from the user's own work at all. The loop only ever closed because an
+     * archive extension happened to write into a folder somebody had separately configured — which
+     * made "install oss-cli and that is it" false for the half of the corpus that is yours.
+     *
+     * <p>Reading the store this tool filled, on the run the user typed, is not acting unasked.
+     * Nothing is fetched and nothing is downloaded.
+     */
+    static List<String> noteFolders(String drivePaths) {
+        List<String> out = new java.util.ArrayList<>();
+        out.add(com.osscli.memory.BuiltinMemory.DIR.toString());
+        if (drivePaths != null && !drivePaths.isBlank()) {
+            for (String path : drivePaths.split(",")) {
+                if (!path.isBlank()) {
+                    out.add(path.trim());
+                }
+            }
+        }
+        return out;
     }
 }

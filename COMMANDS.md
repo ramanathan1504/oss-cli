@@ -135,6 +135,121 @@ Build commands are extracted from the project's own `BUILDING` / `CONTRIBUTING` 
 
 Starter issues are matched on **whole words in a normalised label**, so `good-first-issue`, `Good First Issue` and `E-easy` all match while `area/resteasy-classic` and `spring boot starter` do not. They are listed fewest-comments-first: a starter issue with a long thread usually turned out to be hard, or someone is already on it.
 
+### `hub`
+Is anyone waiting on you? Every project you follow, in one list.
+
+Ranks by whose turn it is rather than by date, so a thread where the ball is in your court outranks a busier one where it is not.
+
+*   `-r`, `--repo <repo>` : Only this repository.
+*   `--all` : Include the ones where the ball is not in your court.
+
+```bash
+oss hub
+oss hub --all
+```
+
+### `pick`
+What to work on next, scored against what you have already worked on.
+
+Ranks the backlog against your own history — the areas you have touched, the reviews you recorded — so the suggestion is one you are already equipped for rather than the newest thing open. With nothing recorded yet it says so and names the two commands that build that profile.
+
+*   `-r`, `--repo <repo>` : Only this repository.
+*   `--limit <n>` : How many to suggest (default 10).
+*   `--issues-only` : Skip pull requests.
+
+```bash
+oss pick
+oss pick --issues-only --limit 5
+```
+
+### `prs`
+Analyse cached open pull requests for stale status, reviews, and critical fixes.
+
+Reads what `sync` already stored, so it answers offline.
+
+*   `-r`, `--repo <repo>` : Target repository. Defaults to `default.repository`.
+
+### `pr`
+Every mechanical fact about a pull request.
+
+No judgement and no model: the title, author, state, base branch, head commit, and — on request — the files or the patch itself.
+
+*   `-r`, `--repo <repo>` : Target repository. Defaults to `default.repository`.
+*   `--files` : Only the files it touches.
+*   `--diff` : The patch itself.
+
+```bash
+oss pr 4249 -r owner/name
+oss pr 4249 -r owner/name --files
+```
+
+Issues and pull requests share one numbering sequence on GitHub, so asking for a number that is an issue says exactly that rather than failing on a null.
+
+### `issue`
+Read an issue as it was filed.
+
+*   `-r`, `--repo <repo>` : Target repository. Defaults to `default.repository`.
+*   `--comments` : Include the discussion.
+
+```bash
+oss issue 1666 -r owner/name --comments
+```
+
+### `followup`
+What moved on a reviewed pull request since you reviewed it.
+
+Records that you reviewed a pull request at a particular head commit, then tells you what the author pushed after that — so a re-review starts from the difference rather than from the top.
+
+*   `-r`, `--repo <repo>` : Target repository. Defaults to the repository already on that row.
+*   `--record`, `--sync <pr>` : Record a pull request as reviewed at its current head.
+*   `--verdict <v>` : With `--record`: `take`, `changes`, `blocked` or `routine`.
+*   `--note <text>` : With `--record`: one line, for you, later.
+*   `--since <pr>` : What the author pushed since you reviewed it.
+*   `--write` : With `--since`: append the report to the review file.
+*   `--changed` : Only the ones that moved.
+*   `--mine` : Only where the last word is not yours.
+*   `--comment <pr>` : Print just the paste-ready block of a review, to pipe.
+
+`--comment` prints; it does not post. Nothing in this tool writes to anybody's repository — every GitHub call it makes is a read.
+
+### `ext`
+Attach and inspect runners and memories.
+
+An extension is a directory somebody points at; the tool reads its manifest and gains the verbs it declares. Nothing is downloaded and nothing is registered without a path being given.
+
+*   `oss ext list` : Show every registered extension.
+*   `oss ext add <path>` : Register the extension declared by a repository.
+*   `oss ext remove <name>` : Unregister an extension.
+*   `oss ext refresh <name>` : Re-read a registered extension's manifest from disk.
+
+### `alias`
+Give this command your own name — `buddy`, `hey`, anything.
+
+*   `--list` : Show the names already created.
+*   `--remove <name>` : Remove a name.
+*   `--force` : Create it even if the name is already taken.
+
+```bash
+oss alias buddy
+oss alias --list
+```
+
+### `backlog`
+The whole backlog as one page: what is mergeable, what is one fix away, what to pick up next.
+
+Fetches the repository's open issues and pull requests, buckets them, builds a cross-reference graph between them, and writes a single HTML page into the current directory. The fetch is cached, so `--dry-run` rebuilds the page from the last real fetch without spending API calls.
+
+*   `-r`, `--repo <repo>` : Target repository. Defaults to `default.repository`.
+*   `--no-ai` : Skip the model-written enrichment.
+*   `--dry-run` : Reuse the cached fetch rather than calling GitHub again.
+
+```bash
+oss backlog -r owner/name
+oss backlog -r owner/name --dry-run
+```
+
+The report itself is POSIX shell, so on Windows it says so and points at WSL rather than half-running. Anything option-shaped that this command does not recognise is refused **here**, by name — passing it down would make the shell script answer with its own interface, which names flags and environment variables no reader of `oss backlog --help` has heard of.
+
 ### `review`
 Reviews a pull request using every source you have connected, and nothing you have not.
 
@@ -162,9 +277,43 @@ Escalation fires **only when it would change the answer** — a diff that alread
 oss review 4234                    facts, conventions and your notes; no model
 oss llm review 4234                + a local verdict
 oss claude review 4234             + Claude, and it reads the whole diff
+oss review 4234 --verify --clone ~/src/project    + built and re-run with the change reverted
 oss review 4234 --no-verdict       facts only
 oss review 4234 -r owner/name --refresh
 ```
+
+### `--verify` — the layer that produces facts
+
+Every other layer reads. This one **builds the change and runs its tests, then takes the production
+change back out and runs them again**:
+
+```
+── Verification (built and run, not read) ──
+  ✔ build
+  ✔ tests with the change
+  ✔ revert the change
+  ✘ tests without the change — Tests run: 15, Failures: 1, Errors: 1
+
+  ✔ ThrowablesTest — fails when the production change is reverted
+  ⚠ SomeOtherTest — passes with the production change reverted
+      It would have passed before the change, so it is not covering it.
+```
+
+That warning is the point. **A test that passes with the fix reverted is proving nothing**, and it
+is invisible to reading: the test is present, well written, green, and covers none of the change.
+No model can find it, because the fact does not exist in the diff — it only exists once something
+has been run.
+
+- Everything happens in a throwaway `git worktree`; **your working tree is never touched**.
+- The change is reverted to the **merge base**, not to the branch tip — the tip has moved on, and
+  reverting to it would revert other people's work and make every test look proven.
+- Each test class is judged on **its own** result line, not on the build's exit code, and a class
+  that never ran reports `was not run` rather than passing quietly.
+- A file the change **adds** is removed rather than restored — there is no earlier version of it to
+  restore to, and reverting the set with one checkout used to fail on it and so revert nothing.
+- If the project will not build once the change is out — usually because the change adds a type the
+  test names — that is reported as **nothing proven**, never as proof. A test run that fails because
+  it could not compile looks exactly like one that failed because it caught the change.
 
 When a verdict is produced it is filed to `<topic>/oss-cli/` in your notes archive and indexed, so it becomes retrievable evidence for later questions.
 
@@ -452,7 +601,14 @@ oss doctor
 #### The schema check, and why it can fail
 
 ### `serve`
-Runs the local page on `http://localhost:1504`, with a palette of whatever extensions are attached.
+Runs the local page on `http://localhost:1504`: the board, the questions you can ask, and a palette of whatever extensions are attached.
+
+**The board opens on `oss hub`** — who is waiting on you, across every repository you follow — and lists the pull requests you have reviewed, from the same ledger `hub` and `followup` read. Beside each row is the question that belongs there: **Seen this?** on every row, and **Since I reviewed** only where a verdict exists, because anywhere else it would answer about nothing.
+
+**The page never reimplements a command.** Every button runs one and shows what came back, so the two cannot disagree — and if they ever did, the page would be the one lying. Hovering a button says what it asks and which command it runs.
+
+**Nothing reachable from the page writes.** A browser has no terminal, and an outward write must be confirmed at one, so the ask table carries only commands that read — `hub`, `pick`, `search`, `duplicates`, `followup`, `hidden-critical`, `doctor`. A test fails the build if a command that writes is ever added to it. Anything that posts stays on the CLI.
+
 *   `--install` : Start it at login and restart it if it dies.
 *   `--uninstall` : Stop starting it at login.
 *   `--port` : Somewhere other than 1504.
@@ -507,6 +663,28 @@ oss gemini review 4249       Google Gemini may answer
 oss codex review 4249        OpenAI may answer
 oss llm claude review 4249   either may, in that order
 ```
+
+### `--cli` — answer on the subscription instead of the API key
+
+Each of the three cloud engines has a command-line tool of its own, and anybody using it has
+already installed and signed in to it. `--cli` reaches the engine that way, so the call bills
+against the subscription rather than against API credit:
+
+```bash
+oss claude --cli review 4249     Claude, through the Claude Code CLI
+oss codex --cli review 4249      OpenAI, through codex exec
+oss gemini --cli review 4249     Google, through the gemini CLI
+```
+
+An account with no API credit is not a broken install. When a provider refuses a call for
+billing and its tool is on your PATH, the error says so and names the one keystroke that
+recovers — but it never switches by itself. Which engine saw your code, and whose account paid,
+stays the line you typed.
+
+Two things worth knowing before you use it. These tools are **agent harnesses, not completion
+endpoints**: they can read files and run commands, so `codex` is invoked `--sandbox read-only`
+and none of them is pointed at the repository being reviewed. And `oss llm --cli` does not
+exist — Ollama is a daemon this already speaks to, with no command-line tool to put in front.
 
 ### May, not will
 
@@ -581,6 +759,135 @@ Three lines of keyword matching score 5 of 5 on the same set and cannot invent a
 capability ships and the claim does not: on a machine with room for a 3B model this is genuinely
 useful, and on a laptop the honest default is the deterministic path plus `oss llm`.
 
+### The knowledge base is built in
+
+`oss memory` is the whole knowledge base, and needs no repository. `oss kb` is the same command
+under a shorter name:
+
+```bash
+oss memory file notes.md      # keep a note
+oss memory index              # read it into the corpus
+oss memory search "…"         # find it again, by meaning
+oss memory map                # which notes touch which topic
+oss memory coverage           # what you have covered, and what you have not
+oss memory gaps               # file the missing half as a note you can search
+oss memory harvest            # pull your own public work on GitHub into the archive
+oss memory harvest --sessions # …and the Claude Code / codex / gemini transcripts on this machine
+oss memory digest             # what you actually worked out, per topic
+oss memory import <folder>    # a chat product's data export, redacted
+oss memory schedule --install # run the harvest daily, at a time you pick
+oss memory doctor             # is any of this actually working
+```
+
+`harvest` is the one verb here that needs the network. It searches for everything you were
+*involved* in — the comment you left, the review you gave, the issue you triaged — not only what
+you authored, and writes one markdown file per item. `sync --me` is narrower on purpose: it stores
+the pull requests you wrote and got merged, which is a fraction of the record.
+
+```bash
+oss memory harvest                 # the username from oss setup
+oss memory harvest someone-else    # or say whose
+oss memory index                   # then read them into the corpus
+```
+
+Each harvested note carries the three headings every harvester in this archive writes — the problem
+as filed, the conversation in order with who said what and when, and how it ended — because `digest`
+reads those headings and a harvest with its own layout would write notes the rest of the tool cannot
+read.
+
+`digest` is the difference between an index and an answer. `map` tells you which notes mention log4j;
+`digest` reads them and says what was solved, putting **the public record above private reasoning** and
+labelling each — what was agreed on a thread and what was reasoned in a conversation are different
+kinds of evidence, and merging them reads as one account when it is two.
+
+`harvest --sessions` reads the transcripts the CLIs on this machine already wrote — Claude Code,
+codex and gemini each keep every session on disk. That is the half of the record that never reaches
+GitHub: the reasoning, the wrong turn taken first, the command that finally worked. It needs no
+network and no token, so it works on a machine that has neither. `--sessions-only` skips the GitHub
+half entirely.
+
+Each transcript is **budgeted, not concatenated** — the newest turns of the newest sessions, with
+the path to the full file — and anything read past the cap is counted and reported. Only the two
+speakers are kept; tool calls and their output are skipped, which is both the bulk of a transcript
+and where the keys and file contents are. What is left is redacted anyway: a real run over this
+machine's own transcripts replaced two sets of database credentials and a password.
+
+`import` is for the products that keep nothing on your machine. ChatGPT, Claude.ai and AI Studio
+write nothing here, so the only route in is the export you download. **Secrets are redacted rather than dropped** — a real
+export carried AWS keys and tokens in seven conversations whose troubleshooting was worth keeping —
+and the original download is never modified. Files that are not text are counted, not silently
+skipped, because an export is mostly screenshots and silence would read as loss.
+
+The file name is stable, so harvesting or importing twice rewrites the note rather than filing a second copy.
+Everything it writes is ordinary markdown in a folder — no database, no front matter, nothing an
+archive extension has to understand — which is why the built-in can read what an extension wrote,
+and the other way round.
+
+With nothing configured it works over `~/.oss-cli/memory`. Pointing it somewhere else, and telling
+it what you are trying to learn, is a file — `~/.oss-cli/kb.json`:
+
+```json
+{
+  "archive": "~/Documents/notes",
+  "topics":  { "log4j": ["log4j", "appender", "layout"] },
+  "yardsticks": { "log4j": ["Appenders", "Layouts", "Filters", "Lookups", "Garbage-free logging"] }
+}
+```
+
+**A yardstick is the outside opinion, and it is the point of `coverage`.** Counting your own notes
+can only report what you have written: an archive with nothing on Lookups will happily report all
+of its Log4j notes as Log4j notes and call that complete. The yardstick is what the technology's
+own manual documents, so an area nobody wrote about scores `○ nothing` instead of being invisible.
+
+Three grades, and the floors are deliberate: an area needs **3 mentions in a note** before that note
+counts for it — one passing use of a word is not knowledge of the subject — and **3 notes** before it
+grades `● covered` rather than `◐ thin`. A single long note that returns to a term forty times is
+one afternoon's reading; three notes that each come back to it is a subject you have worked in.
+
+`gaps` writes the same measurement down instead of printing it. `coverage` scrolls away; the half
+worth keeping is the short list — the areas scoring nothing — and as a note it is retrievable, it
+joins the corpus, and next month's run can be compared against it. It claims only what a count can
+support: an area with no notes is a thing not written down yet.
+
+### Running it daily, if you want that
+
+Nothing here schedules itself. `oss memory schedule --install` asks the operating system to run
+`oss memory harvest` once a day — launchd on macOS, a systemd user timer on Linux, a scheduled task
+on Windows — and `--uninstall` takes it away again:
+
+```bash
+oss memory schedule                      # what is installed, and is the system holding it
+oss memory schedule --install            # every day at 09:15
+oss memory schedule --install --at 07:00 # or whenever suits you
+oss memory schedule --uninstall
+```
+
+A missed run is caught up rather than skipped: a laptop that was closed at 09:15 harvests when it
+wakes. The job exits when it is done — it is not a service, and nothing here keeps it alive.
+
+`oss memory doctor` is the other half of that, and it answers the three questions `oss doctor`
+cannot: is the archive reachable, did the last run succeed, and is the schedule **loaded** rather
+than merely installed. That last distinction is where a dead job hides — the file is still on disk,
+so anything checking for the file reports that everything is fine.
+
+A fresh install reads as a warning, not a failure. The archive folder appears when you file the
+first note, and telling a new user their working install is broken is worse than saying nothing.
+
+### What you remember reaches what answers
+
+`oss sync --me` reads the built-in store **and** anything in `drive.paths`, in that order, and the
+first one is not optional. Only `sync --me` turns a note into a vector, and it used to read
+`drive.paths` alone — which is empty on a fresh install, so the whole step was skipped and `chat`,
+`guide`, `pick` and `prompt` never saw a harvested item. The loop appeared to work only where an
+archive extension happened to write into a folder its owner had separately configured.
+
+So the compounding is: `harvest` writes → `sync --me` embeds → everything that answers reads it →
+what you conclude gets filed and harvested again. On one machine that is 0 notes before and
+**90 notes, 508 passages** after, all from the same embedding model.
+
+Matching is literal and case-insensitive on purpose. A model deciding whether a note is "about" an
+area turns a measurement into an opinion, and makes the number move when nothing was written.
+
 ### A pack is a file
 
 A pack is what points the built-in engine at *your* applications, versions and configurations. It
@@ -601,11 +908,14 @@ is **data the tool reads**, not a program it runs:
 ```
 
 Save it as `pack.json`, or as a ```json block inside `pack.md` if you want the same file to explain
-itself to a person as well. Then:
+itself to a person as well. A worked example ships at `runner/packs/example-json/pack.json` —
+copy it into your own repository and edit the four things that are yours: the name, `useWhen`,
+the versions and the apps. Then:
 
 ```bash
 oss run --pack <dir> list
 cd <dir> && oss run list      # the same thing
+oss bench list                # `bench` is the same command under an older name
 ```
 
 **`useWhen` is the part a directory could never carry.** A pack states what it is for — the

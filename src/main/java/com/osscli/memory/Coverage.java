@@ -1,0 +1,190 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package com.osscli.memory;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.stream.Stream;
+
+/**
+ * What the notes cover, measured against something outside them.
+ *
+ * <p>A topic map answers "which of my notes touch Log4j" and cannot answer "what about Log4j have I
+ * never written down" — both only ever look at what is already there, so a base holding nothing on
+ * Lookups reports every one of its Log4j notes as Log4j notes and calls that complete.
+ *
+ * <p>So the yardstick comes from outside: the list of areas a technology's own manual documents,
+ * declared in {@code kb.json}. Every area is scored by how many notes mention it and how often, and
+ * the ones that score nothing are the answer to what is missing.
+ *
+ * <h2>Two grades, and why they are not one</h2>
+ *
+ * <p><b>Applied</b> requires the mentions to appear in more than one note. A single long note that
+ * uses a term forty times is one thing you read once; three notes that each return to it is a
+ * subject you have actually worked in. Collapsing the two would let one afternoon's reading read as
+ * experience.
+ */
+public final class Coverage {
+
+    /** Mentions in one note before that note counts as being about the area at all. */
+    private static final int MENTION_FLOOR = 3;
+
+    /** Notes that must clear the floor before an area counts as covered rather than touched. */
+    private static final int NOTE_FLOOR = 3;
+
+    private Coverage() {}
+
+    /** One documented area, and what the notes have to say about it. */
+    public record Area(String name, int notes, int mentions, String strongest) {
+
+        /** Nothing at all, one or two notes, several, or several with real weight behind them. */
+        public String grade() {
+            if (notes == 0) {
+                return "nothing";
+            }
+            if (notes < NOTE_FLOOR) {
+                return "thin";
+            }
+            return "covered";
+        }
+
+        public String mark() {
+            switch (grade()) {
+                case "covered":
+                    return "●";
+                case "thin":
+                    return "◐";
+                default:
+                    return "○";
+            }
+        }
+    }
+
+    /**
+     * Score every area of a yardstick against the notes in an archive.
+     *
+     * <p>Matching is literal and case-insensitive, on purpose. The alternative is a model deciding
+     * whether a note is "about" an area, which turns a measurement into an opinion and makes the
+     * number move when nothing was written.
+     */
+    public static List<Area> score(Path archive, List<String> areas) throws IOException {
+        Map<String, Integer> noteCount = new LinkedHashMap<>();
+        Map<String, Integer> mentionCount = new LinkedHashMap<>();
+        Map<String, String> strongest = new LinkedHashMap<>();
+        Map<String, Integer> strongestScore = new LinkedHashMap<>();
+        for (String area : areas) {
+            noteCount.put(area, 0);
+            mentionCount.put(area, 0);
+            strongest.put(area, "");
+            strongestScore.put(area, 0);
+        }
+
+        if (!Files.isDirectory(archive)) {
+            return areas.stream().map(a -> new Area(a, 0, 0, "")).toList();
+        }
+
+        try (Stream<Path> files = Files.walk(archive)) {
+            for (Path note : files.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().endsWith(".md"))
+                    .toList()) {
+                String text;
+                try {
+                    text = Files.readString(note, StandardCharsets.UTF_8).toLowerCase(Locale.ROOT);
+                } catch (IOException e) {
+                    // One unreadable note must not end the measurement; an archive of a thousand
+                    // files will always have one that is not text.
+                    continue;
+                }
+                for (String area : areas) {
+                    int hits = count(text, area.toLowerCase(Locale.ROOT));
+                    if (hits < MENTION_FLOOR) {
+                        // One passing use of a word is not knowledge of the subject. Without a
+                        // floor, a single stray "thread" put most of an archive under concurrency.
+                        continue;
+                    }
+                    noteCount.merge(area, 1, Integer::sum);
+                    mentionCount.merge(area, hits, Integer::sum);
+                    if (hits > strongestScore.get(area)) {
+                        strongestScore.put(area, hits);
+                        strongest.put(area, note.getFileName().toString());
+                    }
+                }
+            }
+        }
+
+        List<Area> out = new ArrayList<>();
+        for (String area : areas) {
+            out.add(new Area(area, noteCount.get(area), mentionCount.get(area), strongest.get(area)));
+        }
+        out.sort((a, b) ->
+                b.notes() != a.notes() ? b.notes() - a.notes() : a.name().compareTo(b.name()));
+        return out;
+    }
+
+    /** Non-overlapping occurrences, which is what "mentions" means to a person counting them. */
+    private static int count(String haystack, String needle) {
+        if (needle.isBlank()) {
+            return 0;
+        }
+        int n = 0;
+        int at = haystack.indexOf(needle);
+        while (at >= 0) {
+            n++;
+            at = haystack.indexOf(needle, at + needle.length());
+        }
+        return n;
+    }
+
+    /** Which notes touch which topic — the question the map answers, over the same archive. */
+    public static Map<String, List<String>> map(Path archive, Map<String, List<String>> topics) throws IOException {
+        Map<String, List<String>> out = new TreeMap<>();
+        topics.keySet().forEach(t -> out.put(t, new ArrayList<>()));
+        if (!Files.isDirectory(archive) || topics.isEmpty()) {
+            return out;
+        }
+        try (Stream<Path> files = Files.walk(archive)) {
+            for (Path note : files.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().endsWith(".md"))
+                    .toList()) {
+                String text;
+                try {
+                    text = Files.readString(note, StandardCharsets.UTF_8).toLowerCase(Locale.ROOT);
+                } catch (IOException e) {
+                    continue;
+                }
+                for (Map.Entry<String, List<String>> topic : topics.entrySet()) {
+                    int hits = 0;
+                    for (String term : topic.getValue()) {
+                        hits += count(text, term.toLowerCase(Locale.ROOT));
+                    }
+                    if (hits >= MENTION_FLOOR) {
+                        out.get(topic.getKey()).add(note.getFileName().toString());
+                    }
+                }
+            }
+        }
+        return out;
+    }
+}

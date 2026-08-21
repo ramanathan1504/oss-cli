@@ -1049,6 +1049,37 @@ public class SqliteStorage {
      * The embedding model that produced the stored vector for this file, or null when the row
      * predates provenance tracking. Null is treated as stale so the row is re-embedded.
      */
+    /**
+     * Indexed notes whose text carries a term, as file name to content.
+     *
+     * <p>Read from the corpus rather than by walking the archive. The notes are already here with
+     * their content, and a cloud-synced folder answers a full-text walk in minutes -- iCloud
+     * downloads each file it is asked to read -- where this answers in milliseconds.
+     *
+     * <p>LIKE rather than the vector index on purpose: a digest groups by a declared topic, and a
+     * declared term either appears in a note or it does not. Ranking by meaning would put a note
+     * about something adjacent into a page whose whole claim is that it is about this.
+     */
+    public static java.util.Map<String, String> notesContaining(String term) {
+        java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
+        String sql =
+                "SELECT file_name, content FROM personal_chat_memory " + "WHERE content LIKE ? ORDER BY file_name;";
+        try (Connection conn = DatabaseManager.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, "%" + term + "%");
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    out.put(rs.getString("file_name"), rs.getString("content"));
+                }
+            }
+        } catch (SQLException e) {
+            // A digest of nothing is a truthful answer to an unreadable store; failing the whole
+            // command because one term could not be looked up is not.
+            System.err.println("  (could not read notes containing '" + term + "': " + e.getMessage() + ")");
+        }
+        return out;
+    }
+
     public static String loadPersonalChatEmbeddingModel(String filePath) throws SQLException {
         String sql = "SELECT embedding_model FROM personal_chat_memory WHERE file_path = ?;";
         try (Connection conn = DatabaseManager.getConnection();
