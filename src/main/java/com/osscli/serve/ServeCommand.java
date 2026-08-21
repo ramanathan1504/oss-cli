@@ -155,7 +155,7 @@ public class ServeCommand implements Callable<Integer> {
         server.createContext("/api/ask", this::handleAsk);
         server.createContext("/api/attach", this::handleAttach);
         server.createContext("/api/detach", this::handleDetach);
-        server.setExecutor(null);
+        server.setExecutor(askPool());
         server.start();
 
         String url = "http://localhost:" + port + "/";
@@ -610,6 +610,31 @@ public class ServeCommand implements Callable<Integer> {
     // --------------------------------------------------------------------- page ---
     // Self-contained: no CDN, no build step, and it renders with the registry it
     // fetches rather than one baked in at start.
+    /**
+     * Threads to answer on, because the default is one and one is not enough here.
+     *
+     * <p>{@code setExecutor(null)} hands every request to the single dispatcher thread, in order.
+     * That is fine for a page of static HTML and wrong for this one: the board fires {@code hub} as
+     * it loads, {@code hub} shells out to a real command that takes tens of seconds against ten
+     * repositories, and until it returns <em>nothing else on the page responds</em> — not another
+     * question, not the page itself on a second tab. Measured: the page did not load at all while
+     * one ask was in flight, which reads as a hung service rather than as a slow command.
+     *
+     * <p>Small and bounded on purpose. Every ask starts a child {@code oss} process, so an unbounded
+     * pool would let a browser with a heavy hand start a dozen JVMs on somebody's laptop. Six is
+     * more than the page can usefully have in flight — it has one output panel per section — and
+     * the queue behind it is the backpressure.
+     */
+    private static java.util.concurrent.ExecutorService askPool() {
+        java.util.concurrent.atomic.AtomicInteger n = new java.util.concurrent.atomic.AtomicInteger();
+        return java.util.concurrent.Executors.newFixedThreadPool(6, r -> {
+            Thread t = new Thread(r, "oss-serve-" + n.incrementAndGet());
+            // Daemon, so ctrl-c stops the service rather than leaving the JVM up on idle threads.
+            t.setDaemon(true);
+            return t;
+        });
+    }
+
     /** The page as it will be served, so a test can assert on what leads it. */
     static String page() {
         return PAGE;
