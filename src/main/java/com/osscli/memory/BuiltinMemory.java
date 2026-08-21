@@ -582,20 +582,37 @@ public final class BuiltinMemory {
     }
 
     /**
-     * How many notes have vectors.
+     * Notes in the archive that no configured folder covers.
      *
-     * <p>Counted from the table {@code sync --me} writes, because that is the one that decides
-     * whether a note can be found by meaning. A count from anywhere else would be a count of
-     * something else.
+     * <p>{@code drive.paths} lists folders; {@code kb.json}'s archive names a tree. A note in the
+     * tree but under no listed folder is read by nothing, embedded by nothing, and found by
+     * nothing — and until this check it was reported by nothing either.
      */
-    private static long embeddedNotes() {
-        try (java.sql.Connection c = com.osscli.storage.DatabaseManager.getConnection();
-                java.sql.Statement st = c.createStatement();
-                java.sql.ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM personal_chat_memory;")) {
-            return rs.next() ? rs.getLong(1) : 0;
+    private static long notesOutsideTheIndexedFolders(Path archive) {
+        if (!Files.isDirectory(archive)) {
+            return 0;
+        }
+        List<Path> indexed = new ArrayList<>();
+        indexed.add(DIR);
+        try {
+            String configured = com.osscli.storage.SqliteStorage.loadConfig("drive.paths");
+            if (configured != null) {
+                for (String folder : configured.split(",")) {
+                    if (!folder.isBlank()) {
+                        indexed.add(Path.of(folder.trim()));
+                    }
+                }
+            }
         } catch (Exception e) {
-            // A store that cannot answer this is not a reason to fail the health check; the rest of
-            // it is still worth printing.
+            // No configuration readable: everything in the archive is outside it, which is what
+            // the count will then say.
+        }
+        try (Stream<Path> walk = Files.walk(archive)) {
+            return walk.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().endsWith(".md"))
+                    .filter(p -> indexed.stream().noneMatch(p::startsWith))
+                    .count();
+        } catch (IOException e) {
             return 0;
         }
     }
@@ -985,18 +1002,25 @@ public final class BuiltinMemory {
         // Measured on this store when the check was written: 23 PR reviews on disk, 19 embedded.
         // The four newest -- the ones you would actually ask about -- were invisible to every
         // command that answers.
-        long onDisk = countNotes(archive) + countNotes(DIR);
-        long embedded = embeddedNotes();
-        if (onDisk > 0) {
-            long missing = Math.max(0, onDisk - embedded);
+        // Counted against what sync actually READS, not against the whole archive.
+        //
+        // The first version of this check compared rows in personal_chat_memory to every .md under
+        // kb.json's archive, and warned for ever: `sync --me` walks the folders in drive.paths and
+        // the built-in store, and kb.json's archive is a different set. Measured after a full sync
+        // with zero read failures, it still said "1691 of 1825", which is a check that cannot be
+        // satisfied -- and a warning that never clears is one people learn to skip.
+        //
+        // The gap it was groping at is real and worth naming precisely: 153 notes sit in the
+        // archive but outside every folder drive.paths lists -- the archive root, Personal/, Blog/
+        // -- so nothing indexes them and nothing said so.
+        long outside = notesOutsideTheIndexedFolders(archive);
+        if (outside > 0) {
             out.add(new Check(
-                    "searchable",
-                    missing == 0 ? Check.Status.OK : Check.Status.WARN,
-                    embedded + " of " + onDisk + " note(s) are vectors",
-                    missing == 0
-                            ? ""
-                            : missing + " written but not embedded yet — oss sync --me indexes them;"
-                                    + " until then they answer by term and not by meaning"));
+                    "not indexed",
+                    Check.Status.WARN,
+                    outside + " note(s) in the archive are outside drive.paths",
+                    "nothing reads those folders, so nothing can find them — oss setup, "
+                            + "or point drive.paths at the archive itself"));
         }
 
         String last = com.osscli.schedule.DailyJob.lastRun();
