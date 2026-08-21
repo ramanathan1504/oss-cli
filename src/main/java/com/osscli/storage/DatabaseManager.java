@@ -79,7 +79,13 @@ public class DatabaseManager {
                     stmt.execute(getCreateSnapshotsTableSql());
                     stmt.execute(getCreateJiraMentionsTableSql());
                     stmt.execute(getCreateMonitoredTableSql());
-                    stmt.execute(getSeedMonitoredTableSql());
+                    // Deliberately not seeded. This used to insert fourteen real third-party
+                    // repositories -- log4j, kafka, spark, elasticsearch and the rest -- into
+                    // EVERY fresh install, so a stranger's first `oss sync --all` would fetch
+                    // hundreds of megabytes from projects they had never named. One person's
+                    // interests shipped as everybody's default is the exact opposite of a tool
+                    // for any OSS developer, and it spends somebody else's API budget to do it.
+                    // The registry starts empty; `oss sync --add owner/name` fills it.
                     stmt.execute(getCreateConfigTableSql());
                     stmt.execute(getSeedConfigTableSql());
                     stmt.execute(getCreatePersonalCodeFootprintTableSql());
@@ -131,7 +137,9 @@ public class DatabaseManager {
                     stmt.execute(getCreateCrossRepoLinksTableSql());
                     stmt.execute(getCreateJiraMentionsTableSql());
                     stmt.execute(getCreateMonitoredTableSql());
-                    stmt.execute(getSeedMonitoredTableSql());
+                    // Not seeded here either, for the reason given in Migration 1. Nothing is lost
+                    // for a store that already ran this: a migration runs once, and the rows it
+                    // wrote then are still there.
                     stmt.execute("PRAGMA foreign_keys = ON;");
                 }
             }
@@ -756,26 +764,6 @@ public class DatabaseManager {
 
     private static String getCreateMonitoredTableSql() {
         return "CREATE TABLE IF NOT EXISTS monitored_repositories (repository TEXT PRIMARY KEY, enabled BOOLEAN DEFAULT 1, last_synced_at TEXT);";
-    }
-
-    private static String getSeedMonitoredTableSql() {
-        return """
-                INSERT OR IGNORE INTO monitored_repositories (repository, enabled) VALUES
-                ('apache/logging-log4j2', 1),
-                ('apache/kafka', 1),
-                ('apache/spark', 1),
-                ('apache/flink', 1),
-                ('apache/ignite', 1),
-                ('quarkusio/quarkus', 1),
-                ('elastic/elasticsearch', 1),
-                ('opensearch-project/OpenSearch', 1),
-                ('open-telemetry/opentelemetry-java-instrumentation', 1),
-                ('spring-projects/spring-boot', 1),
-                ('apache/solr', 1),
-                ('apache/camel', 1),
-                ('apache/tomcat', 1),
-                ('apache/cassandra', 1);
-                """;
     }
 
     private static String getCreateConfigTableSql() {

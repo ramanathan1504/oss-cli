@@ -74,7 +74,7 @@ A JVM property (`-Doss.claude.base_url=…`) wins over both, for a single run. A
 **Sync fetches issues that are still open, and only those changed since its last run.** A closed issue therefore never arrives this way — `sync` reports `Open Issues Saved: 0` and nothing changes, however many times it is run. Reach for it by number instead:
 
 ```bash
-oss issue 4129 --repo apache/logging-log4j2
+oss issue 4129 --repo owner/name
 ```
 
 That fetches the issue whatever its state and **keeps it**, so `chat`, `prompt` and the rest can use it afterwards. Which matters more than it sounds: a closed issue is the kind you go back to read, because it is closed on account of having been resolved and the resolution is the interesting part.
@@ -414,7 +414,7 @@ oss codex chat 4129            # escalate to OpenAI instead of Gemini
 
 ```
 ── What went into this answer ──
-  ✔ The issue as filed              #4129 in apache/logging-log4j2
+  ✔ The issue as filed              #4129 in owner/name
   ✔ Your own prior work             22 passages (~5750 tokens) of 32 that matched
         1 issue · 16 notes · 5 related issues
   ✔ Answered by                     Gemini
@@ -795,7 +795,7 @@ as filed, the conversation in order with who said what and when, and how it ende
 reads those headings and a harvest with its own layout would write notes the rest of the tool cannot
 read.
 
-`digest` is the difference between an index and an answer. `map` tells you which notes mention log4j;
+`digest` is the difference between an index and an answer. `map` tells you which notes mention a topic;
 `digest` reads them and says what was solved, putting **the public record above private reasoning** and
 labelling each — what was agreed on a thread and what was reasoned in a conversation are different
 kinds of evidence, and merging them reads as one account when it is two.
@@ -829,14 +829,14 @@ it what you are trying to learn, is a file — `~/.oss-cli/kb.json`:
 ```json
 {
   "archive": "~/Documents/notes",
-  "topics":  { "log4j": ["log4j", "appender", "layout"] },
-  "yardsticks": { "log4j": ["Appenders", "Layouts", "Filters", "Lookups", "Garbage-free logging"] }
+  "topics":  { "caching": ["cache", "eviction", "ttl"] },
+  "yardsticks": { "caching": ["Eviction policies", "Invalidation", "Warmup", "Metrics", "Distributed caches"] }
 }
 ```
 
 **A yardstick is the outside opinion, and it is the point of `coverage`.** Counting your own notes
-can only report what you have written: an archive with nothing on Lookups will happily report all
-of its Log4j notes as Log4j notes and call that complete. The yardstick is what the technology's
+can only report what you have written: an archive with nothing on invalidation will happily report
+all of its caching notes as caching notes and call that complete. The yardstick is what the technology's
 own manual documents, so an area nobody wrote about scores `○ nothing` instead of being invisible.
 
 Three grades, and the floors are deliberate: an area needs **3 mentions in a note** before that note
@@ -888,6 +888,58 @@ what you conclude gets filed and harvested again. On one machine that is 0 notes
 Matching is literal and case-insensitive on purpose. A model deciding whether a note is "about" an
 area turns a measurement into an opinion, and makes the number move when nothing was written.
 
+### The runner is built in
+
+`oss run` answers with nothing attached and no pack written. `oss bench` is the same command under
+its older name.
+
+```bash
+oss run detect     # what this directory is, and what could be run in it
+oss run init       # write a starter pack from what is already here
+oss run build      # the project's own build command
+oss run test       # the project's own tests
+oss run doctor     # would any of this work, asked before it is tried
+```
+
+Nothing is invented. The build system is read from the file that declares it — `pom.xml`,
+`build.gradle(.kts)`, `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, a `Makefile` — and
+the command printed before the run is the whole contract: copy it, type it yourself, get the same
+result. A `package.json` with no `build` script is reported as having no build command rather than
+being sent `npm run build`, because a guessed command that fails looks like a broken project. The
+wrapper a checkout ships (`mvnw`, `gradlew`) beats whatever is on the PATH, since that is the
+version the project actually pins.
+
+```
+  /home/you/yourproject
+  ─────────────────────────────────────────────────────────────
+  maven    pom.xml            ← build and test use this
+           build:  mvn -DskipTests package
+           test:   mvn test
+           reachable: ./mvnw
+
+  toolchain  java 17  (pom.xml)
+
+  pack       none — oss run init writes a starter one
+```
+
+**What it deliberately does not do** is walk a version × config × app matrix. That needs a pack,
+because only the person maintaining a project knows what a real application of it looks like, and
+no amount of detection invents that. What the built-in does is get you to the point where writing
+one is an edit rather than a blank page: `oss run init` writes a `pack.md` with everything it could
+read already filled in — the name, the build system, the repository from `.git/config`, the
+directories under `apps/` — and the two things it could not know marked as yours. It never
+overwrites a pack that exists.
+
+`oss run doctor` is the runner's half of `oss memory doctor`: is a build system declared here, is
+its tool actually installed, does the pack parse, is the engine shipped beside this install, and is
+the JDK in front of you the one the project declares. A directory with no pack is a **warning** and
+exits 0 — a health check that failed because you had not written a pack yet would turn "nothing to
+do" into a red command.
+
+An attached runner extension still wins, exactly as an archive wins over the built-in memory — and
+a verb the extension does not declare falls back here rather than being refused, so attaching a
+bench costs the richer form of a verb, never the verb.
+
 ### A pack is a file
 
 A pack is what points the built-in engine at *your* applications, versions and configurations. It
@@ -895,9 +947,9 @@ is **data the tool reads**, not a program it runs:
 
 ```json
 {
-  "name": "log4j",
-  "description": "Apache Log4j across a version x config x app matrix, on real JVMs",
-  "useWhen": { "repository": "apache/logging-log4j2", "files": ["log4j-core/pom.xml"] },
+  "name": "yourproject",
+  "description": "Your project across a version x config x app matrix, on real JVMs",
+  "useWhen": { "repository": "owner/name", "files": ["core/pom.xml"] },
   "versions": ["2.24.1", "2.25.5", "2.26.1"],
   "defaultVersion": "2.26.1",
   "apps": ["core-java", "db", "network"],
@@ -940,7 +992,7 @@ something real; a `memory` remembers. Both are declared by an `oss-ext.json` at 
 repository and called as child processes, so an extension can be written in anything.
 
 ```bash
-oss ext add ~/apache/log4j2-workout    # register whatever that repo declares
+oss ext add ~/projects/your-bench      # register whatever that repo declares
 oss ext list                           # what is wired up, and is it still reachable
 ```
 
@@ -985,7 +1037,8 @@ declare — so the two paths agree.
 | `ext list`        | Local          | No                      | What is attached, and whether it is still reachable |
 | `bench <verb>`    | Local          | No                      | Dispatch to an attached **bench** (runs something real) |
 | `kb <verb>`       | Local          | No                      | Dispatch to an attached **kb** (files and indexes) |
-| `run` / `memory`  | Local          | No                      | Typed bare, list the verbs the attached extension declares |
+| `run <verb>`      | Local          | No                      | **Built in**: detect, init, build, test, doctor — no pack needed |
+| `run` / `memory`  | Local          | No                      | Typed bare, list the built-in verbs and any the attached extension declares |
 | `llm <cmd>`       | Local          | Ollama                  | Let a local daemon answer when the local rung cannot |
 | `claude <cmd>`    | Online         | Anthropic key           | Let Claude answer when the local rung cannot |
 | `gemini <cmd>`    | Online         | Gemini key              | Let Gemini answer when the local rung cannot |

@@ -111,7 +111,12 @@ public class SyncCommand implements Callable<Integer> {
         if (all) {
             List<String> activeRepos = SqliteStorage.loadMonitoredRepositories();
             if (activeRepos.isEmpty()) {
-                LOGGER.warn("No active monitored repositories found in your local SQLite registry.");
+                // An empty registry is the normal state of a fresh install now that nothing is
+                // seeded, so this is the first thing a new user sees from --all. A bare warning
+                // told them something was missing without telling them what to type.
+                LOGGER.warn("No repositories are being monitored yet — nothing to sync.");
+                LOGGER.warn("  oss sync --add owner/name     start watching one");
+                LOGGER.warn("  oss sync -r owner/name        or sync one without registering it");
                 return 0;
             }
             LOGGER.info("Starting batch sync for {} active repositories...", activeRepos.size());

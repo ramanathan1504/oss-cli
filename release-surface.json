@@ -40,6 +40,7 @@
     "restore": ["--force", "--help", "--version", "-V", "-h"],
     "review": ["--clone", "--help", "--no-notes", "--no-verdict", "--refresh", "--repo", "--verify", "--version", "-V", "-h", "-r"],
     "run": ["--approve-upstream", "--help", "--name", "--pack", "--version", "-V", "-h"],
+    "run builtin-verbs": ["build", "detect", "doctor", "init", "test"],
     "search": ["--global", "--help", "--limit", "--repo", "--version", "-V", "-g", "-h", "-n", "-r"],
     "serve": ["--help", "--install", "--no-open", "--port", "--uninstall", "--version", "-V", "-h"],
     "setup": ["--help", "--version", "-V", "-h"],

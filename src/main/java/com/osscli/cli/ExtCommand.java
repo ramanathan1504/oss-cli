@@ -42,7 +42,7 @@ import picocli.CommandLine.Parameters;
  * against OSS-CLI at all.
  *
  * <pre>{@code
- * oss ext add ~/apache/log4j2-workout    # register whatever that repo declares
+ * oss ext add ~/projects/your-bench      # register whatever that repo declares
  * oss ext list                           # what is wired up, and is it still reachable
  * oss run review 4234                  # dispatch to the bench extension
  * oss memory file notes.md                   # dispatch to the archive
@@ -395,8 +395,13 @@ public class ExtCommand implements Callable<Integer> {
          * inside. Saying only "attach an extension" would hide the route most people want.
          */
         @Override
+        List<String> builtinVerbs() {
+            return com.osscli.runner.BuiltinRunner.VERBS;
+        }
+
+        @Override
         void whenNothingAttached() {
-            System.out.println("  the built-in engine runs a pack directly:");
+            System.out.println("  and the built-in engine runs a pack directly:");
             System.out.println("    oss run --pack <dir> list");
             System.out.println();
         }
@@ -416,6 +421,18 @@ public class ExtCommand implements Callable<Integer> {
          */
         @Override
         Integer fallback(String verb, List<String> args) {
+            // A built-in verb is answered here, whether or not a pack is present -- these are the
+            // verbs the core can do for ANY project, and none of them is a verb of the engine, so
+            // nothing is being shadowed. `--pack` is not an exception: it names where to look, and
+            // `oss run --pack <dir> doctor` is a fair question about that directory.
+            if (com.osscli.runner.BuiltinRunner.supports(verb)) {
+                java.util.List<String> withPack = new java.util.ArrayList<>();
+                if (pack != null) {
+                    withPack.add(pack.toString());
+                }
+                withPack.addAll(args);
+                return com.osscli.runner.BuiltinRunner.run(verb, withPack);
+            }
             java.util.List<String> all = new java.util.ArrayList<>();
             all.add(verb);
             all.addAll(args);
@@ -425,6 +442,22 @@ public class ExtCommand implements Callable<Integer> {
                 System.err.println("error  " + e.getMessage());
                 return 1;
             }
+        }
+
+        /**
+         * The attached runner does not do this one, but the core might.
+         *
+         * <p>The same rule the archive already follows: attaching a bench should cost the richer
+         * form of a verb, never the verb. A bench that declares {@code matrix} and {@code repro}
+         * has no reason to take {@code oss run doctor} away from a user who has one attached.
+         */
+        @Override
+        Integer whenExtensionCannot(String verb, List<String> args) {
+            if (!com.osscli.runner.BuiltinRunner.supports(verb)) {
+                return null;
+            }
+            System.out.println("  the attached runner does not do \"" + verb + "\" — answering from the core instead");
+            return com.osscli.runner.BuiltinRunner.run(verb, args);
         }
     }
 

@@ -73,6 +73,7 @@ public final class Surface {
         // the entry was written, then silently dropped on the way back in, so the guard compared a
         // surface that had the verbs against one that never did.
         commands.put("memory builtin-verbs", new TreeSet<>(com.osscli.memory.BuiltinMemory.VERBS));
+        commands.put("run builtin-verbs", new TreeSet<>(com.osscli.runner.BuiltinRunner.VERBS));
         return new Surface(DatabaseManager.currentSchemaVersion(), commands);
     }
 

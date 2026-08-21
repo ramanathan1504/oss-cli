@@ -13,15 +13,22 @@ An advanced, offline-first **Prompt Intelligence Platform** for open-source main
 | Role | Owns | Reach for it when |
 |---|---|---|
 | **this one** | facts about any repo from the GitHub API, cached by head SHA — no clone, any language, any forge | you want PR facts, conventions or a verdict without building anything |
-| a **runner** you attach | execution — real applications, real JVMs, a version × config × app matrix, `bench review <n>` | the question needs something to actually run, on one project |
-| a **memory** you attach | the archive: harvest, file, index, retrieve | you want it findable in a year |
+| the **runner**, built in | `oss run detect / init / build / test / doctor` — reads what your project already declares and runs its own build | you want to know whether this thing builds, here, now |
+| a **runner** you attach | the matrix: real applications, real JVMs, version × config × app, `oss run review <n>` | the question needs a real application of one project |
+| the **memory**, built in | `oss memory` — file, index, search, harvest, digest, over a folder of markdown | you want to keep and find what you worked out |
+| a **memory** you attach | a richer archive: classified, linked, searchable in a year | you already have one |
+
+**Both halves are built in, and an extension takes over rather than being
+required.** That is the rule, not a convenience: nothing that indexes, searches
+or runs may be gated on something you have to attach first. An attached
+extension wins for the verbs it declares, and a verb it does not declare falls
+back to the core rather than being refused.
 
 The boundary that matters: **OSS-CLI never needs a clone and is never specific
-to one project.** Anything that has to check out a branch, run a build, or know
-what one particular project does belongs in a runner — which is why the
-red/green PR gates live there and not here. Only you know what a real
-application of your project looks like; the core knows how to walk a matrix, and
-your repository says what the matrix is.
+to one project.** Reading a project's own build file is the same work everywhere,
+so it lives here. Walking a version × config × app matrix needs a **pack** —
+only you know what a real application of your project looks like, and
+`oss run init` writes the starter one from what is already in your directory.
 
 Both write into the same archive and stay out of each other's way by location:
 everything OSS-CLI generates goes to `<topic>/oss-cli/`, hand-written reviews go

@@ -507,16 +507,9 @@ public final class Verifier {
      * Maven from the one the project pins.
      */
     private static String wrapperOrMaven(Path dir) {
-        boolean windows = System.getProperty("os.name", "")
-                .toLowerCase(java.util.Locale.ROOT)
-                .contains("win");
-        for (String name : windows ? List.of("mvnw.cmd", "mvnw.bat") : List.of("mvnw")) {
-            Path wrapper = dir.resolve(name);
-            if (Files.isExecutable(wrapper)) {
-                return wrapper.toString();
-            }
-        }
-        return windows ? "mvn.cmd" : "mvn";
+        // One implementation, in Project, because the built-in runner needs the same answer and two
+        // copies of it would differ on Windows the first time only one of them was corrected.
+        return com.osscli.runner.Project.maven(dir);
     }
 
     /** Where this verification's installs go, beside the throwaway worktree and removed with it. */
