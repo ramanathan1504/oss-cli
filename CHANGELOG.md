@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.2.4
+
+_2026-08-21_
+
+- Same model, different vectors: put the embedding runtime back (#138)
+- onnxruntime 1.29 dropped Intel Macs, and the error said nothing about it (#137)
+- ci: bump actions/download-artifact from 4 to 8 (#106)
+- ci: bump actions/upload-artifact from 4 to 7 (#107)
+- ci: bump actions/setup-java from 4 to 5 (#108)
+- ci: bump actions/checkout from 4 to 7 (#109)
+- deps: bump the routine group with 4 updates (#110)
+- deps: bump org.junit.jupiter:junit-jupiter from 5.11.4 to 6.1.3 (#111)
+
+
 ## 2.2.3
 
 _2026-08-21_
