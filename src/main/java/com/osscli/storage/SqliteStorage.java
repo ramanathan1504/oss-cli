@@ -762,6 +762,107 @@ public class SqliteStorage {
         return results;
     }
 
+    /**
+     * Keep one comment, if the author wrote it.
+     *
+     * <p>Filtered here rather than at the call site so there is one answer to "is this mine?" —
+     * the caller is a harvest loop that already has three other jobs, and a second copy of this
+     * rule is how the two would come to disagree about, say, case.
+     *
+     * <p>{@code INSERT OR REPLACE} on the comment id: harvest runs daily and re-reads the same
+     * threads, and an edited comment should be the edited text rather than a second row of the
+     * same person saying nearly the same thing twice.
+     *
+     * @return true when a comment of the author's was stored
+     */
+    public static boolean saveAuthoredComment(
+            String author, String repository, long issueNumber, java.util.Map<String, Object> raw) {
+        if (author == null || raw == null) {
+            return false;
+        }
+        Object user = raw.get("user");
+        String who =
+                user instanceof java.util.Map<?, ?> m && m.get("login") != null ? String.valueOf(m.get("login")) : null;
+        if (who == null || !who.equalsIgnoreCase(author.trim())) {
+            return false;
+        }
+        Object id = raw.get("id");
+        String body =
+                raw.get("body") == null ? "" : String.valueOf(raw.get("body")).strip();
+        if (id == null || body.isEmpty()) {
+            return false;
+        }
+        String sql = "INSERT OR REPLACE INTO authored_comment "
+                + "(comment_id, repository, issue_number, author, body, created_at) VALUES (?, ?, ?, ?, ?, ?);";
+        try (Connection conn = DatabaseManager.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, Long.parseLong(String.valueOf(id)));
+            ps.setString(2, repository);
+            ps.setLong(3, issueNumber);
+            ps.setString(4, who);
+            ps.setString(5, body);
+            ps.setString(6, raw.get("created_at") == null ? null : String.valueOf(raw.get("created_at")));
+            ps.executeUpdate();
+            return true;
+        } catch (Exception e) {
+            // One unstorable comment must not end a harvest that is otherwise working.
+            return false;
+        }
+    }
+
+    /**
+     * The only author whose comments are stored, when there is exactly one.
+     *
+     * <p>{@code oss memory harvest <name>} takes the username as an argument and stores comments
+     * under it, while {@code profile --me} reads {@code github.username} from config. Run harvest
+     * without ever running {@code oss setup} and the two never meet: 231 comments in the table and
+     * "Nothing of yours was found to measure" on screen, which reads as the harvest having failed.
+     *
+     * <p>Only when there is exactly one. Two authors in this table means somebody harvested for
+     * more than one person, and guessing which of them is "you" is the kind of confident wrong
+     * answer that is worse than the question.
+     */
+    public static String soleCommentAuthor() {
+        // GROUP BY, not COUNT(DISTINCT ...) OVER (): SQLite refuses DISTINCT inside a window
+        // function outright ("DISTINCT is not supported for window functions"), and the catch below
+        // turned that into a silent null -- 231 stored comments reported as "nothing of yours was
+        // found". Two rows is the answer to "is there more than one author", and needs no window.
+        String sql = "SELECT author FROM authored_comment GROUP BY author LIMIT 2;";
+        try (Connection conn = DatabaseManager.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql);
+                ResultSet rs = ps.executeQuery()) {
+            if (!rs.next()) {
+                return null;
+            }
+            String only = rs.getString("author");
+            return rs.next() ? null : only;
+        } catch (Exception ignored) {
+            // Same rule as everything else here: a decoration never fails the command it decorates.
+        }
+        return null;
+    }
+
+    /** Every comment this author wrote, longest-lived first. Empty rather than throwing. */
+    public static List<String> loadAuthoredComments(String author) {
+        List<String> out = new ArrayList<>();
+        if (author == null || author.isBlank()) {
+            return out;
+        }
+        String sql = "SELECT body FROM authored_comment WHERE author = ? AND length(body) > 80;";
+        try (Connection conn = DatabaseManager.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, author.trim());
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    out.add(rs.getString(1));
+                }
+            }
+        } catch (Exception ignored) {
+            // A voice profile decorates other work; the command that needed the corpus reports it.
+        }
+        return out;
+    }
+
     // ==========================================
     // 6. Monitored Repositories Operations
     // ==========================================

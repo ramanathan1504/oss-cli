@@ -198,7 +198,14 @@ public final class VoiceProfile {
         } catch (Exception e) {
             username = null;
         }
+        if (username == null || username.isBlank()) {
+            // Harvested but never set up. The name is already in the table harvest wrote.
+            username = com.osscli.storage.SqliteStorage.soleCommentAuthor();
+        }
         if (username != null && !username.isBlank()) {
+            // Comments first: this is where a voice actually lives. An issue body is often a
+            // template filled in; a review comment is a person talking.
+            out.addAll(com.osscli.storage.SqliteStorage.loadAuthoredComments(username));
             try (java.sql.Connection conn = com.osscli.storage.DatabaseManager.getConnection();
                     java.sql.PreparedStatement ps = conn.prepareStatement(
                             "SELECT body FROM issues WHERE author = ? AND body IS NOT NULL AND length(body) > 80")) {
