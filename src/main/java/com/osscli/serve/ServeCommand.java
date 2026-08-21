@@ -619,18 +619,34 @@ public class ServeCommand implements Callable<Integer> {
             <!doctype html><html><head><meta charset="utf-8">
             <meta name="viewport" content="width=device-width,initial-scale=1">
             <title>oss</title><style>
-            /* The site's palette, not a third one. This page was warm cream with a
-               brown accent while the landing page and the manual are deep teal with
-               brass -- so the local service looked like a different product from the
-               tool that started it. Values are the same as site/index.html. */
-            :root{--bg:#E4EBED;--fg:#08161D;--mut:#4C626C;--line:#BFD0D4;--card:#FFFFFF;
-                  --acc:#7A5D0C;--ok:#175A52;--bad:#7E3320;--code:#D3DEE1}
-            @media(prefers-color-scheme:dark){:root{--bg:#07141A;--fg:#E6EFF0;--mut:#7B949C;
-                  --line:#1A3540;--card:#0D202A;--acc:#D8B23A;--ok:#5FBFB0;--bad:#E08066;--code:#040E13}}
+            /* The site's palette, its fonts, and its way of choosing between them -- not a
+               third of any of the three. The colours were already the site's; the rest was
+               not, and matching two of three is what makes two pages look like relatives
+               rather than the same product.
+
+               The site is dark by default with light under the media query, and an explicit
+               data-theme beats both. This page did the opposite -- light by default -- so a
+               machine set to light showed a light board beside a dark manual, and a person
+               who had chosen a theme on the site got no say here at all. Same three states,
+               same order, same values, same localStorage key. */
+            :root{--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+                  --mono:ui-monospace,"SF Mono",SFMono-Regular,"JetBrains Mono","Cascadia Mono",Menlo,Consolas,monospace;
+                  --bg:#07141A;--fg:#E6EFF0;--mut:#7B949C;--line:#1A3540;--card:#0D202A;
+                  --acc:#D8B23A;--ok:#5FBFB0;--bad:#E08066;--code:#040E13}
+            @media(prefers-color-scheme:light){:root:not([data-theme="dark"]){
+                  --bg:#E4EBED;--fg:#08161D;--mut:#4C626C;--line:#BFD0D4;--card:#FFFFFF;
+                  --acc:#7A5D0C;--ok:#175A52;--bad:#7E3320;--code:#D3DEE1}}
+            :root[data-theme="light"]{--bg:#E4EBED;--fg:#08161D;--mut:#4C626C;--line:#BFD0D4;
+                  --card:#FFFFFF;--acc:#6B510A;--ok:#175A52;--bad:#7E3320;--code:#D3DEE1}
+            :root[data-theme="dark"]{--bg:#07141A;--fg:#E6EFF0;--mut:#7B949C;--line:#1A3540;
+                  --card:#0D202A;--acc:#D8B23A;--ok:#5FBFB0;--bad:#E08066;--code:#040E13}
             *{box-sizing:border-box}
-            body{margin:0;background:var(--bg);color:var(--fg);
-                 font:15px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-            .wrap{max-width:920px;margin:0 auto;padding:32px 20px 64px}
+            body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 var(--sans)}
+            .theme{position:absolute;top:28px;right:20px;border:1px solid var(--line);
+                   background:none;color:var(--mut);border-radius:6px;padding:4px 10px;
+                   font:inherit;font-size:12.5px;cursor:pointer}
+            .theme:hover{border-color:var(--acc);color:var(--acc)}
+            .wrap{max-width:920px;margin:0 auto;padding:32px 20px 64px;position:relative}
             h1{font-size:20px;margin:0 0 2px}
             .sub{color:var(--mut);font-size:13px}
             .grp{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);
@@ -663,7 +679,7 @@ public class ServeCommand implements Callable<Integer> {
                  padding:6px 11px;font:inherit;font-size:13px;cursor:pointer}
             .ask:hover{border-color:var(--acc);color:var(--fg)}
             .ask[aria-busy="true"]{opacity:.55;cursor:progress}
-            .out{white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+            .out{white-space:pre-wrap;font-family:var(--mono);
                  font-size:12.5px;line-height:1.55;color:var(--fg);background:var(--card);
                  border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-top:4px;
                  max-height:420px;overflow:auto}
@@ -683,12 +699,13 @@ public class ServeCommand implements Callable<Integer> {
             .one .q{color:var(--mut);font-size:12.5px;flex:1 1 320px}
             .rw{display:flex;align-items:baseline;gap:10px;padding:8px 0;
                 border-bottom:1px solid var(--line);flex-wrap:wrap}
-            .rw .pr{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:var(--mut)}
+            .rw .pr{font-family:var(--mono);font-size:12.5px;color:var(--mut)}
             .rw .rp{font-size:13px}
             .rw .vd{font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;
                     border:1px solid var(--line);border-radius:999px;padding:1px 8px;color:var(--mut)}
             .rw .sp{flex:1}
             </style></head><body><div class="wrap">
+            <button class="theme" id="theme-btn" title="Same choice as the site makes">theme</button>
             <h1>oss</h1>
             <div class="sub">One core that knows. A <b>runner</b> runs something real; a <b>memory</b> remembers.</div>
 
@@ -863,6 +880,22 @@ public class ServeCommand implements Callable<Integer> {
                   $('#msg').className='msg '+(d.ok?'ok':'bad');
                   draw(d.extensions);});
             });
+            // The site's toggle, the site's key. A person who set the manual to light and
+            // opened the board should not have to set it twice -- and on a machine whose
+            // system theme disagrees with their choice, the stored answer is the one they
+            // actually gave.
+            (function(){
+              const root=document.documentElement, btn=document.getElementById('theme-btn');
+              try{const saved=localStorage.getItem('ubuos-theme');
+                  if(saved){root.setAttribute('data-theme',saved)}}catch(e){}
+              btn.onclick=function(){
+                let now=root.getAttribute('data-theme');
+                if(!now){now=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}
+                const next=now==='dark'?'light':'dark';
+                root.setAttribute('data-theme',next);
+                try{localStorage.setItem('ubuos-theme',next)}catch(e){}
+              };
+            })();
             load();
             questions();
             </script></body></html>

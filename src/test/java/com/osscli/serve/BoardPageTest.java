@@ -58,6 +58,30 @@ class BoardPageTest {
     }
 
     @Test
+    @DisplayName("the board is the same product as the site: same colours, same fonts, same toggle")
+    void themeMatchesTheSite() throws java.io.IOException {
+        // Two copies of a look drift, and this repository has paid for two copies of a web page
+        // before. The colours were already the site's; the fonts and the way a theme is chosen
+        // were not -- the page was light by default while the site is dark by default, so a
+        // machine set to light showed a light board beside a dark manual.
+        java.nio.file.Path site = java.nio.file.Path.of("site", "index.html");
+        String html = java.nio.file.Files.readString(site);
+
+        for (String colour :
+                new String[] {"#07141A", "#E6EFF0", "#1A3540", "#0D202A", "#D8B23A", "#E4EBED", "#08161D"}) {
+            assertTrue(PAGE.contains(colour), "the board dropped " + colour);
+            assertTrue(html.contains(colour), "the site no longer has " + colour + " — the two have drifted");
+        }
+        assertTrue(PAGE.contains("JetBrains Mono") && html.contains("JetBrains Mono"), "the mono stacks differ");
+        // Three states, in the site's order: dark base, light under the media query, explicit wins.
+        assertTrue(PAGE.contains("prefers-color-scheme:light"), "light must come from the media query");
+        assertTrue(
+                PAGE.contains("[data-theme=\"light\"]") && PAGE.contains("[data-theme=\"dark\"]"),
+                "an explicit choice must beat the system preference, both ways");
+        assertTrue(PAGE.contains("ubuos-theme") && html.contains("ubuos-theme"), "the two remember under one key");
+    }
+
+    @Test
     @DisplayName("what a command prints about starting up is not shown as its answer")
     void startupChatterIsStripped() {
         String out = "Initializing local SQLite database connection...\n\n  WAITING ON YOU\n    #4229 changes";
