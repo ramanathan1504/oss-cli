@@ -71,3 +71,8 @@ reports/
 # beside wherever it was run, so running it inside this checkout leaves an
 # artefact that git will happily offer to commit -- and did, once.
 triage-*.html
+
+# A session sidecar (IntelliJ writes one for an in-memory DB console). A colon is an
+# illegal path character on Windows, so committing one breaks git checkout on every
+# Windows runner — which is exactly how v2.2.4 shipped without a Windows build.
+*.ses
