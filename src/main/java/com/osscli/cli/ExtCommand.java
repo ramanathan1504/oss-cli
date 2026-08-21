@@ -62,7 +62,10 @@ public class ExtCommand implements Callable<Integer> {
         return new ListExt().call();
     }
 
-    @Command(name = "add", description = "Register the extension declared by a repository")
+    @Command(
+            name = "add",
+            mixinStandardHelpOptions = true,
+            description = "Register the extension declared by a repository")
     static class Add implements Callable<Integer> {
 
         @Parameters(index = "0", description = "Repository root containing oss-ext.json")
@@ -92,7 +95,7 @@ public class ExtCommand implements Callable<Integer> {
         }
     }
 
-    @Command(name = "list", description = "Show every registered extension")
+    @Command(name = "list", mixinStandardHelpOptions = true, description = "Show every registered extension")
     static class ListExt implements Callable<Integer> {
 
         @Override
@@ -129,7 +132,7 @@ public class ExtCommand implements Callable<Integer> {
         }
     }
 
-    @Command(name = "remove", description = "Unregister an extension")
+    @Command(name = "remove", mixinStandardHelpOptions = true, description = "Unregister an extension")
     static class Remove implements Callable<Integer> {
 
         @Parameters(index = "0", description = "Extension name")
@@ -146,7 +149,10 @@ public class ExtCommand implements Callable<Integer> {
         }
     }
 
-    @Command(name = "refresh", description = "Re-read a registered extension's manifest from disk")
+    @Command(
+            name = "refresh",
+            mixinStandardHelpOptions = true,
+            description = "Re-read a registered extension's manifest from disk")
     static class Refresh implements Callable<Integer> {
 
         @Parameters(index = "0", description = "Extension name")
