@@ -334,9 +334,20 @@ _timeout_cmd() {
   fi
 }
 
+# Which of the three enrichment passes is running, so the wait has a numerator.
+AI_PASS=0
+AI_PASSES=3
+
 enrich_ai() {
   local file="$1" prompt="$2"
   local t; t="$(_timeout_cmd)"
+  # Said, because this is the slow part and it was the silent part. Measured on a real cache:
+  # the whole deterministic report -- copy, buckets, relationship graph, HTML -- is 1.2s, and
+  # the run takes 36s. All 35 of those are these three model calls. With nothing printed, a
+  # `--dry-run` that reuses a local cache and still sits for half a minute reads as a slow
+  # machine or a hung fetch, which is the one thing it is not.
+  AI_PASS=$((AI_PASS + 1))
+  echo "  AI enrichment ${AI_PASS}/${AI_PASSES} — asking the model (this is the slow part; --no-ai skips it)…" >&2
   { ${t:+$t "$AI_TIMEOUT"} claude -p "READ-ONLY triage for ${REPO}. Do NOT run any command that modifies the repo.
 Output GitHub-Flavored Markdown only: a single table, no preamble and no trailing commentary.
 Keep every cell under 240 characters — this renders as a table cell, not a paragraph.

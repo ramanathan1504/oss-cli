@@ -25,6 +25,18 @@ updates:
     labels: ["dependencies"]
     commit-message:
       prefix: "deps"
+    ignore:
+      # onnxruntime is pinned, and pom.xml says at length why: 1.29 runs the same model and
+      # returns different vectors for the same text (0.9978 median cosine over 30 real passages),
+      # which nothing in the store can detect because the model name and the 384 dimensions are
+      # identical on both sides.
+      #
+      # Ignored rather than left to be refused each week. Without this Dependabot re-proposes it
+      # every Monday, CI fails by design, and a red run that is CORRECT sits in the list next to
+      # the red runs that are not -- which is how a real failure gets scrolled past. Moving off
+      # 1.22 is a re-embed of the whole corpus in one pass, not a version bump, so it is opened by
+      # hand on the day someone means to do it.
+      - dependency-name: "com.microsoft.onnxruntime:onnxruntime"
 
   # The workflows themselves pin action versions, and a stale action is how a
   # supply-chain problem arrives in a repository nobody thought had dependencies.

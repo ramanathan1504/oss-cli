@@ -248,6 +248,8 @@ oss backlog -r owner/name
 oss backlog -r owner/name --dry-run
 ```
 
+`--dry-run` saves the API calls, not the wait. The deterministic half — cache, buckets, cross-reference graph, page — is about a second on a real backlog; the model enrichment that follows is three calls and roughly thirty-five. It now says which of the three it is on, because a `--dry-run` that reads a local cache and then sits for half a minute otherwise reads as a hung fetch. `--no-ai` is the flag that makes it quick.
+
 The report itself is POSIX shell, so on Windows it says so and points at WSL rather than half-running. Anything option-shaped that this command does not recognise is refused **here**, by name — passing it down would make the shell script answer with its own interface, which names flags and environment variables no reader of `oss backlog --help` has heard of.
 
 ### `review`

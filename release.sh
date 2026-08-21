@@ -251,6 +251,29 @@ nudge() {
 echo "→ Publishing now rather than at the next poll..."
 nudge ramanathan1504/homebrew-oss-cli "Bump formula"
 nudge ramanathan1504/ubuos-site "Sync release"
+
+# Deploy AFTER the changelog reaches main, not in the same breath as the job that
+# writes it. Fired together, Deploy published a main that did not yet carry the new
+# entry -- so the release went out and the changelog page kept describing the one
+# before it, which is the exact failure Sync release exists to prevent.
+#
+# It cannot be left to the merge either. Sync release merges its own pull request
+# now, but that merge is made with GITHUB_TOKEN, and a GITHUB_TOKEN push starts no
+# further workflow -- deploy.yml's `on: push` will never see it. The dispatch has to
+# come from a shell holding a real credential, which is this one.
+#
+# Best effort, like the asset wait above: if it times out, Deploy is nudged anyway
+# and the daily schedule is still the safety net.
+echo "→ Waiting for the changelog on main to name v$VERSION..."
+CHANGELOG_URL="repos/ramanathan1504/ubuos-site/contents/docs/src/content/docs/reference/changelog.md"
+for _ in $(seq 1 30); do
+    if gh api "$CHANGELOG_URL" -H "Accept: application/vnd.github.raw" 2>/dev/null \
+        | grep -q "Current release: \*\*$VERSION\*\*"; then
+        echo "   ✔ changelog on main names $VERSION"
+        break
+    fi
+    sleep 10
+done
 nudge ramanathan1504/ubuos-site "Deploy"
 
 echo "========================================"

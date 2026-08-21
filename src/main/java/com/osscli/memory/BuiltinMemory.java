@@ -572,6 +572,13 @@ public final class BuiltinMemory {
                 default:
                     System.err.println("error  built-in memory has no verb \"" + verb + "\"");
                     System.err.println("       it knows: " + String.join(", ", VERBS));
+                    // `oss memory sync --me` is the line this is here for: sync is a command of
+                    // its own and --me is its flag, so listing memory's verbs was a correct
+                    // answer that sent the reader hunting for a verb that will never exist.
+                    String elsewhere = com.osscli.cli.NearMiss.elsewhere("memory", verb, args);
+                    if (elsewhere != null) {
+                        System.err.println("       \"" + verb + "\" is a command of its own: " + elsewhere);
+                    }
                     System.err.println("       A different archive is a few lines in kb.json, not a checkout.");
                     return 2;
             }
