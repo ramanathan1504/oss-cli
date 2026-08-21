@@ -508,10 +508,22 @@ public class SyncCommand implements Callable<Integer> {
             }
         }
 
-        // B. Ingest the note folders in drive.paths (always runs)
-        if (drivePathsStr != null && !drivePathsStr.trim().isEmpty()) {
-            LOGGER.info("Scanning your note folders (drive.paths) recursively...");
-            String[] paths = drivePathsStr.split(",");
+        // B. Ingest the note folders: the built-in store, plus anything in drive.paths.
+        //
+        // The built-in store is FIRST and unconditional, and that is the whole point. Without it
+        // the compounding stopped one step short of being useful: `memory harvest` wrote notes,
+        // `memory search` found them by term -- and `chat`, `guide`, `pick` and `prompt`, every
+        // command that actually answers from the corpus, never saw one of them. On a fresh install
+        // drive.paths is empty, so this entire step was skipped and the corpus could not grow from
+        // the user's own work at all. The loop only closed here because an archive extension
+        // happened to write into a folder somebody had configured.
+        //
+        // This is not acting unasked: it reads the store this tool filled, on the run the user
+        // typed. Nothing is fetched and nothing is downloaded.
+        List<String> noteFolders = noteFolders(drivePathsStr);
+        {
+            LOGGER.info("Scanning your note folders ({}) recursively...", noteFolders.size());
+            List<String> paths = noteFolders;
 
             for (String path : paths) {
                 java.nio.file.Path localPath = java.nio.file.Paths.get(path.trim());
@@ -709,8 +721,11 @@ public class SyncCommand implements Callable<Integer> {
                             e.getMessage());
                 }
             }
-        } else {
-            LOGGER.info("No note folders configured (drive.paths). Skipping this step.");
+        }
+        if (noteFolders.size() == 1) {
+            // Said rather than silent. With nothing in drive.paths the built-in store is the whole
+            // note layer, which is the normal state of a fresh install and not a misconfiguration.
+            LOGGER.info("  ↳ Only the built-in store was read. oss setup adds your own folders.");
         }
 
         // C. Update the sync timestamp in SQLite on success
@@ -742,5 +757,33 @@ public class SyncCommand implements Callable<Integer> {
      */
     static boolean worthIndexing(String content) {
         return content != null && !content.isBlank();
+    }
+    /**
+     * Every folder whose notes belong in the corpus.
+     *
+     * <p>The built-in store is first and unconditional, and that is the whole point. Without it the
+     * compounding stopped one step short of being useful: {@code memory harvest} wrote notes,
+     * {@code memory search} found them by term — and {@code chat}, {@code guide}, {@code pick} and
+     * {@code prompt}, every command that actually answers from the corpus, never saw one of them.
+     *
+     * <p>On a fresh install {@code drive.paths} is empty, so this entire step was skipped and the
+     * corpus could not grow from the user's own work at all. The loop only ever closed because an
+     * archive extension happened to write into a folder somebody had separately configured — which
+     * made "install oss-cli and that is it" false for the half of the corpus that is yours.
+     *
+     * <p>Reading the store this tool filled, on the run the user typed, is not acting unasked.
+     * Nothing is fetched and nothing is downloaded.
+     */
+    static List<String> noteFolders(String drivePaths) {
+        List<String> out = new java.util.ArrayList<>();
+        out.add(com.osscli.memory.BuiltinMemory.DIR.toString());
+        if (drivePaths != null && !drivePaths.isBlank()) {
+            for (String path : drivePaths.split(",")) {
+                if (!path.isBlank()) {
+                    out.add(path.trim());
+                }
+            }
+        }
+        return out;
     }
 }

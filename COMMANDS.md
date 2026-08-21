@@ -873,6 +873,18 @@ so anything checking for the file reports that everything is fine.
 A fresh install reads as a warning, not a failure. The archive folder appears when you file the
 first note, and telling a new user their working install is broken is worse than saying nothing.
 
+### What you remember reaches what answers
+
+`oss sync --me` reads the built-in store **and** anything in `drive.paths`, in that order, and the
+first one is not optional. Only `sync --me` turns a note into a vector, and it used to read
+`drive.paths` alone — which is empty on a fresh install, so the whole step was skipped and `chat`,
+`guide`, `pick` and `prompt` never saw a harvested item. The loop appeared to work only where an
+archive extension happened to write into a folder its owner had separately configured.
+
+So the compounding is: `harvest` writes → `sync --me` embeds → everything that answers reads it →
+what you conclude gets filed and harvested again. On one machine that is 0 notes before and
+**90 notes, 508 passages** after, all from the same embedding model.
+
 Matching is literal and case-insensitive on purpose. A model deciding whether a note is "about" an
 area turns a measurement into an opinion, and makes the number move when nothing was written.
 
