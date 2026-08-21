@@ -888,6 +888,58 @@ what you conclude gets filed and harvested again. On one machine that is 0 notes
 Matching is literal and case-insensitive on purpose. A model deciding whether a note is "about" an
 area turns a measurement into an opinion, and makes the number move when nothing was written.
 
+### The runner is built in
+
+`oss run` answers with nothing attached and no pack written. `oss bench` is the same command under
+its older name.
+
+```bash
+oss run detect     # what this directory is, and what could be run in it
+oss run init       # write a starter pack from what is already here
+oss run build      # the project's own build command
+oss run test       # the project's own tests
+oss run doctor     # would any of this work, asked before it is tried
+```
+
+Nothing is invented. The build system is read from the file that declares it — `pom.xml`,
+`build.gradle(.kts)`, `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, a `Makefile` — and
+the command printed before the run is the whole contract: copy it, type it yourself, get the same
+result. A `package.json` with no `build` script is reported as having no build command rather than
+being sent `npm run build`, because a guessed command that fails looks like a broken project. The
+wrapper a checkout ships (`mvnw`, `gradlew`) beats whatever is on the PATH, since that is the
+version the project actually pins.
+
+```
+  /home/you/yourproject
+  ─────────────────────────────────────────────────────────────
+  maven    pom.xml            ← build and test use this
+           build:  mvn -DskipTests package
+           test:   mvn test
+           reachable: ./mvnw
+
+  toolchain  java 17  (pom.xml)
+
+  pack       none — oss run init writes a starter one
+```
+
+**What it deliberately does not do** is walk a version × config × app matrix. That needs a pack,
+because only the person maintaining a project knows what a real application of it looks like, and
+no amount of detection invents that. What the built-in does is get you to the point where writing
+one is an edit rather than a blank page: `oss run init` writes a `pack.md` with everything it could
+read already filled in — the name, the build system, the repository from `.git/config`, the
+directories under `apps/` — and the two things it could not know marked as yours. It never
+overwrites a pack that exists.
+
+`oss run doctor` is the runner's half of `oss memory doctor`: is a build system declared here, is
+its tool actually installed, does the pack parse, is the engine shipped beside this install, and is
+the JDK in front of you the one the project declares. A directory with no pack is a **warning** and
+exits 0 — a health check that failed because you had not written a pack yet would turn "nothing to
+do" into a red command.
+
+An attached runner extension still wins, exactly as an archive wins over the built-in memory — and
+a verb the extension does not declare falls back here rather than being refused, so attaching a
+bench costs the richer form of a verb, never the verb.
+
 ### A pack is a file
 
 A pack is what points the built-in engine at *your* applications, versions and configurations. It
@@ -985,7 +1037,8 @@ declare — so the two paths agree.
 | `ext list`        | Local          | No                      | What is attached, and whether it is still reachable |
 | `bench <verb>`    | Local          | No                      | Dispatch to an attached **bench** (runs something real) |
 | `kb <verb>`       | Local          | No                      | Dispatch to an attached **kb** (files and indexes) |
-| `run` / `memory`  | Local          | No                      | Typed bare, list the verbs the attached extension declares |
+| `run <verb>`      | Local          | No                      | **Built in**: detect, init, build, test, doctor — no pack needed |
+| `run` / `memory`  | Local          | No                      | Typed bare, list the built-in verbs and any the attached extension declares |
 | `llm <cmd>`       | Local          | Ollama                  | Let a local daemon answer when the local rung cannot |
 | `claude <cmd>`    | Online         | Anthropic key           | Let Claude answer when the local rung cannot |
 | `gemini <cmd>`    | Online         | Gemini key              | Let Gemini answer when the local rung cannot |

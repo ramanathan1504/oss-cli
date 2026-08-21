@@ -134,4 +134,21 @@ class ReleaseSurfaceTest {
         Surface reparsed = Surface.fromJson(live.toJson());
         assertEquals(verbs, reparsed.commands().get("memory builtin-verbs"), "the row did not survive fromJson");
     }
+
+    @Test
+    @DisplayName("the built-in runner's verbs are recorded on the same terms")
+    void builtinRunnerVerbsAreRecorded() {
+        Surface live = Surface.current();
+
+        // Same argument as the memory's verbs, and worth its own test rather than an extra line in
+        // that one: these arrive by the same invisible route, and the row that carries them is a
+        // separate key that can be dropped on its own.
+        java.util.Set<String> verbs = live.commands().get("run builtin-verbs");
+        assertTrue(verbs != null && !verbs.isEmpty(), "the built-in runner's verbs are not in the surface");
+        assertEquals(new java.util.TreeSet<>(com.osscli.runner.BuiltinRunner.VERBS), verbs);
+        assertEquals(
+                verbs,
+                Surface.fromJson(live.toJson()).commands().get("run builtin-verbs"),
+                "the row did not survive fromJson");
+    }
 }

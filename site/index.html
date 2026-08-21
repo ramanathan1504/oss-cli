@@ -1114,6 +1114,11 @@ oss prompt 812</pre>
         <p>File a note, index it, search it by meaning, see which notes touch which topic, and measure what you have covered against what a technology actually documents &mdash; all <code>oss memory</code>, all shipped. It harvests your own public work on GitHub and the Claude Code, codex and gemini transcripts already on your disk, redacting secrets rather than dropping the passage around them. <code>oss memory schedule --install</code> runs it daily if you ask; <code>oss memory doctor</code> tells you whether it worked. Pointing it at your own folder is a few lines of <code>kb.json</code>, not a checkout.</p>
       </div>
       <div class="card">
+        <span class="k">A runner, built in</span>
+        <h3>It builds your project with your project&rsquo;s own command</h3>
+        <p><code>oss run detect</code> reads what the directory already declares &mdash; <code>pom.xml</code>, <code>build.gradle</code>, <code>package.json</code>, <code>go.mod</code>, <code>Cargo.toml</code>, a <code>Makefile</code> &mdash; and <code>oss run build</code> and <code>oss run test</code> run it, printing the exact command first so you can type it yourself. Nothing is invented: a <code>package.json</code> with no build script is reported as having none rather than being sent one that fails. <code>oss run init</code> writes the starter pack that unlocks the matrix engine, filled in from what is already there.</p>
+      </div>
+      <div class="card">
         <span class="k">Local-first</span>
         <h3>Your data stays put</h3>
         <p>Issues, vectors and notes live in SQLite on your disk. Retrieval and embedding run locally. Nothing leaves your machine unless you explicitly escalate a prompt to a cloud model.</p>
@@ -1121,7 +1126,7 @@ oss prompt 812</pre>
       <div class="card">
         <span class="k">Extensions</span>
         <h3>Two questions it will not answer alone</h3>
-        <p>OSS-CLI reads any repository through the API, in any language, without a clone — which is why it generalises, and why it cannot tell you <em>does this actually run</em> or <em>have I worked this out before</em>. A repo declares an <code>oss-ext.json</code> and becomes a runner or a memory; <code>oss ext add &lt;repo&gt;</code> attaches it, and <code>oss run</code> or <code>oss memory</code> dispatch to it. Written in anything, called as a child process.</p>
+        <p>OSS-CLI reads any repository through the API, in any language, without a clone — which is why it generalises, and why it cannot tell you <em>does this actually run</em> or <em>have I worked this out before</em>. Both have a built-in floor &mdash; <code>oss run</code> builds and tests any project, <code>oss memory</code> files and finds anything you write &mdash; and an extension takes over when you attach one. A repo declares an <code>oss-ext.json</code> and becomes a runner or a memory; <code>oss ext add &lt;repo&gt;</code> attaches it, and a verb it does not declare falls back to the core rather than being refused. Written in anything, called as a child process.</p>
       </div>
       <div class="card">
         <span class="k">Packs</span>

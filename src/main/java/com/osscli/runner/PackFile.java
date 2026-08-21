@@ -135,6 +135,11 @@ public final class PackFile {
         return root;
     }
 
+    /** The applications this pack declares, which is the half only its author could write. */
+    public List<String> apps() {
+        return texts(json.path("apps"));
+    }
+
     /**
      * Whether this pack is the one for a given repository and working directory.
      *
