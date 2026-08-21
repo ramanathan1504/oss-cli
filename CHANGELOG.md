@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.5
+
+_2026-08-21_
+
+- A colon in a filename cost the Windows build, and the tag was already pushed (#140)
+
+
 ## 2.2.4
 
 _2026-08-21_
