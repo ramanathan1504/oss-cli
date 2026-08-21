@@ -203,15 +203,59 @@ git pull --ff-only origin main
 git tag -a "v$VERSION" -m "OSS-CLI v$VERSION"
 git push origin "v$VERSION"
 
+echo "→ Waiting for the archives, which the tap and the site both read..."
+# The tap's formula points at oss-macos-arm64.tar.gz and needs its checksum, and
+# the site prints the version. Both read the release rather than being handed it,
+# so neither can be nudged until Distributions has attached the archives.
+#
+# Best effort: if this wait times out the release is still published and the
+# polls below still catch it. What it must not do is nudge them too early, which
+# would publish a formula pointing at a file that is not there yet.
+for _ in $(seq 1 60); do
+    ASSETS=$(gh release view "v$VERSION" --json assets --jq '[.assets[].name] | length' 2>/dev/null || echo 0)
+    if [ "${ASSETS:-0}" -ge 4 ]; then break; fi
+    sleep 20
+done
+
+# Push, do not wait to be polled -- and with no stored credential.
+#
+# Both consumers poll on a schedule, because a cross-repo push once needed a
+# personal access token, that token expired, and a release silently shipped a
+# formula pointing at the previous version: `brew upgrade` said "already
+# installed" while a newer release existed. Removing the credential removed that
+# whole class of failure and cost a few hours of staleness.
+#
+# This gets the immediacy back without putting the credential back. The person
+# cutting a release is already authenticated -- `gh` has been used a dozen times
+# above -- so the nudge comes from THEM, at the moment they release. Nothing is
+# stored, nothing expires, and the polls stay exactly where they are as the
+# safety net for a release cut any other way.
+nudge() {
+    if gh workflow run "$2" --repo "$1" >/dev/null 2>&1; then
+        echo "   ✔ $1 — $2"
+    else
+        # Loud, because the alternative is a stale formula nobody notices. Not
+        # fatal: the release itself is out, and the poll will catch it.
+        echo "   ⚠ could not start \"$2\" in $1 — it will be picked up by its own schedule"
+        echo "     to publish sooner:  gh workflow run \"$2\" --repo $1"
+    fi
+}
+
+echo "→ Publishing now rather than at the next poll..."
+nudge ramanathan1504/homebrew-oss-cli "Bump formula"
+nudge ramanathan1504/ubuos-site "Sync release"
+nudge ramanathan1504/ubuos-site "Deploy"
+
 echo "========================================"
-echo "✅ v$VERSION merged and tagged."
+echo "✅ v$VERSION merged, tagged and published."
 echo
-echo "CI takes it from here, in order:"
+echo "CI took it from here, in order:"
 echo "   Release        publishes the GitHub release and the jar"
 echo "   Distributions  builds the self-contained archives"
 echo "   Packages       builds the .deb and the choco .nupkg (runs after Distributions)"
-echo "   The tap bumps itself within three hours; to publish immediately:"
-echo "     gh workflow run \"Bump formula\" --repo ramanathan1504/homebrew-oss-cli"
+echo "   Bump formula   the tap, started above — brew upgrade oss"
+echo "   Deploy         ubuos.com, started above"
+echo
 echo "   gh run watch"
 echo "   https://github.com/ramanathan1504/oss-cli/releases"
 echo "========================================"
