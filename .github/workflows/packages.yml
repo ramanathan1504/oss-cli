@@ -108,7 +108,7 @@ jobs:
         # 404 on the day it ships. The versioned file stays for anyone pinning.
         run: cp "oss_${{ steps.rel.outputs.version }}_amd64.deb" oss_amd64.deb
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: deb
           path: oss_*.deb
@@ -188,7 +188,7 @@ jobs:
           cd choco && choco pack --limit-output
           ls *.nupkg
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: choco
           path: choco/*.nupkg
