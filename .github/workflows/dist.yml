@@ -42,7 +42,7 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # 21, not 17, and the bytecode target is unaffected -- the pom still
       # compiles to release 17. This is about the runtime that gets SHIPPED.
