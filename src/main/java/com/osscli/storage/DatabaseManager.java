@@ -32,7 +32,7 @@ public class DatabaseManager {
 
     private static final Logger LOGGER = LogManager.getLogger(DatabaseManager.class);
     // private static final String DB_URL = "jdbc:sqlite:data/issue_intelligence.db";
-    private static final int CURRENT_SCHEMA_VERSION = 14;
+    private static final int CURRENT_SCHEMA_VERSION = 15;
 
     /**
      * How long a statement waits for a lock before giving up.
@@ -423,6 +423,49 @@ public class DatabaseManager {
                     stmt.execute(
                             "CREATE INDEX IF NOT EXISTS idx_chat_session_issue ON chat_session (repository, issue_number);");
                     stmt.execute("CREATE INDEX IF NOT EXISTS idx_chat_turn_session ON chat_turn (session_id, seq);");
+                }
+            }
+        },
+
+        // Migration 15: the comments you wrote, kept as yours
+        new Migration() {
+            @Override
+            public int getTargetVersion() {
+                return 15;
+            }
+
+            /**
+             * The corpus was full of prose and almost none of it was the user's.
+             *
+             * <p>{@code harvest} has always fetched whole comment threads and rendered them into a
+             * note, which loses the one fact that makes a comment the user's: who wrote it. So a
+             * machine holding 1,874 notes could offer nine pieces of its owner's writing, and
+             * anything learned about "their" voice was learned from other people and from generated
+             * drafts.
+             *
+             * <p>Only comments whose author is the configured username are stored here. Other
+             * people's words stay where they were, in the thread note -- keeping them in a table
+             * called "yours" would be a lie the schema tells, and this table exists precisely
+             * because that lie was already being told by omission.
+             *
+             * <p>No new network call: harvest already reads these pages.
+             */
+            @Override
+            public void execute(Connection conn) throws SQLException {
+                LOGGER.info("Upgrading database schema to Version 15 (the comments you wrote)...");
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("""
+                            CREATE TABLE IF NOT EXISTS authored_comment (
+                                comment_id INTEGER PRIMARY KEY,
+                                repository TEXT NOT NULL,
+                                issue_number INTEGER NOT NULL,
+                                author TEXT NOT NULL,
+                                body TEXT NOT NULL,
+                                created_at TEXT
+                            );""");
+                    // Read one way only: everything this author wrote, newest first.
+                    stmt.execute(
+                            "CREATE INDEX IF NOT EXISTS idx_authored_comment_author ON authored_comment (author, created_at);");
                 }
             }
         }

@@ -303,6 +303,7 @@ public final class BuiltinMemory {
         com.osscli.github.GitHubClient gh = new com.osscli.github.GitHubClient();
         int written = 0;
         int withDiscussion = 0;
+        int mine = 0;
         for (com.osscli.model.Issue issue : found) {
             List<String> discussion = new ArrayList<>();
             String repo = repositoryOf(issue);
@@ -313,6 +314,13 @@ public final class BuiltinMemory {
                     for (Map<String, Object> c :
                             gh.getPaged("/repos/" + repo + "/issues/" + issue.number() + "/comments", 2)) {
                         discussion.add(comment(c));
+                        // The same page, read twice for two different purposes. The note keeps the
+                        // conversation; this keeps the half of it the user wrote, with their name
+                        // still attached -- which the note cannot answer, because a note is prose.
+                        // No extra request: this page was already fetched.
+                        mine += com.osscli.storage.SqliteStorage.saveAuthoredComment(user, repo, issue.number(), c)
+                                ? 1
+                                : 0;
                     }
                 } catch (Exception e) {
                     // One unreachable thread must not end the harvest. The note is still worth
@@ -328,6 +336,11 @@ public final class BuiltinMemory {
             written++;
         }
         System.out.printf("  %d of them carried a conversation worth keeping%n", withDiscussion);
+        if (mine > 0) {
+            // Said out loud because it is the only thing here that is about the user rather than
+            // about the repositories: this is the number `oss profile --me` can measure a voice from.
+            System.out.printf("  %d comment(s) you wrote yourself, kept as yours — oss profile --me%n", mine);
+        }
 
         System.out.printf("  harvested %d item(s) for %s into %s%n", written, user, into);
         if (result.truncated()) {

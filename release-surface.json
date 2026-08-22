@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 14,
+  "schemaVersion": 15,
   "commands": {
     "alias": ["--force", "--help", "--list", "--remove", "--version", "-V", "-h"],
     "analyze": ["--help", "--model", "--repo", "--version", "-V", "-h", "-m", "-r"],
@@ -33,7 +33,7 @@
     "onboard": ["--help", "--no-steps", "--rebuild", "--repo", "--version", "-V", "-h", "-r"],
     "pick": ["--help", "--issues-only", "--limit", "--repo", "--version", "-V", "-h", "-r"],
     "pr": ["--diff", "--files", "--help", "--repo", "--version", "-V", "-h", "-r"],
-    "profile": ["--help", "--rebuild", "--repo", "--version", "-V", "-h", "-r"],
+    "profile": ["--help", "--me", "--rebuild", "--repo", "--version", "-V", "-h", "-r"],
     "prompt": ["--copy", "--force-prompt", "--help", "--out", "--repo", "--version", "-V", "-h", "-r"],
     "prs": ["--help", "--repo", "--version", "-V", "-h", "-r"],
     "report": ["--help", "--me", "--repo", "--version", "-V", "-h", "-r"],

@@ -57,6 +57,7 @@ class SchemaTest {
             "ai_analysis",
             "chat_session",
             "chat_turn",
+            "authored_comment",
             "cross_repo_links",
             "embeddings",
             "issue_references",
@@ -152,7 +153,7 @@ class SchemaTest {
             assertTrue(rs.next());
             // The number itself is not the point; that the tables exist at it is. Bump this with
             // CURRENT_SCHEMA_VERSION, and only after the two tests above still pass.
-            assertEquals(14, rs.getInt("v"));
+            assertEquals(15, rs.getInt("v"));
         }
     }
 
