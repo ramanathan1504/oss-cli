@@ -33,6 +33,36 @@ generate text.
 
 ---
 
+## Running a build you just made
+
+**Set `OSS_CLI_HOME` every time.** A jar out of `target/` opens the same
+`~/.oss-cli` the installed release does, and if your branch has raised
+`CURRENT_SCHEMA_VERSION`, running it once migrates your real store. The installed
+`oss` then refuses that store — correctly — until a release carrying the new
+schema exists.
+
+```bash
+OSS_CLI_HOME=/tmp/oss-scratch java -jar target/oss-cli-*.jar doctor
+```
+
+That is not advice any more, it is enforced: a build under `target/`, pointed at
+the default store, with data already in it, **refuses** and prints both ways out.
+An installed release never asks — migrating your store is the point of upgrading.
+A build pointed at a scratch directory never asks either. The refusal exists only
+where unreleased code meets real data.
+
+To go ahead anyway, on purpose:
+
+```bash
+OSS_ALLOW_SCHEMA_UPGRADE=1 java -jar target/oss-cli-*.jar doctor
+```
+
+The test suite already does the right thing: surefire sets
+`OSS_CLI_HOME=target/test-home` as an **environment variable**, which is the only
+thing `AppPaths.resolveBaseDir()` reads. `-Doss.cli.home=…` redirects nothing —
+that property is written *by* the application so `log4j2.xml` can read the path
+back. A test once "redirected" itself with it and deleted a real 496 MB database.
+
 ## Storage and migrations
 
 `DatabaseManager` holds a numbered `Migration[]`. Each has a target version and
