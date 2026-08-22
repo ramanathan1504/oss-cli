@@ -121,6 +121,19 @@ public class AppPaths {
         return null;
     }
 
+    /**
+     * Whether the store in use is the real one, or a directory somebody pointed us at.
+     *
+     * <p>Read from the environment variable rather than by comparing paths, because
+     * {@code OSS_CLI_HOME=$HOME/.oss-cli} is somebody naming the real store deliberately, and a
+     * path comparison would call that redirected. The question being asked is "was this chosen",
+     * and the variable is the choice.
+     */
+    public static boolean isDefaultBaseDir() {
+        String override = System.getenv(HOME_ENV_VAR);
+        return override == null || override.isBlank();
+    }
+
     private static Path resolveBaseDir() {
         String override = System.getenv(HOME_ENV_VAR);
         if (override == null || override.isBlank()) {
