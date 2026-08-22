@@ -123,16 +123,27 @@ public class FollowupCommand implements Callable<Integer> {
             // needs no line about itself; a ledger of seventeen is three quarters of a minute.
             com.osscli.ui.Live live =
                     only != null ? null : com.osscli.ui.Live.start("checking " + rows.size() + " recorded review(s)");
-            int checked = 0;
+            java.util.List<ReviewLedger.Row> wanted = new ArrayList<>();
             for (ReviewLedger.Row r : rows) {
-                if (only != null && r.pr != only) {
-                    continue;
+                if (only == null || r.pr == only) {
+                    wanted.add(r);
                 }
-                checked++;
+            }
+            // Read them together, print them in ledger order. Six lanes turns fifty-one serial
+            // round trips into nine rounds; the order the rows come back in is unchanged, because
+            // a report whose rows move between runs cannot be diffed against yesterday's.
+            java.util.List<Loaded> loaded = com.osscli.util.Parallel.map(wanted, this::load, done -> {
                 if (live != null) {
-                    live.step(checked + " of " + rows.size() + " — " + r.repo + "#" + r.pr);
+                    live.step(done + " of " + wanted.size() + " — " + wanted.get(done - 1).repo + "#"
+                            + wanted.get(done - 1).pr);
                 }
-                report(r);
+            });
+            int checked = 0;
+            for (int i = 0; i < loaded.size(); i++) {
+                checked++;
+                Loaded l = loaded.get(i);
+                // A row whose whole fetch threw is still a row: say so where the reader is looking.
+                report(l != null ? l : new Loaded(wanted.get(i), null, null));
             }
             if (live != null) {
                 live.done(checked + " checked");
@@ -213,8 +224,23 @@ public class FollowupCommand implements Callable<Integer> {
 
     // ------------------------------------------------------------------ report ---
 
-    private void report(ReviewLedger.Row r) throws Exception {
+    /**
+     * One row's three network reads, done off the printing thread.
+     *
+     * <p>The pull request, its comments and its reviews -- three calls, and nothing else. Split out
+     * so seventeen rows can be read at once while the printing below stays in ledger order.
+     */
+    private Loaded load(ReviewLedger.Row r) {
         JsonNode pull = fetch(r.repo, r.pr);
+        return new Loaded(r, pull, pull == null ? null : lastWord(r.repo, r.pr));
+    }
+
+    /** A row and everything the network had to say about it. */
+    private record Loaded(ReviewLedger.Row row, JsonNode pull, Said last) {}
+
+    private void report(Loaded loaded) throws Exception {
+        ReviewLedger.Row r = loaded.row();
+        JsonNode pull = loaded.pull();
         if (pull == null) {
             System.out.printf("  %-28s #%-6d %s%n", r.repo, r.pr, "unreachable");
             return;
@@ -224,7 +250,7 @@ public class FollowupCommand implements Callable<Integer> {
         boolean merged = !pull.path("merged_at").isNull()
                 && pull.path("merged_at").asText("").length() > 0;
 
-        Said last = lastWord(r.repo, r.pr);
+        Said last = loaded.last();
 
         List<String> moved = new ArrayList<>();
         if (!head.isEmpty() && !head.equals(r.head)) {
@@ -659,22 +685,30 @@ public class FollowupCommand implements Callable<Integer> {
      * rate limit and a pulled cable alike -- four different problems with four different remedies,
      * behind one sentence that suggests none of them.
      */
-    private String lastFailure;
+    /**
+     * Why the last API call failed, per thread.
+     *
+     * <p>A plain field here was the one thing stopping these rows being fetched at once: every
+     * worker would clear and overwrite it, so the reason printed against row four could belong to
+     * row eleven. Thread-confined, it stays correct whether one row is being read or six.
+     */
+    private final ThreadLocal<String> lastFailure = ThreadLocal.withInitial(() -> null);
 
     private JsonNode api(String path) {
-        lastFailure = null;
+        lastFailure.set(null);
         try {
             String json = new GitHubClient().getJson(path);
             return (json == null || json.isBlank()) ? null : MAPPER.readTree(json);
         } catch (Exception e) {
-            lastFailure = com.osscli.github.Reachability.describe(e);
+            lastFailure.set(com.osscli.github.Reachability.describe(e));
             return null;
         }
     }
 
     /** What to tell someone about a pull request that could not be read. */
     private String whyNot(String repoName, int pr) {
-        return lastFailure != null ? lastFailure : repoName + "#" + pr + " does not exist, or this token cannot see it";
+        String why = lastFailure.get();
+        return why != null ? why : repoName + "#" + pr + " does not exist, or this token cannot see it";
     }
 
     private JsonNode fetch(String repoName, int pr) {

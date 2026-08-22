@@ -64,35 +64,26 @@ public class HubCommand implements Callable<Integer> {
         // repository states is that anything slower than a second reports what it is doing, and a
         // command that reads a network in a loop is the case the rule was written for.
         com.osscli.ui.Live live = com.osscli.ui.Live.start("reading " + rows.size() + " recorded review(s)");
-        int checked = 0;
+        List<ReviewLedger.Row> wanted = new ArrayList<>();
         for (ReviewLedger.Row r : rows) {
-            if (repo != null && !repo.isBlank() && !r.repo.equalsIgnoreCase(repo.trim())) {
-                continue;
+            if (repo == null || repo.isBlank() || r.repo.equalsIgnoreCase(repo.trim())) {
+                wanted.add(r);
             }
-            live.step(++checked + " of " + rows.size() + " — " + r.repo + "#" + r.pr);
-            JsonNode pull = api("/repos/" + r.repo + "/pulls/" + r.pr);
-            if (pull == null) {
+        }
+        // Three calls a row, six rows at a time. The ledger order is not the output order here --
+        // both lists are sorted by last activity below -- but the reads still come back in ledger
+        // order, so the counter above counts rows rather than whichever request finished first.
+        List<Item> fetched = com.osscli.util.Parallel.map(
+                wanted,
+                r -> read(r, me),
+                done -> live.step(done + " of " + wanted.size() + " — " + wanted.get(done - 1).repo + "#"
+                        + wanted.get(done - 1).pr));
+        int checked = wanted.size();
+        for (Item it : fetched) {
+            if (it == null) {
                 unreachable++;
                 continue;
             }
-            Item it = new Item();
-            it.row = r;
-            it.state = pull.path("state").asText("?");
-            it.merged = pull.path("merged_at").asText("").length() > 0;
-            it.head = pull.path("head").path("sha").asText("");
-            it.title = pull.path("title").asText("");
-            it.pushed = !it.head.isEmpty() && !it.head.equals(r.head);
-
-            Said last = lastWord(r.repo, r.pr);
-            it.lastBy = last == null ? "" : last.by;
-            it.lastAt = last == null ? "" : last.at;
-
-            // Whose move it is. Two things put it back on you: the author pushed after you looked,
-            // or the last word is somebody else's. Both mean the thing you decided was decided
-            // against a state that no longer exists.
-            it.onYou = !it.merged
-                    && "open".equalsIgnoreCase(it.state)
-                    && (it.pushed || (!it.lastBy.isEmpty() && !it.lastBy.equals(me)));
             (it.onYou ? yours : theirs).add(it);
         }
 
@@ -136,6 +127,39 @@ public class HubCommand implements Callable<Integer> {
             }
         }
         System.out.println();
+    }
+
+    /**
+     * One row's reads, and the verdict they support. Null when the pull request cannot be read.
+     *
+     * <p>Called from several threads at once, which is safe because everything it touches is either
+     * a parameter or created here -- {@link #api} keeps no state of its own, and {@code me} is
+     * resolved once before any of this starts.
+     */
+    private Item read(ReviewLedger.Row r, String me) {
+        JsonNode pull = api("/repos/" + r.repo + "/pulls/" + r.pr);
+        if (pull == null) {
+            return null;
+        }
+        Item it = new Item();
+        it.row = r;
+        it.state = pull.path("state").asText("?");
+        it.merged = pull.path("merged_at").asText("").length() > 0;
+        it.head = pull.path("head").path("sha").asText("");
+        it.title = pull.path("title").asText("");
+        it.pushed = !it.head.isEmpty() && !it.head.equals(r.head);
+
+        Said last = lastWord(r.repo, r.pr);
+        it.lastBy = last == null ? "" : last.by;
+        it.lastAt = last == null ? "" : last.at;
+
+        // Whose move it is. Two things put it back on you: the author pushed after you looked, or
+        // the last word is somebody else's. Both mean the thing you decided was decided against a
+        // state that no longer exists.
+        it.onYou = !it.merged
+                && "open".equalsIgnoreCase(it.state)
+                && (it.pushed || (!it.lastBy.isEmpty() && !it.lastBy.equals(me)));
+        return it;
     }
 
     // ------------------------------------------------------------------- github ---
