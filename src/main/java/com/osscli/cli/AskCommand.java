@@ -107,8 +107,11 @@ public class AskCommand implements Callable<Integer> {
             return 1;
         }
 
-        List<Tool> tools = new java.util.ArrayList<>(
-                List.of(new ReadFile(), new Recall(AskCommand::searchThisMachine), new RunVerb()));
+        List<Tool> tools = new java.util.ArrayList<>(List.of(
+                new ReadFile(),
+                new Recall(AskCommand::searchThisMachine),
+                new com.osscli.agent.AskOss(AskCommand::askOss),
+                new RunVerb()));
         if (allowEdit) {
             // Only offered when it was asked for. A tool the model can see is a tool it will
             // propose, and proposing an edit on a read-only run wastes a step explaining why not.
@@ -231,6 +234,41 @@ public class AskCommand implements Callable<Integer> {
         } catch (Exception e) {
             return "";
         }
+    }
+
+    /**
+     * Run one of oss's own read-only commands in this process and capture what it printed.
+     *
+     * <p>In-process rather than by spawning another {@code oss}: the store is already open here,
+     * and a second process would pay the schema check and the connection again per question. The
+     * output stream is swapped for the duration, which is safe because the loop is single-threaded
+     * by construction and the live status line writes to stderr.
+     */
+    private static String askOss(List<String> argv, Integer timeoutSeconds) {
+        java.io.PrintStream originalOut = System.out;
+        java.io.PrintStream originalErr = System.err;
+        java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
+        java.io.ByteArrayOutputStream problems = new java.io.ByteArrayOutputStream();
+        try {
+            System.setOut(new java.io.PrintStream(captured, true, java.nio.charset.StandardCharsets.UTF_8));
+            // stderr too, or the inner command's own status line prints straight through this one:
+            // asking `hub` printed seventeen "3 of 17 — apache/logging-log4j2#4240" lines into the
+            // middle of the transcript, which is the nested command narrating itself to a reader
+            // who asked a different question.
+            System.setErr(new java.io.PrintStream(problems, true, java.nio.charset.StandardCharsets.UTF_8));
+            com.osscli.Main.commandLine().execute(argv.toArray(new String[0]));
+        } catch (Exception e) {
+            return "error: oss " + String.join(" ", argv) + " failed — " + e.getMessage();
+        } finally {
+            System.setOut(originalOut);
+            System.setErr(originalErr);
+        }
+        String answer = captured.toString(java.nio.charset.StandardCharsets.UTF_8);
+        String failed =
+                problems.toString(java.nio.charset.StandardCharsets.UTF_8).strip();
+        // Kept, not discarded: a command that printed nothing and complained on stderr has told the
+        // model exactly what it needs to know, and swallowing it would leave an unexplained blank.
+        return answer.isBlank() && !failed.isEmpty() ? failed : answer;
     }
 
     /**
