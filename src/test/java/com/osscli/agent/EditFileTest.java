@@ -159,6 +159,29 @@ class EditFileTest {
     }
 
     @Test
+    @DisplayName("several files in one run, because nothing ever restricted it to one")
+    void multipleFilesInOneRun(@TempDir Path dir) throws IOException {
+        // Claimed as a gap when it was only untested. Each turn is an independent action, so a
+        // second edit to a different file is the ordinary case rather than a feature -- and a
+        // capability nobody has exercised is a capability nobody should be told about.
+        Files.writeString(dir.resolve("A.java"), "int a = 1;\n");
+        Files.writeString(dir.resolve("B.java"), "int b = 1;\n");
+        Loop loop = new Loop(new Workspace(dir), java.util.List.of(tool(true)), true, 5);
+
+        java.util.Iterator<String> script = java.util.List.of(
+                        "```oss\ntool: edit\npath: A.java\nfind: a = 1\nreplace: a = 2\n```",
+                        "```oss\ntool: edit\npath: B.java\nfind: b = 1\nreplace: b = 2\n```",
+                        "Both files updated.")
+                .iterator();
+
+        Loop.Transcript t = loop.run("bump both", prompt -> script.next());
+
+        assertEquals("Both files updated.", t.answer());
+        assertEquals("int a = 2;\n", Files.readString(dir.resolve("A.java")));
+        assertEquals("int b = 2;\n", Files.readString(dir.resolve("B.java")));
+    }
+
+    @Test
     @DisplayName("with no terminal there is nothing to confirm at, so nothing is written")
     void noTerminalMeansNo(@TempDir Path dir) throws IOException {
         Path file = dir.resolve("a.txt");
