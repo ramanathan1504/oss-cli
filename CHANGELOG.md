@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.4.0
+
+_2026-08-22_
+
+- Seventeen rows, three calls each, one at a time (#149)
+- backlog died at the last line, after paying for every fetch (#148)
+- 1,874 notes on this machine, and almost none of them are yours (#147)
+- An engine you can reach, refused because you could only reach it one way (#146)
+
+
 ## 2.3.0
 
 _2026-08-21_
