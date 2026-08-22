@@ -1303,14 +1303,73 @@ oss review 4234 -r owner/name</pre>
   </div>
 </section>
 
+<!-- ══════════════ 3.0 ══════════════ -->
+<section class="band" id="three">
+  <div class="shell">
+    <p class="eyebrow">New in 3.0</p>
+    <h2>One interface, whichever backend you have</h2>
+    <p class="sub">
+      Naming an engine grants permission; it does not order a call. Every ask starts
+      on the local rung and climbs only when that rung fails a stated test — and the
+      rung that answers says so <em>before</em> it answers.
+    </p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th scope="col">What you have</th><th scope="col">What answers</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>An API key</td><td>The provider's API</td></tr>
+          <tr><td>No key, but their CLI installed and signed in</td><td><strong>That CLI, on your subscription</strong> — announced, not silent</td></tr>
+          <tr><td>Neither, but Ollama running</td><td>The local daemon</td></tr>
+          <tr><td>None of it</td><td>The built-in model: ranks and retrieves, offline</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="sub">
+      A key is never abandoned for a subscription without being asked — that would
+      change who pays and what the harness may read. Having <em>no</em> key is a
+      different situation: there is no account to move away from, and the
+      alternative was a dead end you had to already know a flag to escape.
+    </p>
+
+    <h2>It writes the way you write</h2>
+    <p class="sub">
+      <code>oss profile --me</code> measures how you write from text with your name
+      on it — the issues and pull requests you authored, the comments you wrote.
+      Harvested threads and generated notes are excluded on purpose: a voice learned
+      from those is the tool's own, handed back to you as yours. Every trait is
+      arithmetic over your text, never a model asked what you “sound like”, because
+      that returns flattery and flattery cannot be checked. Under twenty samples it
+      tells no model anything, and says so.
+    </p>
+
+    <h2>Packs, and the support packs under them</h2>
+    <p class="sub">
+      A pack is a subject; a support pack is something attached to it. Every
+      repository you follow is already a pack, so this works before you configure
+      anything — a manifest only says which one it sits under. The assistant is then
+      told what is attached and to which subject, stated as fact rather than as
+      instruction: told “use the bench” a model reaches for it on an unrelated
+      issue to be helpful; told “this exists, it supports that”, it can decline.
+    </p>
+  </div>
+</section>
+
 <!-- ══════════════ commands ══════════════ -->
 <section class="band" id="commands">
   <div class="shell">
     <p class="eyebrow">Reference</p>
     <h2>The commands you will actually use</h2>
     <p class="sub">
-      Run <code>oss --help</code> for the full list, or <code>oss doctor</code> when
-      something is not behaving — it checks every prerequisite and names what to fix.
+      Since 3.0, <code>oss --help</code> shows the twelve that carry the daily work
+      rather than all forty at once — a list that long is an inventory, not a menu.
+      <strong>Nothing was removed.</strong> The rest still run, unchanged, and
+      <code>oss --help-all</code> lists every one of them. Or run
+      <code>oss doctor</code> when something is not behaving — it checks every
+      prerequisite and names what to fix.
     </p>
 
     <div class="table-wrap">
