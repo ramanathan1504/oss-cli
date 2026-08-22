@@ -1,5 +1,26 @@
 # CLI Command Reference (`COMMANDS.md`)
 
+## Twelve are shown; all of them work
+
+Since **3.0**, `oss --help` lists the dozen that carry the daily work plus the
+four engine prefixes, rather than all forty at once — a list that long is an
+inventory, not a menu.
+
+```
+sync  search  review  triage  chat  hub  pr  ext  serve  run  memory  doctor  setup
+llm   claude  gemini  codex
+```
+
+**Nothing was removed.** Every command documented below still runs, still takes
+the same flags, and still prints its own usage. `oss --help-all` lists all of
+them, grouped, and the footer of `oss --help` says so — a hidden command nobody
+can find again is a removed command with extra steps.
+
+CI checks both halves: that the twelve are listed, *and* that the twenty-three
+are still there. The local board on port 1504 dispatches several of the hidden
+ones (`pick`, `hidden-critical`) and is unaffected.
+
+
 This guide outlines all subcommands available in the `oss-cli` CLI platform.
 
 ## Global Options

@@ -121,6 +121,22 @@ fills the budget and **says what it dropped** — "25 of 67 included" is a
 different answer from "67 included" and the user must not have to guess which
 they got.
 
+**A build out of `target/` must not migrate the real store.** `SchemaTooNewException`
+refuses to *read* a store written by a newer build, loudly. The other direction was
+silent: the checkout's jar opened `~/.oss-cli`, ran every pending migration, stamped
+it, and printed a progress line — after which the *installed* `oss` refused that
+store until a release carrying the new schema existed. That cost an afternoon on
+2026-08-22, from one command missing its `OSS_CLI_HOME`. `DatabaseManager` now
+refuses when all three are true: the jar is under `target/`, the store is the
+default one, and the store already holds data. Both ways out are printed —
+`OSS_CLI_HOME=/tmp/…` or `OSS_ALLOW_SCHEMA_UPGRADE=1`. **Always set `OSS_CLI_HOME`
+when running a development build.**
+
+An unversioned store is *two* situations that read the same number: a database
+created a second ago, and one from before stamping existed that holds everything
+somebody has. `tableExists(conn, "issues")` is what separates them, and both
+refusals run *before* the bootstrap, because that bootstrap writes.
+
 **Vectors from different models are never comparable.** Every vector is stored
 with the model that produced it and every read filters on it. All models used
 here emit 384 dimensions, so nothing catches a mix by shape — it produces
@@ -145,7 +161,7 @@ Embedding runs **in this process** via ONNX. It is not one of the providers in
 
 ## Database
 
-`CURRENT_SCHEMA_VERSION` in `DatabaseManager` (14). A fresh database runs the real
+`CURRENT_SCHEMA_VERSION` in `DatabaseManager` (15). A fresh database runs the real
 migrations rather than being stamped at the current version — it used to be
 stamped, drifted, and shipped new installs missing three tables. `SchemaTest`
 names every expected table in a list so adding one without updating it fails.
