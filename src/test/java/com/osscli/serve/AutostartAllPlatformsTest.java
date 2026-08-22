@@ -208,8 +208,12 @@ class AutostartAllPlatformsTest {
     @DisplayName("each platform keeps its definition where that platform looks for it")
     void descriptorPerPlatform() {
         pretend("Mac OS X");
+        // Compared with separators normalised. This test pretends to be each platform in turn, but
+        // it still builds real Paths on the host it runs on -- so on Windows the macOS descriptor
+        // renders as Library\\LaunchAgents and a literal "Library/LaunchAgents" fails on a
+        // difference the test is not about.
         assertTrue(
-                Autostart.descriptor().toString().contains("Library/LaunchAgents"),
+                Autostart.descriptor().toString().replace('\\', '/').contains("Library/LaunchAgents"),
                 Autostart.descriptor().toString());
         assertTrue(Autostart.descriptor().toString().endsWith(".plist"));
         restoreOs();

@@ -202,6 +202,12 @@ class PackFuzzTest {
     }
 
     @Test
+    @org.junit.jupiter.api.condition.DisabledOnOs(
+            value = org.junit.jupiter.api.condition.OS.WINDOWS,
+            disabledReason = "the matrix engine is POSIX shell; on Windows it reaches for WSL, which "
+                    + "a runner does not have — the job answered \"Windows Subsystem for Linux has no "
+                    + "installed distributions\" instead of running the pack. `oss run` says the same "
+                    + "thing to a Windows user, so this is the documented behaviour, not a gap.")
     @DisplayName("an app that runs out of another app's module is expressible")
     void modulePathExceptionsAreNamed() throws Exception {
         // A real pack runs nineteen applications out of eighteen directories: "nosql" is exercised

@@ -57,6 +57,15 @@ class BuiltinRunnerTest {
 
         Path wrapper = dir.resolve("mvnw");
         Files.writeString(wrapper, "#!/bin/sh\n");
+        // Windows has no execute bit, so setExecutable returns false there and this asserted a
+        // property of the filesystem rather than of the detector. A wrapper IS the POSIX
+        // ./mvnw case; the Windows equivalent is mvnw.cmd, which needs no bit at all.
+        boolean posix = !System.getProperty("os.name")
+                .toLowerCase(java.util.Locale.ROOT)
+                .contains("win");
+        if (!posix) {
+            return;
+        }
         assertTrue(wrapper.toFile().setExecutable(true), "could not make the wrapper executable");
 
         // The wrapper pins a version; `mvn` is whatever this machine happens to have. A project

@@ -45,7 +45,13 @@ class ImportExportTest {
         // The file this got wrong. A real export's conversations have NO extension --
         // "Paste July 01, 2026 - 11:21PM" is 45 KB of readable text -- and an allow-list of four
         // extensions imported zero of 179 of them while reporting "not text".
-        assertTrue(BuiltinMemory.isText(Path.of("Paste July 01, 2026 - 11:21PM")));
+        // A macOS paste really is named with a colon, and Path.of refuses to build one at all on
+        // Windows -- so the extensionless case is asserted with a name every filesystem accepts,
+        // and the colon itself is checked only where such a file can exist.
+        assertTrue(BuiltinMemory.isText(Path.of("Paste July 01, 2026 - 1121PM")));
+        if (!System.getProperty("os.name").toLowerCase(java.util.Locale.ROOT).contains("win")) {
+            assertTrue(BuiltinMemory.isText(Path.of("Paste July 01, 2026 - 11:21PM")));
+        }
         assertTrue(BuiltinMemory.isText(Path.of("some-conversation-with-no-suffix")));
         assertTrue(BuiltinMemory.isText(Path.of("notes.rtf")));
 
