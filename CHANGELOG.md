@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.0
+
+_2026-08-22_
+
+- Thirty-eight commands in one flat list is an inventory, not a menu (#151)
+
+
 ## 2.4.0
 
 _2026-08-22_
