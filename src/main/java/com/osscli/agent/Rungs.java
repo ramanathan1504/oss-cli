@@ -49,33 +49,64 @@ public final class Rungs {
      *
      * @param model the local model name to try
      */
+    /**
+     * Every rung this machine could answer on, best first.
+     *
+     * <p>Used when nothing was named. Typing {@code oss claude ask} is permission and settles the
+     * question; typing plain {@code oss ask} on a machine with three engines installed does not,
+     * and guessing on the user's behalf is how a tool spends somebody's subscription without being
+     * asked. So the list is offered, and choosing from it is the same permission the prefix gives.
+     *
+     * <p><b>Only ever offered at a terminal.</b> In a pipe, a script or cron there is nobody to
+     * choose, and the honest reading of silence is not consent — {@link #forThisMachine} falls back
+     * to the local rung there and never reaches outward.
+     */
+    public static java.util.List<Chosen> available(String model) {
+        java.util.List<Chosen> out = new java.util.ArrayList<>();
+        for (Ai.Engine engine : Ai.Engine.values()) {
+            if (engine.isExternal() && Ai.routeFor(engine) != Ai.Route.NONE) {
+                out.add(external(engine));
+            }
+        }
+        local(model).ifPresent(out::add);
+        return out;
+    }
+
+    private static Chosen external(Ai.Engine engine) {
+        String how = Ai.routeFor(engine) == Ai.Route.CLI ? "its own tool" : "an API key";
+        return new Chosen(engine.label() + " · " + how, prompt -> {
+            try {
+                return Cloud.generateText(engine, prompt);
+            } catch (Exception e) {
+                // One turn's failure, handed back as text: the loop treats it as an observation and
+                // can still answer from what it already has.
+                return "error: " + engine.label() + " could not answer — " + e.getMessage();
+            }
+        });
+    }
+
+    private static Optional<Chosen> local(String model) {
+        OllamaClient client = new OllamaClient(model);
+        if (!client.isServerReachable() || !client.isModelAvailable()) {
+            return Optional.empty();
+        }
+        return Optional.of(new Chosen("local " + model + " · nothing leaves this machine", prompt -> {
+            try {
+                return client.generateText(prompt);
+            } catch (Exception e) {
+                return "error: the local model could not answer — " + e.getMessage();
+            }
+        }));
+    }
+
     public static Optional<Chosen> forThisMachine(String model) {
         // Named engines first: naming one is the user saying they are willing to pay for it, and
         // ignoring that in favour of a local daemon would make the prefix a lie.
         for (Ai.Engine engine : Ai.escalationPath()) {
-            return Optional.of(new Chosen(engine.label(), prompt -> {
-                try {
-                    return Cloud.generateText(engine, prompt);
-                } catch (Exception e) {
-                    // One turn's failure, handed back as text: the loop treats it as an
-                    // observation and can still answer from what it already has.
-                    return "error: " + engine.label() + " could not answer — " + e.getMessage();
-                }
-            }));
+            return Optional.of(external(engine));
         }
-        OllamaClient local = new OllamaClient(model);
-        // Both questions, not one: a daemon that is running without the model pulled answers the
-        // first and fails the second, and a loop discovering that on turn three has already spent
-        // the user's time.
-        if (local.isServerReachable() && local.isModelAvailable()) {
-            return Optional.of(new Chosen("local " + model, prompt -> {
-                try {
-                    return local.generateText(prompt);
-                } catch (Exception e) {
-                    return "error: the local model could not answer — " + e.getMessage();
-                }
-            }));
-        }
-        return Optional.empty();
+        // Both questions, not one: a daemon running without the model pulled answers the first and
+        // fails the second, and a loop discovering that on turn three has already spent the time.
+        return local(model);
     }
 }

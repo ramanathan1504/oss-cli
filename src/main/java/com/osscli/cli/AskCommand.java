@@ -92,7 +92,11 @@ public class AskCommand implements Callable<Integer> {
             }
         }
 
-        var chosen = Rungs.forThisMachine(resolved).orElse(null);
+        // Named engine wins outright -- `oss claude ask` is the choice already made, and asking
+        // again would be ceremony. Otherwise: one rung is taken, several are offered, none refuses.
+        var chosen = com.osscli.llm.Ai.mayEscalate()
+                ? Rungs.forThisMachine(resolved).orElse(null)
+                : pick(Rungs.available(resolved));
         if (chosen == null) {
             // Refused with both fixes named, rather than a loop that turns without producing
             // anything. The built-in model ranks and retrieves; it does not write sentences, and
@@ -180,6 +184,40 @@ public class AskCommand implements Callable<Integer> {
      * <p>Static and defensive: a corpus that cannot be read is a sentence the loop reads and works
      * around, never an exception that ends somebody's question.
      */
+    /**
+     * One rung, chosen the way the user would choose it.
+     *
+     * <p>The shape they asked for, and the one {@code Picker} already implements: several
+     * available means ask, exactly one means take it and say so, none means fall back. What makes
+     * this safe rather than merely convenient is the last clause — in a pipe, a script or cron
+     * there is nobody to ask, and {@code Picker.canAsk()} is false there, so the local rung is used
+     * and nothing reaches outward on a decision nobody made.
+     */
+    private static Rungs.Chosen pick(List<Rungs.Chosen> available) {
+        if (available.isEmpty()) {
+            return null;
+        }
+        if (available.size() == 1) {
+            return available.get(0);
+        }
+        if (!com.osscli.ui.Picker.canAsk()) {
+            // No terminal. The local rung if there is one, and never an external engine: silence is
+            // not permission to send somebody's code to somebody else's computer.
+            return available.stream()
+                    .filter(c -> c.label().startsWith("local "))
+                    .findFirst()
+                    .orElse(null);
+        }
+        return com.osscli.ui.Picker.choose(
+                "Which should answer?",
+                available,
+                Rungs.Chosen::label,
+                c -> List.of(
+                        c.label().startsWith("local ")
+                                ? "Runs on this machine. Nothing you ask leaves it."
+                                : "Sends this question, and what it reads, to that provider."));
+    }
+
     /**
      * A session for this directory, or zero when the store cannot take one.
      *

@@ -149,6 +149,7 @@ public class ServeCommand implements Callable<Integer> {
         }
 
         server.createContext("/", this::handlePage);
+        server.createContext("/docs", this::handleDocs);
         server.createContext("/api/extensions", this::handleList);
         server.createContext("/api/questions", this::handleQuestions);
         server.createContext("/api/rows", this::handleRows);
@@ -217,6 +218,78 @@ public class ServeCommand implements Callable<Integer> {
             return;
         }
         send(x, 200, "text/html; charset=utf-8", PAGE);
+    }
+
+    /**
+     * The documentation, on the same page as the board.
+     *
+     * <p>Read from inside the jar rather than from disk. The board has to work from a Homebrew
+     * install and from an unpacked archive, and neither carries this checkout — the distribution
+     * copies README.md beside the jar and nothing else, so reading from the filesystem would give a
+     * page that is complete on the machine that built it and half empty everywhere it ships.
+     */
+    private static final java.util.List<String> DOCS =
+            java.util.List.of("README.md", "COMMANDS.md", "OFFLINE.md", "SETUP.md", "CONTRIBUTING.md");
+
+    private void handleDocs(HttpExchange x) throws IOException {
+        String path = x.getRequestURI().getPath();
+        String wanted = path.length() > "/docs/".length() ? path.substring("/docs/".length()) : "README.md";
+        if (!DOCS.contains(wanted)) {
+            // The list, not a 404 with nothing in it: somebody who mistyped one is one link away.
+            send(x, 404, "text/html; charset=utf-8", docPage("Not a document", "<p>Try: " + docLinks() + "</p>"));
+            return;
+        }
+        try (java.io.InputStream in = ServeCommand.class.getResourceAsStream("/docs/" + wanted)) {
+            if (in == null) {
+                send(
+                        x,
+                        500,
+                        "text/html; charset=utf-8",
+                        docPage(wanted, "<p>This build does not carry " + wanted + ".</p>"));
+                return;
+            }
+            String markdown = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            send(x, 200, "text/html; charset=utf-8", docPage(wanted, Markdown.toHtml(markdown)));
+        }
+    }
+
+    private static String docLinks() {
+        StringBuilder b = new StringBuilder();
+        for (String d : DOCS) {
+            b.append("<a href=\"/docs/")
+                    .append(d)
+                    .append("\">")
+                    .append(d.replace(".md", ""))
+                    .append("</a> ");
+        }
+        return b.toString();
+    }
+
+    /** One document, wearing the same palette as the board it is served beside. */
+    private static String docPage(String title, String body) {
+        return "<!doctype html><html><head><meta charset=\"utf-8\">"
+                + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+                + "<title>" + title + " · oss</title><style>"
+                + ":root{--bg:#faf9f5;--fg:#141413;--soft:#5b5a55;--rule:#e3e1d9;--acc:#8a6d1f;--card:#fff}"
+                + "@media(prefers-color-scheme:dark){:root{--bg:#12120f;--fg:#eceae1;--soft:#a5a294;"
+                + "--rule:#2b2a24;--acc:#d9ba6a;--card:#1a1a16}}"
+                + "*{box-sizing:border-box}body{background:var(--bg);color:var(--fg);margin:0;"
+                + "font:16px/1.65 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:2rem 1.25rem 5rem}"
+                + ".w{max-width:46rem;margin:0 auto}nav{display:flex;flex-wrap:wrap;gap:.9rem;"
+                + "border-bottom:1px solid var(--rule);padding-bottom:.9rem;margin-bottom:2rem;font-size:.9rem}"
+                + "nav a{color:var(--acc);text-decoration:none}nav a:hover{text-decoration:underline}"
+                + "h1,h2,h3{line-height:1.25;margin:2rem 0 .6rem}h1{font-size:1.9rem}h2{font-size:1.35rem}"
+                + "h3{font-size:1.05rem}p,li{color:var(--fg)}code{background:var(--card);border:1px solid var(--rule);"
+                + "padding:.08em .35em;border-radius:3px;font-size:.88em;"
+                + "font-family:ui-monospace,SFMono-Regular,Menlo,monospace}"
+                + "pre{background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--acc);"
+                + "border-radius:3px;padding:.9rem 1rem;overflow-x:auto}pre code{background:none;border:0;padding:0}"
+                + "table{border-collapse:collapse;width:100%;display:block;overflow-x:auto}"
+                + "th,td{border-bottom:1px solid var(--rule);padding:.5rem .7rem;text-align:left;vertical-align:top}"
+                + "th{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--soft)}"
+                + "hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}a{color:var(--acc)}"
+                + "</style></head><body><div class=\"w\"><nav><a href=\"/\">← board</a>" + docLinks()
+                + "</nav>" + body + "</div></body></html>";
     }
 
     private void handleList(HttpExchange x) throws IOException {
@@ -730,6 +803,7 @@ public class ServeCommand implements Callable<Integer> {
                     border:1px solid var(--line);border-radius:999px;padding:1px 8px;color:var(--mut)}
             .rw .sp{flex:1}
             </style></head><body><div class="wrap">
+            <a class="theme" href="/docs" title="Every document this build carries">docs</a>
             <button class="theme" id="theme-btn" title="Same choice as the site makes">theme</button>
             <h1>oss</h1>
             <div class="sub">One core that knows. A <b>runner</b> runs something real; a <b>memory</b> remembers.</div>
