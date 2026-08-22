@@ -1129,3 +1129,38 @@ decision you have to make, and this one is already made.
 Junie is an agent that runs code tasks and has no read-only switch, so oss points
 it at an empty directory of its own with `--project`. It is being asked to judge
 something it was handed, not to edit whatever checkout your terminal is standing in.
+
+### `ask`
+
+```bash
+oss ask "why does the Windows build fail on a colon?"
+oss ask --allow-run "do the tests pass, and what fails?"
+oss claude --cli ask "which file decides the schema version?"
+```
+
+The one command here that goes and looks. It reads files in the project you are
+standing in, searches what this machine already has indexed, and can run the
+project's own build or tests — deciding what to do next from what it found.
+
+**It checks your corpus first.** A real run on this repository asked `recall`
+before it opened a single file:
+
+```
+  · recall → 8 of 10702 indexed items match:
+  · read_file → pom.xml  lines 1-267 of 267
+```
+
+**Read-only unless you say otherwise.** `--allow-run` is the entire permission
+model, and it is one flag rather than a prompt per step. Nothing in the built-in
+tool set writes to a file. `run` offers only the verbs the built-in runner already
+derives from your build file — there is deliberately no "run any command" tool,
+because a model that has read a README will suggest what the README said.
+
+**It works on whichever rung you have**, because the tool protocol is text rather
+than any provider's function-calling API: a key, that provider's own CLI on your
+subscription, a local Ollama model, in that order. The built-in model is the one
+rung that cannot drive it — it ranks and retrieves, it does not write sentences —
+and `ask` says so plainly rather than turning without producing anything.
+
+If a local model is too small to emit the format, that is named as the model's
+limit rather than printed as an answer.

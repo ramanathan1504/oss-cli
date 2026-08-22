@@ -32,6 +32,7 @@ import picocli.CommandLine.Command;
         versionProvider = VersionProvider.class,
         subcommands = {
             SyncCommand.class,
+            AskCommand.class,
             CriticalCommand.class,
             AnalyzeCommand.class,
             HiddenCriticalCommand.class,

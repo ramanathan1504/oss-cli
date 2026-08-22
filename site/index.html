@@ -694,7 +694,7 @@ td .need,td.need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)
     <ul class="hero-facts">
       <li><strong>A GitHub token is the only requirement.</strong> Everything else is a layer you add when you want it.</li>
       <li><strong>Nothing leaves the machine</strong> unless you attach a cloud key and ask it to.</li>
-      <li><strong>Sync once, then the network is optional</strong> — 30 of the 41 commands never need it.</li>
+      <li><strong>Sync once, then the network is optional</strong> — 31 of the 42 commands never need it.</li>
     </ul>
 
     <div class="install-line">
@@ -911,14 +911,15 @@ oss claude --cli review 4249</pre>
           <span class="cable-label">Pull the cable</span>
         </button>
         <p class="cable-read">
-          <span class="cable-num" id="cable-num">41</span>
-          <span class="cable-of">of 41 commands still work</span>
+          <span class="cable-num" id="cable-num">42</span>
+          <span class="cable-of">of 42 commands still work</span>
         </p>
       </div>
 
       <ul class="cmd-board" id="cmd-board">
         <li class="cmd net" style="--i:0" title="fetches issues, PRs and comments — the one that matters">sync</li>
         <li class="cmd net" style="--i:1" title="pulls one issue you have not synced">issue</li>
+        <li class="cmd" style="--i:1" title="asks about this project and looks: your corpus, the files, the build">ask</li>
         <li class="cmd net" style="--i:2" title="pulls one pull request you have not synced">pr</li>
         <li class="cmd net" style="--i:3" title="reads across the repositories you follow">hub</li>
         <li class="cmd net" style="--i:4" title="checks whether a branch moved since you reviewed it">followup</li>

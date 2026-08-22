@@ -164,6 +164,39 @@ class LoopTest {
     }
 
     @Test
+    @DisplayName("a model reaching for a tool and missing the format is corrected, then called")
+    void aModelThatCannotFollowTheFormatIsNamed(@TempDir Path dir) {
+        // Real output from qwen2.5:0.5b on this machine:
+        //   read_file:path:/path/to/your/project/root/root/src/main/cpp/tool/oss.py
+        // An attempt at a tool call, in no format at all. It used to be printed as the answer,
+        // which is the one output worse than a refusal.
+        // Every shape this model produced on this machine, in order, including echoing the usage
+        // line back on the third turn.
+        Function model = ask(
+                "read_file:path:/some/invented/path.py",
+                "read_file\"path\": \"path/to/project\"",
+                "read_file - path: <file>   [from: <line>]   read part of a file in this project");
+
+        Loop.Transcript t = loop(dir, false).run("what build tool is this?", model);
+
+        assertTrue(t.couldNotFollow(), "it must say the model could not follow the format");
+        assertEquals("", t.answer(), "and must not present the attempt as an answer");
+        assertTrue(model.prompts.get(1).contains("that was not a block"), model.prompts.get(1));
+    }
+
+    @Test
+    @DisplayName("prose that merely mentions a tool is an answer, not a failed attempt")
+    void mentioningAToolIsNotAnAttempt(@TempDir Path dir) {
+        // The inverse mistake: treating a finished answer as confusion because it used the word.
+        Function model = ask("I used read_file on pom.xml and it is a Maven project.");
+
+        Loop.Transcript t = loop(dir, false).run("what is it?", model);
+
+        assertFalse(t.couldNotFollow());
+        assertTrue(t.answer().contains("Maven project"), t.answer());
+    }
+
+    @Test
     @DisplayName("the model is told to check this machine before reasoning from nothing")
     void thePromptPutsLocalFirst(@TempDir Path dir) {
         Function model = ask("done");

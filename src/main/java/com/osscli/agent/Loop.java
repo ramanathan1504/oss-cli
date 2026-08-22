@@ -66,8 +66,25 @@ public final class Loop {
         }
     }
 
+    /**
+     * How many malformed attempts are worth correcting before calling it.
+     *
+     * <p>Two, because the first is a mistake and the third is a model that cannot do this. A
+     * qwen2.5:0.5b asked to follow the format answered
+     * {@code read_file:path:/path/to/your/project/root/root/src/main/cpp/tool/oss.py} -- an attempt
+     * at a tool call, in no format at all -- and the loop handed it back as the answer. Nonsense
+     * presented confidently is the one output worse than a refusal.
+     */
+    static final int MAX_MALFORMED = 2;
+
     /** What happened, in order, and the answer if there was one. */
-    public record Transcript(String answer, List<String> steps, boolean ranOut) {}
+    public record Transcript(String answer, List<String> steps, boolean ranOut, boolean couldNotFollow) {
+
+        /** The ordinary case: an answer, no confusion. */
+        public Transcript(String answer, List<String> steps, boolean ranOut) {
+            this(answer, steps, ranOut, false);
+        }
+    }
 
     /**
      * Run until the model stops asking for things.
@@ -77,6 +94,7 @@ public final class Loop {
      */
     public Transcript run(String question, Function<String, String> ask) {
         List<String> steps = new ArrayList<>();
+        int malformed = 0;
         Map<String, String> alreadySeen = new LinkedHashMap<>();
         StringBuilder conversation = new StringBuilder();
 
@@ -84,6 +102,25 @@ public final class Loop {
             String reply = ask.apply(prompt(question, conversation.toString()));
             Optional<Action> action = Action.firstIn(reply);
             if (action.isEmpty()) {
+                if (looksLikeAnAttempt(reply)) {
+                    // It tried to call a tool and could not spell it. Correct it, at the cost of a
+                    // step, rather than printing the attempt as though it were an answer.
+                    if (++malformed > MAX_MALFORMED) {
+                        return new Transcript("", steps, false, true);
+                    }
+                    steps.add("(reply was not a tool block — asked again)");
+                    conversation
+                            .append("\n> that was not a block. Reply with exactly this and nothing else:\n")
+                            .append("```oss\ntool: <name>\n<argument>: <value>\n```\n");
+                    continue;
+                }
+                if (malformed > 0 && mentionsATool(reply)) {
+                    // It has already failed the format once, and is still talking about tools
+                    // rather than answering -- this one echoed the usage line back verbatim. A
+                    // model in that state is not finished, and printing its reply as the answer is
+                    // how nonsense gets presented confidently.
+                    return new Transcript("", steps, false, true);
+                }
                 // No action asked for: the model is answering rather than working.
                 return new Transcript(reply == null ? "" : reply.strip(), steps, false);
             }
@@ -110,6 +147,47 @@ public final class Loop {
         }
         // Out of steps is not an answer, and must not be dressed as one.
         return new Transcript("", steps, true);
+    }
+
+    /**
+     * Whether a reply was reaching for a tool and missed the format.
+     *
+     * <p>Deliberately narrow: it must name a tool this loop actually has, and pair it with a colon.
+     * Prose that merely mentions {@code read_file} while explaining an answer does not match,
+     * because the whole point is to tell a confused model from a finished one.
+     */
+    private boolean looksLikeAnAttempt(String reply) {
+        if (reply == null || reply.isBlank()) {
+            return false;
+        }
+        String lower = reply.toLowerCase(java.util.Locale.ROOT);
+        if (lower.contains("```oss")) {
+            return true; // a fence it failed to close or fill
+        }
+        if (lower.contains("tool:")) {
+            return true;
+        }
+        // A tool name followed immediately by punctuation is a call being attempted; a tool name
+        // followed by a word is prose about one. qwen2.5:0.5b produced both shapes on this machine
+        // within two turns -- `read_file:path:/...` and `read_file"path": "..."` -- so matching one
+        // spelling at a time is chasing, not a rule.
+        for (String tool : tools.keySet()) {
+            int at = lower.indexOf(tool);
+            while (at >= 0) {
+                int next = at + tool.length();
+                if (next < lower.length() && ":\"'({[=".indexOf(lower.charAt(next)) >= 0) {
+                    return true;
+                }
+                at = lower.indexOf(tool, next);
+            }
+        }
+        return false;
+    }
+
+    /** Whether the reply names any tool at all, however it spells it. */
+    private boolean mentionsATool(String reply) {
+        String lower = reply == null ? "" : reply.toLowerCase(java.util.Locale.ROOT);
+        return tools.keySet().stream().anyMatch(lower::contains);
     }
 
     private String perform(Action action) {

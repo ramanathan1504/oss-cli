@@ -165,7 +165,7 @@ public final class Ai {
     private static Map<String, Use> buildUse() {
         Map<String, Use> m = new java.util.TreeMap<>();
         // Generates by definition -- these have no other output.
-        for (String c : List.of("analyze", "chat", "guide", "prompt")) {
+        for (String c : List.of("analyze", "ask", "chat", "guide", "prompt")) {
             m.put(c, Use.ALWAYS);
         }
         // Answers on its own; an engine adds a verdict, a narrative, or steps.

@@ -1,6 +1,6 @@
 # Working offline
 
-**Of 41 commands, eleven can reach the network. Thirty never do.**
+**Of 42 commands, eleven can reach the network. Thirty-one never do.**
 
 And of those eleven, only one is part of ordinary use: `sync`. Six fetch one specific
 thing you asked for by number, `model --fetch` downloads once in the life of the
@@ -35,12 +35,12 @@ are engines you named yourself.
 | `codex <cmd>` | The same, for OpenAI. |
 | `junie <cmd>` | The same, for JetBrains Junie — through its own tool, which brings its own sign-in. There is no endpoint of ours for it, so that tool is the only road. |
 
-The other thirty need no network to do their job:
+The other thirty-one need no network to do their job:
 
 ```
 search    prompt    inspect    history    chat      critical
 duplicates          triage     guide      profile   onboard
-report    trend     analyze    backlog    pick      hidden-critical
+report    trend     analyze ask    backlog    pick      hidden-critical
 prs       serve     backup     restore    doctor    alias
 ext       setup     run        memory     bench     kb
 llm
