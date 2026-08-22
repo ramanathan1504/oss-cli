@@ -69,6 +69,9 @@ public class AskCommand implements Callable<Integer> {
     @Option(names = "--steps", description = "How many looks it may take before it must answer")
     private int steps = Loop.MAX_STEPS;
 
+    @Option(names = "--resume", description = "Continue the last ask in this directory")
+    private boolean resume;
+
     @Override
     public Integer call() {
         String asked = String.join(" ", question);
@@ -120,7 +123,25 @@ public class AskCommand implements Callable<Integer> {
         System.out.println("  " + chosen.label() + " · " + workspace.root() + permission);
         System.out.println();
 
-        Loop.Transcript transcript = new Loop(workspace, tools, allowRun || allowEdit, steps).run(asked, chosen.ask());
+        // The same status line hub and followup use, for the same reason: a loop turn is a model
+        // call plus a tool, and the first version of this printed nothing until all of them were
+        // over. A silent terminal is indistinguishable from a hung one.
+        // Kept in chat_session and chat_turn -- the tables that already exist for exactly this,
+        // durable the moment a turn is said rather than written out at the end. A second table for
+        // "ask sessions" would be the same shape, a schema bump, and a release.
+        long session = openSession(workspace, chosen.label());
+        String earlier = resume ? earlierTurns(workspace) : "";
+        if (resume && earlier.isBlank()) {
+            System.out.println("  nothing to resume in this directory — starting fresh");
+        }
+
+        Loop.Transcript transcript;
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("looking")) {
+            transcript = new Loop(workspace, tools, allowRun || allowEdit, steps)
+                    .watching(live::step)
+                    .run(asked, chosen.ask(), earlier);
+            live.done(transcript.steps().size() + (transcript.steps().size() == 1 ? " look" : " looks"));
+        }
 
         for (String step : transcript.steps()) {
             System.out.println("  · " + step);
@@ -146,6 +167,7 @@ public class AskCommand implements Callable<Integer> {
             return 1;
         }
         System.out.println(transcript.answer());
+        remember(session, asked, transcript.answer());
         return 0;
     }
 
@@ -155,6 +177,62 @@ public class AskCommand implements Callable<Integer> {
      * <p>Static and defensive: a corpus that cannot be read is a sentence the loop reads and works
      * around, never an exception that ends somebody's question.
      */
+    /**
+     * A session for this directory, or zero when the store cannot take one.
+     *
+     * <p>The workspace stands in for the repository and the issue number is zero: an ask is about a
+     * place on disk rather than about one issue. Reusing the columns rather than adding a table
+     * keeps this out of the migration chain entirely, which matters because a schema bump is a
+     * release and an older binary refusing the store.
+     */
+    private static long openSession(Workspace workspace, String provider) {
+        try {
+            return com.osscli.storage.ChatSessionStore.open(workspace.root().toString(), 0, "oss ask", provider, null);
+        } catch (Exception e) {
+            // A conversation nobody can resume is worse than no conversation only if it is silent
+            // about it; the answer itself is unaffected, so this does not stop the command.
+            return 0;
+        }
+    }
+
+    /** Both halves of this exchange, durable as soon as they exist. */
+    private static void remember(long session, String question, String answer) {
+        if (session == 0) {
+            return;
+        }
+        try {
+            com.osscli.storage.ChatSessionStore.append(session, com.osscli.model.ChatTurn.Role.USER, question);
+            com.osscli.storage.ChatSessionStore.append(session, com.osscli.model.ChatTurn.Role.LOCAL, answer);
+            com.osscli.storage.ChatSessionStore.end(session);
+        } catch (Exception ignored) {
+            // Same reason as above.
+        }
+    }
+
+    /** What was said in this directory last time, rendered the way the loop renders its own steps. */
+    private static String earlierTurns(Workspace workspace) {
+        try {
+            var recent =
+                    com.osscli.storage.ChatSessionStore.recent(workspace.root().toString(), 0L, 2);
+            StringBuilder b = new StringBuilder();
+            for (var session : recent) {
+                for (var turn : com.osscli.storage.ChatSessionStore.turns(session.id())) {
+                    b.append("\n> ")
+                            .append(
+                                    turn.role() == com.osscli.model.ChatTurn.Role.USER
+                                            ? "you asked earlier:"
+                                            : "you answered:")
+                            .append('\n')
+                            .append(turn.content())
+                            .append('\n');
+                }
+            }
+            return b.toString();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
     /**
      * Built once per process, not once per question.
      *

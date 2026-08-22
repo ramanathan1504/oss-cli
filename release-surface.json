@@ -3,7 +3,7 @@
   "commands": {
     "alias": ["--force", "--help", "--list", "--remove", "--version", "-V", "-h"],
     "analyze": ["--help", "--model", "--repo", "--version", "-V", "-h", "-m", "-r"],
-    "ask": ["--allow-edit", "--allow-run", "--help", "--model", "--steps", "--version", "-V", "-h"],
+    "ask": ["--allow-edit", "--allow-run", "--help", "--model", "--resume", "--steps", "--version", "-V", "-h"],
     "backlog": ["--dry-run", "--help", "--no-ai", "--repo", "--version", "-V", "-h", "-r"],
     "backup": ["--help", "--include", "--to", "--version", "-V", "-h"],
     "bench": ["--approve-upstream", "--help", "--name", "--pack", "--version", "-V", "-h"],

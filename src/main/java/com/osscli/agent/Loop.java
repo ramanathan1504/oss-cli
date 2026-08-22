@@ -87,6 +87,24 @@ public final class Loop {
      */
     static final int MAX_MALFORMED = 2;
 
+    /**
+     * Told as it happens, not collected and shown at the end.
+     *
+     * <p>A loop turn is a model call and a tool: seconds each, a minute or more together, and the
+     * first version printed nothing until all of it was over. This repository's own rule is that
+     * anything slower than a second reports what it is doing, and {@code hub} and {@code followup}
+     * both learned it the same way -- a silent terminal is indistinguishable from a hung one.
+     *
+     * <p>A {@link java.util.function.Consumer} rather than the status line itself, so the loop owes
+     * nothing to {@code ui} and every test can watch the same events without a terminal.
+     */
+    private java.util.function.Consumer<String> onStep = step -> {};
+
+    public Loop watching(java.util.function.Consumer<String> onStep) {
+        this.onStep = onStep == null ? step -> {} : onStep;
+        return this;
+    }
+
     /** What happened, in order, and the answer if there was one. */
     public record Transcript(String answer, List<String> steps, boolean ranOut, boolean couldNotFollow) {
 
@@ -103,12 +121,27 @@ public final class Loop {
      * @param ask the rung that answers — prompt in, text out
      */
     public Transcript run(String question, Function<String, String> ask) {
+        return run(question, ask, "");
+    }
+
+    /**
+     * As above, continuing from what was said before.
+     *
+     * @param earlier the previous exchange, already rendered — an empty string for a fresh start
+     */
+    public Transcript run(String question, Function<String, String> ask, String earlier) {
         List<String> steps = new ArrayList<>();
         int malformed = 0;
         Map<String, String> alreadySeen = new LinkedHashMap<>();
         StringBuilder conversation = new StringBuilder();
+        if (earlier != null && !earlier.isBlank()) {
+            // Seeded, not concatenated onto the question: it belongs in the same place this run's
+            // own steps go, so the model reads one history rather than a question with a preamble.
+            conversation.append(earlier);
+        }
 
         for (int step = 0; step < maxSteps; step++) {
+            onStep.accept("thinking (" + (step + 1) + " of " + maxSteps + ")");
             String reply = ask.apply(prompt(question, conversation.toString()));
             Optional<Action> action = Action.firstIn(reply);
             if (action.isEmpty()) {
@@ -136,6 +169,7 @@ public final class Loop {
             }
 
             Action a = action.get();
+            onStep.accept(a.tool() + " " + a.argument("path") + a.argument("query") + a.argument("verb"));
             String key = a.tool() + " " + a.arguments();
             String observation;
             if (alreadySeen.containsKey(key)) {
