@@ -444,7 +444,36 @@ public final class BuiltinMemory {
      * answer the same question.
      */
     static String harvestName(com.osscli.model.Issue issue) {
-        return "gh-" + repositoryOf(issue).replace('/', '-') + "-" + issue.number() + ".md";
+        return "gh-" + windowsSafe(repositoryOf(issue).replace('/', '-')) + "-" + issue.number() + ".md";
+    }
+
+    /**
+     * A filename Windows will actually accept, built from data GitHub sent.
+     *
+     * <p>{@code harvest} names each note after the repository, and the repository comes off the
+     * API. On Windows this threw before it wrote anything:
+     *
+     * <pre>
+     * java.nio.file.InvalidPathException: Illegal char &lt;:&gt; at index 6: gh-??:?-...-35.md
+     * </pre>
+     *
+     * <p>Real repository names cannot contain a colon, which is why this survived — but a filename
+     * assembled from a remote value and handed to the filesystem unexamined is the same defect that
+     * cost this project a release once already, and it was found here only because the suite
+     * finally ran on Windows.
+     *
+     * <p><b>Not {@code slug()}</b>, which also lowercases: a thousand harvested notes already exist
+     * under names like {@code gh-opensearch-project-OpenSearch-4174.md}, and lowercasing would make
+     * the next harvest write a second copy of every one of them beside the first. This changes
+     * nothing for any name that was already legal.
+     */
+    private static String windowsSafe(String name) {
+        // The set Windows refuses outright, plus the control characters no filesystem wants.
+        String cleaned = name.replaceAll("[<>:\"/\\\\|?*\\x00-\\x1F]", "-");
+        // A trailing dot or space is silently dropped by Windows, so a name ending in one refers to
+        // a different file than the one asked for -- worse than being refused.
+        cleaned = cleaned.replaceAll("[. ]+$", "");
+        return cleaned.isEmpty() ? "unknown" : cleaned;
     }
 
     /**

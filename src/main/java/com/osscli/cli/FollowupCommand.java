@@ -115,9 +115,29 @@ public class FollowupCommand implements Callable<Integer> {
             }
             List<ReviewLedger.Row> rows = ReviewLedger.read();
             if (rows.isEmpty()) {
+                // The same question gets the same answer, whether the ledger is empty or merely
+                // does not contain this one. Asking about #999999 used to be told "Nothing recorded
+                // yet" on a fresh install and "nothing recorded for #999999" on everybody else's --
+                // two sentences and two exit codes for one situation, which is what let this survive
+                // on three platforms and fail on the fourth.
+                if (only != null) {
+                    System.out.println("  nothing recorded for #" + only + " — this lists what you have reviewed.");
+                    System.out.println();
+                    System.out.println("  oss followup --record " + only + " --repo owner/name --verdict take");
+                    return 1;
+                }
                 System.out.println("Nothing recorded yet.");
                 System.out.println();
                 System.out.println("  oss followup --record <pr> --repo owner/name --verdict take");
+                // Asking about ONE pull request that is not there is a failed lookup, and it stayed
+                // a failed lookup whether the ledger is empty or merely does not contain it. Those
+                // two produced different exit codes -- 1 further down when the ledger had other
+                // rows, 0 here when it had none -- so `oss followup 999999 || echo missing` printed
+                // nothing on a fresh install and worked on everybody else's.
+                //
+                // Found by running the suite on Windows for the first time. Every other platform
+                // reached this test with a ledger some earlier test had written, took the branch
+                // below, and passed. The bug was never Windows-specific; the empty ledger was.
                 return 0;
             }
             // Same silence as hub, same cause: an API call per row. A single row is quick and

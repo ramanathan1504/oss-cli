@@ -1,0 +1,26 @@
+# Line endings are decided here, not by each machine's git config.
+#
+# Windows checks out with core.autocrlf=true by default, so every source file
+# arrives with CRLF -- and spotless (palantir-java-format, endWithNewline) then
+# fails the build on files nobody edited. Running CI on Windows without this
+# reports a formatting violation on all 218 files and says nothing at all about
+# the change being tested.
+#
+# Normalised in the repository, LF in every working tree.
+* text=auto eol=lf
+
+# cmd.exe is the exception: a .cmd whose last line lacks CRLF can execute without
+# the terminator it expects. The Windows launcher in every release archive is one
+# of these.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binary, never touched.
+*.png binary
+*.jpg binary
+*.ico binary
+*.onnx binary
+*.jar binary
+*.zip binary
+*.gz binary
+*.tar binary

@@ -15,6 +15,15 @@ name: Distributions
 on:
   push:
     tags: ['v*']
+  # Release pull requests too, so the archives are proven BEFORE the tag exists.
+  #
+  # Building them only on the tag meant a packaging fault was discovered at the one
+  # moment it costs most: v2.2.4 published three assets instead of seven because the
+  # Windows job failed at checkout, and by then the tag was pushed and the release was
+  # public. release.sh waits on this pull request's checks, so this now blocks the
+  # merge that precedes the tag rather than reporting after it.
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -22,6 +31,10 @@ permissions:
 
 jobs:
   build:
+    # Only for a release pull request. Every other pull request would pay three jlink
+    # builds for a change that cannot affect them, and the branch name is what
+    # release.sh already uses to identify itself.
+    if: github.event_name != 'pull_request' || startsWith(github.head_ref, 'release-')
     strategy:
       fail-fast: false
       matrix:
@@ -173,6 +186,8 @@ jobs:
             oss-*.zip
 
   attach:
+    # Already tags-only below, which is what a release pull request needs: it proves
+    # the archives build, and publishing them stays the tag's job.
     needs: build
     # always(), so one unavailable platform cannot withhold the archives that DID
     # build. A release missing one architecture beats a release missing all four.

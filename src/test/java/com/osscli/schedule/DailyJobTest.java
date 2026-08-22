@@ -150,10 +150,15 @@ class DailyJobTest {
     @Test
     @DisplayName("a percent sign in a log path is not read as a systemd specifier")
     void unitEscapesPercent() {
-        String service = DailyJob.serviceFor(START, Path.of("/logs/100%/out.log"), ERR);
+        Path log = Path.of("/logs/100%/out.log");
+        String service = DailyJob.serviceFor(START, log, ERR);
 
         // %h is the user's home to systemd, so an unescaped path is silently rewritten elsewhere.
-        assertTrue(service.contains("/logs/100%%/out.log"), service);
+        //
+        // Expected from the path's OWN rendering rather than a typed "/logs/...". Windows renders
+        // the same Path with backslashes, so the literal made this assertion about the separator
+        // instead of about the escaping it is named for.
+        assertTrue(service.contains(log.toString().replace("%", "%%")), service);
     }
 
     @Test

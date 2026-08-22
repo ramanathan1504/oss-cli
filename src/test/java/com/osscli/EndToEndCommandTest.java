@@ -140,6 +140,15 @@ class EndToEndCommandTest {
 
         assertNotEquals(0, r.exitCode(), "an empty answer must not report success:\n" + r.all());
         assertTrue(r.says("nothing recorded"), "and must say which it is:\n" + r.all());
+
+        // And it must not depend on what an earlier test left in the ledger. This passed on Linux
+        // and macOS for the wrong reason -- some other test had written a row, so the lookup took
+        // the "not in the ledger" branch. On a clean Windows runner the ledger was empty, a
+        // different branch answered, and it exited 0. Both branches now answer the same question
+        // the same way.
+        assertTrue(
+                r.says("nothing recorded for #999999"),
+                "whichever branch answers, it must name the pull request that was asked about:\n" + r.all());
     }
 
     @Test

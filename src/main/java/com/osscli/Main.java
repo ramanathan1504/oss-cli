@@ -81,6 +81,19 @@ public class Main {
      */
     public static CommandLine commandLine() {
         CommandLine commandLine = new CommandLine(new RootCommand());
+        // No colour when nothing is there to render it.
+        //
+        // `oss --help > help.txt` on Windows wrote the escape codes into the file:
+        //
+        //     ^[[1msync^[[21m^[[0m   Pull live GitHub issues and PRs...
+        //
+        // picocli's AUTO heuristic reads the environment, and a GitHub Windows runner looks
+        // colour-capable to it even with stdout redirected to a file. Every platform is treated the
+        // same way here instead: a console means colour, a pipe means text. Anyone grepping, piping
+        // or saving the output gets what they can read, which is the only reason help exists.
+        if (System.console() == null) {
+            commandLine.setColorScheme(CommandLine.Help.defaultColorScheme(CommandLine.Help.Ansi.OFF));
+        }
         java.util.List<String> dispatchers = new java.util.ArrayList<>(java.util.List.of("run", "memory", "backlog"));
         dispatchers.addAll(com.osscli.llm.Ai.prefixes());
         for (String dispatcher : dispatchers) {
