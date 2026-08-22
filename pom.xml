@@ -125,6 +125,29 @@
                     <exclude>version.properties</exclude>
                 </excludes>
             </resource>
+            <!--
+                The documentation travels inside the jar.
+
+                `oss serve` shows it on the local page, and that page has to work from a Homebrew
+                install and from an unpacked archive, neither of which has this checkout. The
+                distribution copies README.md beside the jar and nothing else, so reading from disk
+                would give a page that is complete here and half empty everywhere it ships.
+
+                Copied rather than moved: these files are read at the repository root by
+                DocumentedCommandsTest, by GitHub, and by anyone who clones it.
+            -->
+            <resource>
+                <directory>${project.basedir}</directory>
+                <targetPath>docs</targetPath>
+                <filtering>false</filtering>
+                <includes>
+                    <include>README.md</include>
+                    <include>COMMANDS.md</include>
+                    <include>OFFLINE.md</include>
+                    <include>SETUP.md</include>
+                    <include>CONTRIBUTING.md</include>
+                </includes>
+            </resource>
         </resources>
         <plugins>
             <plugin>
