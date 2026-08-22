@@ -68,7 +68,12 @@ public final class RunVerb implements Tool {
             return "error: \"" + verb + "\" is not one of " + String.join(", ", BuiltinRunner.VERBS)
                     + ". This runs the project's own build, not an arbitrary command.";
         }
-        int exit = BuiltinRunner.run(verb, List.of("--where", workspace.root().toString()));
+        // The bare path, not an invented flag. `--where` is not something BuiltinRunner knows: it
+        // takes the first non-flag argument that is a directory, so passing "--where" worked only
+        // because the token was skipped for starting with a dash and the path behind it was found
+        // anyway. Right by accident is a thing that stops being right when somebody tightens the
+        // argument handling.
+        int exit = BuiltinRunner.run(verb, List.of(workspace.root().toString()));
         return "run " + verb + " exited " + exit + (exit == 0 ? " (success)" : " (failure)");
     }
 }

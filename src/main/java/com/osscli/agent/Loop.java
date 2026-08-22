@@ -57,10 +57,20 @@ public final class Loop {
     private final Map<String, Tool> tools = new LinkedHashMap<>();
     private final Workspace workspace;
     private final boolean allowWrites;
+    private final int maxSteps;
 
     public Loop(Workspace workspace, List<Tool> tools, boolean allowWrites) {
+        this(workspace, tools, allowWrites, MAX_STEPS);
+    }
+
+    /**
+     * @param maxSteps how many looks before it must answer; below one there is no loop at all, so
+     *     anything smaller is treated as one rather than as an instruction to do nothing
+     */
+    public Loop(Workspace workspace, List<Tool> tools, boolean allowWrites, int maxSteps) {
         this.workspace = workspace;
         this.allowWrites = allowWrites;
+        this.maxSteps = Math.max(1, maxSteps);
         for (Tool t : tools) {
             this.tools.put(t.name(), t);
         }
@@ -98,7 +108,7 @@ public final class Loop {
         Map<String, String> alreadySeen = new LinkedHashMap<>();
         StringBuilder conversation = new StringBuilder();
 
-        for (int step = 0; step < MAX_STEPS; step++) {
+        for (int step = 0; step < maxSteps; step++) {
             String reply = ask.apply(prompt(question, conversation.toString()));
             Optional<Action> action = Action.firstIn(reply);
             if (action.isEmpty()) {

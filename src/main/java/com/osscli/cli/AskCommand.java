@@ -105,7 +105,7 @@ public class AskCommand implements Callable<Integer> {
         System.out.println("  " + chosen.label() + " · " + workspace.root() + (allowRun ? "" : " · read-only"));
         System.out.println();
 
-        Loop.Transcript transcript = new Loop(workspace, tools, allowRun).run(asked, chosen.ask());
+        Loop.Transcript transcript = new Loop(workspace, tools, allowRun, steps).run(asked, chosen.ask());
 
         for (String step : transcript.steps()) {
             System.out.println("  · " + step);
@@ -125,7 +125,8 @@ public class AskCommand implements Callable<Integer> {
             return 1;
         }
         if (transcript.ranOut()) {
-            System.out.println("  Stopped after " + transcript.steps().size() + " looks without an answer.");
+            int looks = transcript.steps().size();
+            System.out.println("  Stopped after " + looks + (looks == 1 ? " look" : " looks") + " without an answer.");
             System.out.println("  Ask something narrower, or raise the ceiling with --steps.");
             return 1;
         }
@@ -139,29 +140,45 @@ public class AskCommand implements Callable<Integer> {
      * <p>Static and defensive: a corpus that cannot be read is a sentence the loop reads and works
      * around, never an exception that ends somebody's question.
      */
+    /**
+     * Built once per process, not once per question.
+     *
+     * <p>A loop asks {@code recall} more than once, and each call was reloading every issue from
+     * every followed repository and rebuilding the index over all of them -- 15,938 rows on the
+     * machine this was written for, three times in one answer. The process runs a single command
+     * and exits, so once is exactly the right number of times.
+     */
+    private static com.osscli.retrieval.TextIndex index;
+
+    private static int indexed;
+
     private static String searchThisMachine(String query) {
         try {
             // The same index `oss search` uses, over the issues already synced. Building it per
             // call is what `search` does too; sharing the construction would mean caching a corpus
             // across a process that runs one command and exits.
-            java.util.Map<String, com.osscli.model.Issue> issues = new java.util.LinkedHashMap<>();
-            for (String repository : com.osscli.storage.SqliteStorage.loadMonitoredRepositories()) {
-                for (com.osscli.model.Issue issue : com.osscli.storage.SqliteStorage.loadIssues(repository)) {
-                    issues.put(repository + "#" + issue.number(), issue);
+            if (index == null) {
+                java.util.Map<String, com.osscli.model.Issue> issues = new java.util.LinkedHashMap<>();
+                for (String repository : com.osscli.storage.SqliteStorage.loadMonitoredRepositories()) {
+                    for (com.osscli.model.Issue issue : com.osscli.storage.SqliteStorage.loadIssues(repository)) {
+                        issues.put(repository + "#" + issue.number(), issue);
+                    }
                 }
+                if (issues.isEmpty()) {
+                    return "nothing is synced on this machine yet — oss sync --all";
+                }
+                com.osscli.retrieval.TextIndex built = new com.osscli.retrieval.TextIndex();
+                issues.forEach((key, issue) -> built.add(key, issue.title(), issue.body()));
+                built.build();
+                indexed = issues.size();
+                index = built;
             }
-            if (issues.isEmpty()) {
-                return "nothing is synced on this machine yet — oss sync --all";
-            }
-            com.osscli.retrieval.TextIndex index = new com.osscli.retrieval.TextIndex();
-            issues.forEach((key, issue) -> index.add(key, issue.title(), issue.body()));
-            index.build();
 
             List<com.osscli.retrieval.TextIndex.Hit> hits = index.search(query, 8);
             if (hits.isEmpty()) {
                 return "";
             }
-            StringBuilder b = new StringBuilder(hits.size() + " of " + issues.size() + " indexed items match:\n");
+            StringBuilder b = new StringBuilder(hits.size() + " of " + indexed + " indexed items match:\n");
             for (com.osscli.retrieval.TextIndex.Hit hit : hits) {
                 b.append("  ").append(hit.id()).append("  ").append(hit.title()).append('\n');
             }
