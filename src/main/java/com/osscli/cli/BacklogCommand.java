@@ -22,6 +22,7 @@ import picocli.CommandLine.Parameters;
  */
 @Command(
         name = "backlog",
+        hidden = true,
         mixinStandardHelpOptions = true,
         description = "The whole backlog as one page: clusters, mergeable, one fix away, what to pick")
 public class BacklogCommand implements Callable<Integer> {

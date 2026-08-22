@@ -38,6 +38,7 @@ import picocli.CommandLine.Parameters;
 
 @Command(
         name = "restore",
+        hidden = true,
         mixinStandardHelpOptions = true,
         description = "Import and restore your AI memory and database from a backup archive")
 public class RestoreCommand implements Callable<Integer> {

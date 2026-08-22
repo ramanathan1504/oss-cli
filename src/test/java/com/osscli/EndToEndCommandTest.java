@@ -64,14 +64,35 @@ class EndToEndCommandTest {
     // ==========================================
 
     @Test
-    @DisplayName("the root command lists its subcommands and exits cleanly")
+    @DisplayName("the root command lists the everyday dozen and exits cleanly")
     void helpWorks() {
         Cli.Result r = Cli.run("--help");
 
         assertTrue(r.ok(), "--help should exit 0, got " + r.exitCode());
-        for (String expected : new String[] {"sync", "review", "search", "chat", "history", "doctor"}) {
+        for (String expected : new String[] {"sync", "review", "search", "chat", "doctor", "hub", "triage"}) {
             assertTrue(r.says(expected), "--help should list " + expected + ":\n" + r.all());
         }
+    }
+
+    @Test
+    @DisplayName("a command hidden from the short help is still reachable, and findable")
+    void hiddenIsNotRemoved() {
+        // Thirty-eight entries in one flat list is an inventory, not a menu, so twenty-three of them
+        // are hidden. Hidden is a presentation decision and must stay one: the commands still run,
+        // and --help says in its footer how to see them. A hidden command nobody can find again is
+        // a removed command with extra steps, and this is the test that keeps the two apart.
+        Cli.Result shortHelp = Cli.run("--help");
+        assertFalse(shortHelp.says("Browse and resume saved conversations"), "history should not be listed");
+        assertTrue(shortHelp.says("--help-all"), "the footer must name the way back:\n" + shortHelp.all());
+
+        Cli.Result everything = Cli.run("--help-all");
+        assertTrue(everything.ok(), "--help-all should exit 0, got " + everything.exitCode());
+        for (String hidden : new String[] {"history", "backlog", "followup", "critical", "prompt"}) {
+            assertTrue(everything.says(hidden), "--help-all should list " + hidden + ":\n" + everything.all());
+        }
+
+        // And the command itself is untouched -- the whole promise of hiding rather than removing.
+        assertTrue(Cli.run("history", "--help").ok(), "a hidden command must still answer --help");
     }
 
     @ParameterizedTest(name = "oss {0} --help")

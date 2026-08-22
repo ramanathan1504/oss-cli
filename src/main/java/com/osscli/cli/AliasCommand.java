@@ -33,6 +33,7 @@ import picocli.CommandLine.Parameters;
  */
 @Command(
         name = "alias",
+        hidden = true,
         mixinStandardHelpOptions = true,
         description = "Give this command your own name (buddy, hey, anything)")
 public class AliasCommand implements Callable<Integer> {

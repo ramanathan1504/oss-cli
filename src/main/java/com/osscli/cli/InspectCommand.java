@@ -29,6 +29,7 @@ import picocli.CommandLine.Parameters;
 
 @Command(
         name = "inspect",
+        hidden = true,
         mixinStandardHelpOptions = true,
         description =
                 "Show all context retrieved for an issue and preview whether Ollama will answer locally or escalate to an expert prompt.")

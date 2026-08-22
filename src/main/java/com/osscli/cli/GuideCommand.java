@@ -34,6 +34,7 @@ import picocli.CommandLine.Parameters;
 
 @Command(
         name = "guide",
+        hidden = true,
         mixinStandardHelpOptions = true,
         description = "Generate a personalized resolution blueprint using local memory and Omni-Cloud escalation")
 public class GuideCommand implements Callable<Integer> {

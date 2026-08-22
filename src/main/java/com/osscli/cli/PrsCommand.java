@@ -36,6 +36,7 @@ import picocli.CommandLine.Command;
 
 @Command(
         name = "prs",
+        hidden = true,
         mixinStandardHelpOptions = true,
         description = "Analyze cached open pull requests for stale status, reviews, and critical fixes")
 public class PrsCommand implements Callable<Integer> {

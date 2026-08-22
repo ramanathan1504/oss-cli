@@ -44,6 +44,7 @@ import picocli.CommandLine.Option;
  */
 @Command(
         name = "onboard",
+        hidden = true,
         mixinStandardHelpOptions = true,
         description = "Learn what a project expects before you contribute to it")
 public class OnboardCommand implements Callable<Integer> {
