@@ -32,6 +32,7 @@ import picocli.CommandLine.Command;
         versionProvider = VersionProvider.class,
         subcommands = {
             SyncCommand.class,
+            AskCommand.class,
             CriticalCommand.class,
             AnalyzeCommand.class,
             HiddenCriticalCommand.class,
@@ -73,7 +74,8 @@ import picocli.CommandLine.Command;
             EngineCommand.Llm.class,
             EngineCommand.Claude.class,
             EngineCommand.Gemini.class,
-            EngineCommand.Codex.class
+            EngineCommand.Codex.class,
+            EngineCommand.Junie.class
         })
 public class RootCommand implements java.util.concurrent.Callable<Integer> {
 

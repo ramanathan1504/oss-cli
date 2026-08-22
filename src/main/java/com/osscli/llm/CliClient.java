@@ -57,6 +57,18 @@ public final class CliClient {
     // Not installed on the machine this was written on, so the invocation is documented rather than
     // demonstrated. It says so in doctor rather than presenting an unrun guess as a working route.
     public static final Spec GEMINI = new Spec("gemini", Ai.Engine.GEMINI, false);
+    // JetBrains Junie. Read from its own --help rather than guessed: a bare task argument is the
+    // non-interactive form, and --output-format text is what stops it answering in JSON.
+    public static final Spec JUNIE = new Spec("junie", Ai.Engine.JUNIE, true);
+
+    /**
+     * Every provider tool, in one place.
+     *
+     * <p>Because the alternative was a list written by hand in {@code doctor}, and adding Junie
+     * proved what that costs: {@code oss --help} offered an engine that the command whose entire
+     * job is saying what is reachable did not know existed.
+     */
+    public static final List<Spec> ALL = List.of(CLAUDE, CODEX, GEMINI, JUNIE);
 
     private final Spec spec;
     private final long timeoutSeconds;
@@ -71,6 +83,7 @@ public final class CliClient {
             case CLAUDE -> CLAUDE;
             case OPENAI -> CODEX;
             case GEMINI -> GEMINI;
+            case JUNIE -> JUNIE;
             // Ollama is a daemon this already speaks to over HTTP, and the built-in model runs in
             // this process. Neither has a command-line tool to stand in front of.
             default -> null;
@@ -141,12 +154,40 @@ public final class CliClient {
                 cmd.add(lastMessage.toString());
                 cmd.add(prompt);
             }
+            case JUNIE -> {
+                // --task, because -p means --project here and would hand it a directory as the
+                // question. Read from its own --help rather than assumed from the others.
+                cmd.add("--task");
+                cmd.add(prompt);
+                // Otherwise it answers JSON, and the reply would be parsed as prose.
+                cmd.add("--output-format");
+                cmd.add("text");
+                // Junie is an agent that runs code tasks and has no read-only switch. What it does
+                // have is --project, so it is pointed at an empty directory of ours: it is being
+                // asked to judge something it was handed, not to go and edit whatever checkout the
+                // terminal happens to be standing in. Same rule as codex's read-only sandbox,
+                // enforced with the only flag this tool offers.
+                cmd.add("--project");
+                cmd.add(workspaceFor(lastMessage).toString());
+                cmd.add("--timeout");
+                cmd.add(String.valueOf(timeoutSeconds * 1000));
+            }
             default -> {
                 cmd.add("-p");
                 cmd.add(prompt);
             }
         }
         return List.copyOf(cmd);
+    }
+
+    /**
+     * An empty directory to point an agent at, derived from the reply file so it is predictable.
+     *
+     * <p>Created beside the temporary file this call already makes, rather than in the working
+     * directory, so nothing an agent decides to write lands in somebody's checkout.
+     */
+    static Path workspaceFor(Path lastMessage) {
+        return lastMessage.resolveSibling(lastMessage.getFileName() + "-project");
     }
 
     /**
@@ -165,6 +206,9 @@ public final class CliClient {
         }
         Path lastMessage = Files.createTempFile("oss-cli-" + spec.binary(), ".txt");
         try {
+            if (spec.engine() == Ai.Engine.JUNIE) {
+                Files.createDirectories(workspaceFor(lastMessage));
+            }
             Path binary = resolve();
             List<String> cmd = new ArrayList<>(commandFor(prompt, lastMessage));
             // The resolved file, not the bare name: on Windows ProcessBuilder will not find

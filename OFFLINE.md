@@ -1,11 +1,11 @@
 # Working offline
 
-**Of 40 commands, ten can reach the network. Thirty never do.**
+**Of 42 commands, eleven can reach the network. Thirty-one never do.**
 
-And of those ten, only one is part of ordinary use: `sync`. Six fetch one specific
+And of those eleven, only one is part of ordinary use: `sync`. Six fetch one specific
 thing you asked for by number, `model --fetch` downloads once in the life of the
-install, and three are the engine prefixes — `claude`, `gemini` and `codex` — which
-reach an API only when the local rung cannot answer. (`run`, `bench`, `memory` and
+install, and four are the engine prefixes — `claude`, `gemini`, `codex` and `junie` —
+which reach outward only when the local rung cannot answer. (`run`, `bench`, `memory` and
 `kb` hand off to whatever extension you attached, so they are as offline as it is —
 they are counted below among the thirty, along with `llm`, which talks to a daemon
 on your own machine.)
@@ -33,13 +33,14 @@ are engines you named yourself.
 | `claude <cmd>` | Permission for Anthropic's API to answer, if the local rung cannot. Naming it is not a call. |
 | `gemini <cmd>` | The same, for Google Gemini. |
 | `codex <cmd>` | The same, for OpenAI. |
+| `junie <cmd>` | The same, for JetBrains Junie — through its own tool, which brings its own sign-in. There is no endpoint of ours for it, so that tool is the only road. |
 
-The other thirty need no network to do their job:
+The other thirty-one need no network to do their job:
 
 ```
 search    prompt    inspect    history    chat      critical
 duplicates          triage     guide      profile   onboard
-report    trend     analyze    backlog    pick      hidden-critical
+report    trend     analyze ask    backlog    pick      hidden-critical
 prs       serve     backup     restore    doctor    alias
 ext       setup     run        memory     bench     kb
 llm

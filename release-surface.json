@@ -3,6 +3,7 @@
   "commands": {
     "alias": ["--force", "--help", "--list", "--remove", "--version", "-V", "-h"],
     "analyze": ["--help", "--model", "--repo", "--version", "-V", "-h", "-m", "-r"],
+    "ask": ["--allow-run", "--help", "--model", "--steps", "--version", "-V", "-h"],
     "backlog": ["--dry-run", "--help", "--no-ai", "--repo", "--version", "-V", "-h", "-r"],
     "backup": ["--help", "--include", "--to", "--version", "-V", "-h"],
     "bench": ["--approve-upstream", "--help", "--name", "--pack", "--version", "-V", "-h"],
@@ -25,6 +26,7 @@
     "hub": ["--all", "--help", "--repo", "--version", "-V", "-h", "-r"],
     "inspect": ["--help", "--repo", "--version", "-V", "-h", "-r"],
     "issue": ["--comments", "--help", "--repo", "--version", "-V", "-h", "-r"],
+    "junie": [],
     "kb": ["--approve-upstream", "--help", "--name", "--version", "-V", "-h"],
     "llm": [],
     "memory": ["--approve-upstream", "--help", "--name", "--version", "-V", "-h"],
