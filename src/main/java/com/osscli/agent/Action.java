@@ -84,7 +84,7 @@ public record Action(String tool, Map<String, String> arguments, String raw) {
                 continue;
             }
             String key = trimmed.substring(0, colon).strip().toLowerCase(Locale.ROOT);
-            String value = trimmed.substring(colon + 1).strip();
+            String value = value(trimmed.substring(colon + 1));
             if ("tool".equals(key)) {
                 tool = value.toLowerCase(Locale.ROOT);
             } else {
@@ -94,6 +94,26 @@ public record Action(String tool, Map<String, String> arguments, String raw) {
         // A block naming no tool is not an action. Returning one with a null name would push the
         // decision into the loop, which would have to invent an error message for it.
         return tool == null || tool.isEmpty() ? Optional.empty() : Optional.of(new Action(tool, args, body.strip()));
+    }
+
+    /**
+     * The value of one line, with a way to say "exactly this, spaces included".
+     *
+     * <p>Stripping is right for nearly everything: a path with a trailing space is a typo, not an
+     * instruction. It is wrong for the one argument where whitespace carries meaning — the text an
+     * edit is matching, where the leading spaces ARE the indentation being matched. A quoted value
+     * is taken verbatim between the quotes.
+     *
+     * <p>Found by a test for deleting text: {@code find: " DELETE ME"} silently lost its leading
+     * space and the edit left two spaces behind, which is the class of change nobody reviews
+     * carefully because the diff looks almost right.
+     */
+    private static String value(String raw) {
+        String trimmed = raw.strip();
+        if (trimmed.length() >= 2 && trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
+            return trimmed.substring(1, trimmed.length() - 1);
+        }
+        return trimmed;
     }
 
     /** An argument, or the empty string — a missing one is the tool's business to complain about. */

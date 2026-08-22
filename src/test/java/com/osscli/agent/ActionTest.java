@@ -121,6 +121,35 @@ class ActionTest {
     }
 
     @Test
+    @DisplayName("a quoted value keeps the whitespace that a match depends on")
+    void quotedValuesAreVerbatim() {
+        Action a = Action.firstIn("""
+                ```oss
+                tool: edit
+                path: Foo.java
+                find: "    private int x;"
+                replace: "    private long x;"
+                ```
+                """).orElseThrow();
+
+        // Indentation is exactly what an edit has to match, and stripping it produced an edit that
+        // looked almost right in the diff -- the kind nobody reads twice.
+        assertEquals("    private int x;", a.argument("find"));
+        assertEquals("    private long x;", a.argument("replace"));
+        assertEquals("Foo.java", a.argument("path"), "and an unquoted value is still tidied");
+    }
+
+    @Test
+    @DisplayName("an empty quoted value is empty, which is how text is deleted")
+    void anEmptyQuotedValueIsEmpty() {
+        Action a = Action.firstIn("```oss\ntool: edit\nfind: \"x\"\nreplace: \"\"\n```")
+                .orElseThrow();
+
+        assertEquals("x", a.argument("find"));
+        assertEquals("", a.argument("replace"));
+    }
+
+    @Test
     @DisplayName("a missing argument is empty rather than absent, so tools report it themselves")
     void missingArgumentsAreEmpty() {
         Action a = Action.firstIn("```oss\ntool: read_file\n```").orElseThrow();
