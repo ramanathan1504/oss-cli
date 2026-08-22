@@ -48,6 +48,11 @@ public class Main {
                 System.exit(1);
             }
             // Fall through: doctor reports the mismatch itself, and reporting it is the point.
+        } catch (com.osscli.storage.SchemaUpgradeRefusedException e) {
+            // Not passed through for doctor: doctor would open the store to report on it, which is
+            // the thing being refused. The message below already says everything doctor would.
+            refuseUpgrade(e);
+            System.exit(1);
         }
 
         // Answered before picocli dispatches, because it is a question about the command tree
@@ -61,6 +66,31 @@ public class Main {
 
         int exitCode = commandLine().execute(args);
         System.exit(exitCode);
+    }
+
+    /**
+     * What a development build says instead of quietly migrating somebody's store.
+     *
+     * <p>Both ways forward are printed, because "be careful next time" is not a fix and the person
+     * reading this is mid-command. The first line of each is the whole answer.
+     */
+    private static void refuseUpgrade(com.osscli.storage.SchemaUpgradeRefusedException e) {
+        System.err.println();
+        System.err.println("  This build is not installed, and would migrate your real store.");
+        System.err.println();
+        System.err.printf("    store:       schema %d  —  %s%n", e.storeVersion(), e.store());
+        System.err.printf("    this build:  schema %d  —  running from target/%n", e.buildVersion());
+        System.err.println();
+        System.err.println("  Migrating is one way. Afterwards the installed oss refuses this store");
+        System.err.println("  until a release carrying the new schema exists, and nothing warns you");
+        System.err.println("  in between. Nothing has been read or changed.");
+        System.err.println();
+        System.err.println("  Point it somewhere else:");
+        System.err.println("    OSS_CLI_HOME=/tmp/oss-scratch <your command>");
+        System.err.println();
+        System.err.println("  Or say yes on purpose:");
+        System.err.println("    " + com.osscli.storage.SchemaUpgradeRefusedException.OVERRIDE + "=1 <your command>");
+        System.err.println();
     }
 
     /**

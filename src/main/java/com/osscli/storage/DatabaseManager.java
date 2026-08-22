@@ -652,6 +652,14 @@ public class DatabaseManager {
                 }
             }
 
+            // What the store said before this method touched anything.
+            //
+            // The guard below has to judge on this rather than on `currentVersion`, because the
+            // bootstrap immediately underneath stamps an early version on a brand-new database --
+            // so by the time the guard ran, a store created seconds ago was indistinguishable from
+            // somebody's half-migrated one, and every CI runner refused its own fresh database.
+            final int versionAtEntry = currentVersion;
+
             // Handle unversioned or legacy database migrations
             if (currentVersion == 0) {
                 if (!tableExists(conn, "issues")) {
@@ -691,6 +699,17 @@ public class DatabaseManager {
                 throw new SchemaTooNewException(currentVersion, CURRENT_SCHEMA_VERSION);
             }
 
+            // The other direction of the same one-way door, and until now the silent one.
+            if (refuseUpgrade(
+                    runningFromBuildOutput(),
+                    AppPaths.isDefaultBaseDir(),
+                    System.getenv(SchemaUpgradeRefusedException.OVERRIDE) != null,
+                    versionAtEntry,
+                    CURRENT_SCHEMA_VERSION)) {
+                throw new SchemaUpgradeRefusedException(
+                        versionAtEntry, CURRENT_SCHEMA_VERSION, AppPaths.DB_PATH.toString());
+            }
+
             // Sequentially execute any remaining migrations registered in the array
             for (Migration migration : MIGRATIONS) {
                 if (migration.getTargetVersion() > currentVersion
@@ -708,6 +727,46 @@ public class DatabaseManager {
             // scrolls past inside a command which then continues is worse than no warning.
             LOGGER.error("Database schema initialization failed: {}", e.getMessage(), e);
             throw new IllegalStateException("could not initialise the database at " + AppPaths.DB_PATH, e);
+        }
+    }
+
+    /**
+     * Whether this run must refuse to migrate, given everything it knows.
+     *
+     * <p>A pure function of five facts, because the alternative needs a jar location, an
+     * environment variable and a real database to answer, and a rule that can only be exercised by
+     * damaging something is a rule nobody can test.
+     *
+     * <p>Only an <b>existing</b> store is protected: a fresh database has nothing to lose and every
+     * scratch directory would otherwise need the override to be usable at all.
+     */
+    static boolean refuseUpgrade(
+            boolean buildOutput, boolean defaultStore, boolean allowed, int currentVersion, int buildVersion) {
+        if (allowed || !buildOutput || !defaultStore) {
+            return false;
+        }
+        return currentVersion > 0 && currentVersion < buildVersion;
+    }
+
+    /**
+     * Whether the code running is a build output rather than something installed.
+     *
+     * <p>Asked of the jar's own location: Maven writes to {@code target/}, and nothing installed
+     * lives there — Homebrew keeps a Cellar, the archives keep a {@code lib/}. Reading where the
+     * class actually came from is the one answer that cannot drift from the truth, unlike a version
+     * string, which is identical in a release and in a checkout of the commit that made it.
+     */
+    private static boolean runningFromBuildOutput() {
+        try {
+            java.net.URL src =
+                    DatabaseManager.class.getProtectionDomain().getCodeSource().getLocation();
+            String path = java.nio.file.Path.of(src.toURI()).toString().replace('\\', '/');
+            return path.contains("/target/");
+        } catch (Exception e) {
+            // Unknowable: an odd classloader, a shaded launcher, a security manager. Treat it as
+            // installed. Refusing to run because the location cannot be read would break every user
+            // to protect the one machine with a checkout on it.
+            return false;
         }
     }
 
