@@ -84,6 +84,96 @@ A brand-new user with none of the optional pieces still gets working commands. M
 
 ---
 
+## 🧭 Twelve commands, and the twenty-three behind them
+
+`oss --help` used to list all forty entries at once. A list that long is an
+inventory, not a menu: somebody asking *"what is waiting on me"* had to already
+know that `hub` was the answer and that `critical`, `prs`, `followup`, `backlog`
+and `pick` were not — which is exactly what the list was supposed to tell them.
+
+Since **3.0** the help shows the twelve that carry the daily work, plus the four
+engine prefixes that go in front of them:
+
+```
+sync  search  review  triage  chat  hub  pr  ext  serve  run  memory  doctor  setup
+llm   claude  gemini  codex
+```
+
+**Nothing was removed.** The other twenty-three still run, still take the same
+flags, still print their own usage — a script written last year does not care what
+this help looks like, and breaking one to tidy a screen would charge somebody else
+for a decision they did not make.
+
+```bash
+oss --help-all      # every command, grouped: the everyday set and the rest
+```
+
+That line is printed in the footer of `oss --help`, because a hidden command
+nobody can find again is a removed command with extra steps. CI checks both
+halves — that the twelve are listed, *and* that the twenty-three are still there.
+
+---
+
+## 🪜 One interface, whichever backend you have
+
+Naming an engine grants permission; it does not order a call. Every ask starts on
+the local rung and climbs only when that rung fails a stated test — and the rung
+that answers says so before it answers.
+
+| What you have | What answers |
+|---|---|
+| An API key | The provider's API |
+| No key, but their CLI installed and signed in | **That CLI, on your subscription** — announced, not silent |
+| Neither, but Ollama running | The local daemon |
+| None of it | The built-in model: ranks and retrieves, offline |
+
+A key is never abandoned for a subscription without being asked — that would
+change who pays and what the harness may read. Having *no* key is a different
+situation: there is no account to move away from, and the alternative was a dead
+end you had to already know a flag to escape.
+
+---
+
+## ✍️ It writes the way you write
+
+```bash
+oss profile --me
+```
+
+Measured from text with **your** name on it — issues and pull requests you
+authored, the comments you wrote, your own turns in `oss chat`. Harvested threads
+and generated notes are excluded on purpose: a voice learned from those is the
+tool's own, handed back to you as yours.
+
+Every trait is arithmetic over your text — words per sentence, how often a list or
+a code fence or a heading appears, British against American spelling. Nothing asks
+a model what you "sound like", because that returns flattery and flattery cannot be
+checked against anything.
+
+**Under twenty samples it tells no model anything.** The profile is still written
+and marked *Provisional*, because the way to fix a thin sample is to see that it is
+thin. `oss memory harvest <your-username>` keeps the comments you wrote as it goes,
+from pages it was already fetching.
+
+---
+
+## 🧱 Packs, and the support packs under them
+
+A **pack** is a subject; a **support pack** is something attached to it. Every
+repository you follow is already a pack, which is what makes this work before you
+configure anything. A manifest only says which one it sits under:
+
+```json
+{ "name": "log4j-workout", "kind": "runner", "supports": "apache/logging-log4j2" }
+```
+
+`oss ext list` renders the tree, and the assistant is told what is attached and to
+which subject — stated as fact, never as instruction. Told *"use the bench"*, a
+model reaches for it on an unrelated issue to be helpful; told *"this exists, it
+supports that"*, it has what it needs to decline.
+
+---
+
 ## 🛠 What you need
 
 **A GitHub token. That is the whole list.**
