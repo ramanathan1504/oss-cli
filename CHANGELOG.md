@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.0.1
+
+_2026-08-22_
+
+- The docs said fourteen, the code said fifteen, and one of them ships (#157)
+- An unversioned store is still your store, and the guard was writing before it decided (#156)
+- An older build refuses a newer store, loudly. A newer build took an older one in silence. (#155)
+- The tests ran on one platform; the archives shipped for three (#154)
+- The README and the landing page still described a forty-command menu (#153)
+
+
 ## 3.0.0
 
 _2026-08-22_
