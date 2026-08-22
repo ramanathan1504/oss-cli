@@ -15,21 +15,49 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # The tests run where this ships. Until now they ran on ubuntu/17 only, while the
+    # release archives were built for macOS, Linux and Windows -- with -DskipTests --
+    # and only after the tag was pushed. A Windows-only fault was therefore first
+    # discoverable by whoever ran brew upgrade, which is exactly how "A colon in a
+    # filename cost the Windows build, and the tag was already pushed" happened.
+    #
+    # JDK 21 is not decoration either: the distribution images are jlinked from 21 and
+    # run this jar on a 21 runtime, so 21 is what most users actually execute. Nothing
+    # had ever run the suite there.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            java: "17"
+            primary: true
+          - os: ubuntu-latest
+            java: "21"
+          - os: macos-14
+            java: "17"
+          - os: windows-latest
+            java: "17"
+
+    name: ${{ matrix.os }} · JDK ${{ matrix.java }}
+    runs-on: ${{ matrix.os }}
+    # A job that cannot finish should fail rather than hold the queue: the whole build
+    # is under two minutes on every platform measured.
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up JDK 17
+      - name: Set up JDK ${{ matrix.java }}
         uses: actions/setup-java@v5
         with:
-          java-version: "17"
+          java-version: ${{ matrix.java }}
           distribution: temurin
           cache: maven
 
       # spotless:check is bound to the verify phase, so formatting is a build
       # failure here rather than a review comment.
       - name: Build and verify
+        shell: bash
         run: mvn -B -ntp clean verify
 
       # `verify` runs the unit tests above. This covers what they cannot: picocli
@@ -38,6 +66,7 @@ jobs:
       # first launch -- which without this would be discovered by whoever ran
       # brew upgrade.
       - name: Smoke test the built jar
+        shell: bash
         run: |
           JAR=$(ls target/oss-cli-*.jar | head -1)
           echo "Testing $JAR"
@@ -77,7 +106,10 @@ jobs:
           echo "All commands reachable and loadable."
 
       - name: Keep the jar for inspection
-        if: success()
+        # From the primary job only. Four jobs uploading the same artifact name is an
+        # error, and the jar is identical anyway -- the pom compiles to release 17
+        # whichever JDK builds it.
+        if: success() && matrix.primary
         uses: actions/upload-artifact@v7
         with:
           name: oss-cli-jar
