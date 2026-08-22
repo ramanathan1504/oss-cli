@@ -197,6 +197,32 @@ class LoopTest {
     }
 
     @Test
+    @DisplayName("a step ceiling is honoured, because a flag that does nothing is worse than none")
+    void theStepCeilingIsReal(@TempDir Path dir) throws IOException {
+        // --steps was accepted and silently ignored: the Loop had no such parameter and always used
+        // MAX_STEPS. The message printed on running out told the reader to "raise the ceiling with
+        // --steps", which is advice that does nothing -- worse than the flag not existing.
+        Files.writeString(dir.resolve("a.txt"), "x");
+        java.util.function.Function<String, String> forever =
+                prompt -> "```oss\ntool: read_file\npath: a.txt\nnonce: " + prompt.length() + "\n```";
+
+        Loop.Transcript three = new Loop(new Workspace(dir), List.of(new ReadFile()), false, 3).run("go", forever);
+
+        assertTrue(three.ranOut());
+        assertEquals(3, three.steps().size(), "it must stop where it was told to");
+    }
+
+    @Test
+    @DisplayName("a ceiling below one is one, not a loop that never looks")
+    void aZeroCeilingStillLooksOnce(@TempDir Path dir) {
+        Function model = ask("answered without looking");
+
+        Loop.Transcript t = new Loop(new Workspace(dir), List.of(new ReadFile()), false, 0).run("go", model);
+
+        assertEquals("answered without looking", t.answer(), "zero must not mean do nothing at all");
+    }
+
+    @Test
     @DisplayName("the model is told to check this machine before reasoning from nothing")
     void thePromptPutsLocalFirst(@TempDir Path dir) {
         Function model = ask("done");
