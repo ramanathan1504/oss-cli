@@ -234,6 +234,11 @@ public final class Loop {
                     .append('\n');
         }
         b.append("\nSearch what this machine already knows before reasoning from nothing.\n");
+        // Only where it matters. A quoting rule stated for every argument invites a model to quote
+        // paths too, and a path with quotes in it is a path that does not exist.
+        if (tools.containsKey("edit")) {
+            b.append("Quote a value to keep its exact spacing: find: \"    int x;\"\n");
+        }
         b.append("When you can answer, reply in prose with no block at all.\n\n");
         b.append("Question: ").append(question).append('\n');
         if (!conversation.isBlank()) {

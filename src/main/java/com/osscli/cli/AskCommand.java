@@ -58,6 +58,11 @@ public class AskCommand implements Callable<Integer> {
             description = "Let it run this project's own build or tests (never an arbitrary command)")
     private boolean allowRun;
 
+    @Option(
+            names = "--allow-edit",
+            description = "Let it propose edits — each one is shown as a diff and confirmed by you")
+    private boolean allowEdit;
+
     @Option(names = "--model", description = "Local model to use when no engine was named")
     private String model;
 
@@ -99,13 +104,23 @@ public class AskCommand implements Callable<Integer> {
             return 1;
         }
 
-        List<Tool> tools = List.of(new ReadFile(), new Recall(AskCommand::searchThisMachine), new RunVerb());
+        List<Tool> tools = new java.util.ArrayList<>(
+                List.of(new ReadFile(), new Recall(AskCommand::searchThisMachine), new RunVerb()));
+        if (allowEdit) {
+            // Only offered when it was asked for. A tool the model can see is a tool it will
+            // propose, and proposing an edit on a read-only run wastes a step explaining why not.
+            tools.add(new com.osscli.agent.EditFile(com.osscli.agent.Confirm.atTerminal(), System.out));
+        }
         // Said before it starts, not after: the rung that answers is the answer to "whose model saw
         // my code", and finding that out afterwards is finding it out too late.
-        System.out.println("  " + chosen.label() + " · " + workspace.root() + (allowRun ? "" : " · read-only"));
+        // What it may do, said before it does anything. "read-only" is the important word and it
+        // is the default, so it is the one that has to be visible without being looked for.
+        String permission =
+                allowEdit ? " · may edit, with your confirmation" : allowRun ? " · may run the build" : " · read-only";
+        System.out.println("  " + chosen.label() + " · " + workspace.root() + permission);
         System.out.println();
 
-        Loop.Transcript transcript = new Loop(workspace, tools, allowRun, steps).run(asked, chosen.ask());
+        Loop.Transcript transcript = new Loop(workspace, tools, allowRun || allowEdit, steps).run(asked, chosen.ask());
 
         for (String step : transcript.steps()) {
             System.out.println("  · " + step);
