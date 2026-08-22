@@ -31,7 +31,7 @@ public class Main {
      * neither is unsafe on an unknown schema.
      */
     private static final java.util.Set<String> SAFE_WITHOUT_A_DATABASE =
-            java.util.Set.of("doctor", "--version", "-V", "--help", "-h", "help");
+            java.util.Set.of("doctor", "--version", "-V", "--help", "-h", "help", "--help-all");
 
     public static void main(String[] args) {
         // First, and before anything can touch a logger: log4j2.xml resolves its file appender
@@ -48,6 +48,15 @@ public class Main {
                 System.exit(1);
             }
             // Fall through: doctor reports the mismatch itself, and reporting it is the point.
+        }
+
+        // Answered before picocli dispatches, because it is a question about the command tree
+        // rather than a command in it -- and because it must work when the store is unreadable,
+        // exactly like --help and --version.
+        for (String a : args) {
+            if ("--help-all".equals(a)) {
+                System.exit(RootCommand.printEveryCommand(commandLine()));
+            }
         }
 
         int exitCode = commandLine().execute(args);

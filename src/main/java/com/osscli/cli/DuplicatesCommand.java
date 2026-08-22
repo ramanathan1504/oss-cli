@@ -35,6 +35,7 @@ import picocli.CommandLine.Option;
 
 @Command(
         name = "duplicates",
+        hidden = true,
         mixinStandardHelpOptions = true,
         description = "Identify potential duplicate issues using local vector embeddings")
 public class DuplicatesCommand implements Callable<Integer> {

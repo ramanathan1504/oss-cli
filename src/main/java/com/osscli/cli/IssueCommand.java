@@ -19,7 +19,7 @@ import picocli.CommandLine.Parameters;
  *
  * <p>In the core, because reading an issue is an API call. Nothing about it needs a clone.
  */
-@Command(name = "issue", mixinStandardHelpOptions = true, description = "Read an issue as it was filed")
+@Command(name = "issue", hidden = true, mixinStandardHelpOptions = true, description = "Read an issue as it was filed")
 public class IssueCommand implements Callable<Integer> {
 
     private static final org.apache.logging.log4j.Logger LOGGER =

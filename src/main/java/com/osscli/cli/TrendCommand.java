@@ -39,6 +39,7 @@ import picocli.CommandLine.Option;
 
 @Command(
         name = "trend",
+        hidden = true,
         mixinStandardHelpOptions = true,
         description = "Track and visualize weekly project health trends")
 public class TrendCommand implements Callable<Integer> {

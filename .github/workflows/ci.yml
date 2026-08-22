@@ -45,11 +45,23 @@ jobs:
           java -jar "$JAR" --help > help.txt
           java -jar "$JAR" --version
 
-          # Every command must be reachable from the root command.
-          for cmd in sync profile onboard review prompt search doctor backup restore; do
+          # The everyday dozen must be reachable from the root command.
+          for cmd in sync review search chat triage hub pr doctor ext serve; do
             grep -q "^  $cmd" help.txt || {
               echo "::error::'$cmd' is missing from --help; the subcommand is not wired up"
               cat help.txt
+              exit 1
+            }
+          done
+
+          # And the twenty-three hidden ones must still be there. Hiding is a presentation
+          # decision; this is what keeps it from quietly becoming a removal, which is the
+          # failure this whole smoke test exists to catch one release earlier than a user does.
+          java -jar "$JAR" --help-all > all.txt
+          for cmd in profile onboard prompt backup restore history followup backlog critical; do
+            grep -q "^  $cmd" all.txt || {
+              echo "::error::'$cmd' is gone, not hidden — --help-all does not list it"
+              cat all.txt
               exit 1
             }
           done

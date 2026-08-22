@@ -47,6 +47,7 @@ import picocli.CommandLine.Parameters;
  */
 @Command(
         name = "followup",
+        hidden = true,
         mixinStandardHelpOptions = true,
         description = "What moved on a reviewed pull request since you reviewed it")
 public class FollowupCommand implements Callable<Integer> {

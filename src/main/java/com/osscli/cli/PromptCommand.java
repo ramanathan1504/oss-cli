@@ -37,6 +37,7 @@ import picocli.CommandLine.Parameters;
 
 @Command(
         name = "prompt",
+        hidden = true,
         mixinStandardHelpOptions = true,
         description =
                 "Retrieve all local context and let Ollama answer directly. If context exceeds Ollama's limit or confidence is low, builds a ready-to-send expert prompt instead.")

@@ -30,6 +30,7 @@ import picocli.CommandLine.Option;
  */
 @Command(
         name = "pick",
+        hidden = true,
         mixinStandardHelpOptions = true,
         description = "What to work on next, scored against what you have already worked on")
 public class PickCommand implements Callable<Integer> {

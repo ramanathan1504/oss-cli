@@ -30,6 +30,7 @@ import picocli.CommandLine.Option;
 
 @Command(
         name = "hidden-critical",
+        hidden = true,
         mixinStandardHelpOptions = true,
         description = "Find critical issues that maintainers may have underestimated")
 public class HiddenCriticalCommand implements Callable<Integer> {

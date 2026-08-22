@@ -102,8 +102,13 @@ public class ExtCommand implements Callable<Integer> {
         @Override
         public Integer call() {
             List<Extension> all = ExtensionRegistry.all();
+            // What is on by default, before the list of what somebody added. "No extensions
+            // registered" read as "this machine has none of this capability", which is the opposite
+            // of true: both kinds answer built in and an attachment takes over the verbs it
+            // declares. Saying only the second half is what made attaching look mandatory.
+            builtIns();
             if (all.isEmpty()) {
-                System.out.println("No extensions registered.");
+                System.out.println("  Nothing attached — the built-ins above are answering.");
                 System.out.println();
                 System.out.println("  oss ext add <repo>     a repo with an oss-ext.json at its root");
                 System.out.println("  kinds: runner (executes something real) · memory (remembers)");
@@ -140,6 +145,22 @@ public class ExtCommand implements Callable<Integer> {
                 System.out.println("  " + bare + " more repository(ies) followed, nothing attached.");
             }
             return 0;
+        }
+
+        /**
+         * The capabilities that answer with nothing attached.
+         *
+         * <p>Both kinds are built in and on by default; an attachment takes over the verbs it
+         * declares and nothing else. Printing only the attachments made the built-ins invisible,
+         * and an invisible default reads as a missing feature -- the same reason {@code oss run}
+         * with no pack used to look broken rather than answer.
+         */
+        private static void builtIns() {
+            System.out.println("  BUILT IN, ON BY DEFAULT");
+            System.out.printf("    %-10s %s%n", "memory", "file, search, index — an attached archive takes over");
+            System.out.printf(
+                    "    %-10s %s%n", "runner", "detect, init, build, test, doctor — an attached pack takes over");
+            System.out.println();
         }
 
         /** One extension, with the state only a live check can know. */

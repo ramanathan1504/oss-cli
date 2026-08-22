@@ -34,6 +34,7 @@ import picocli.CommandLine.Option;
 
 @Command(
         name = "analyze",
+        hidden = true,
         mixinStandardHelpOptions = true,
         description = "Perform batch AI Severity Analysis on open issues via local Ollama")
 public class AnalyzeCommand implements Callable<Integer> {

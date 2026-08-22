@@ -41,7 +41,11 @@ import picocli.CommandLine.Option;
  * connections that cannot do raw keyboard input: {@code --list} prints, {@code --show} dumps one
  * transcript, and {@code oss chat --resume <id>} needs no picker at all.
  */
-@Command(name = "history", mixinStandardHelpOptions = true, description = "Browse and resume saved conversations.")
+@Command(
+        name = "history",
+        hidden = true,
+        mixinStandardHelpOptions = true,
+        description = "Browse and resume saved conversations.")
 public class HistoryCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(HistoryCommand.class);

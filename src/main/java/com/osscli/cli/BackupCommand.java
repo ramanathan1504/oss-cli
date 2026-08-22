@@ -43,6 +43,7 @@ import picocli.CommandLine.Option;
 
 @Command(
         name = "backup",
+        hidden = true,
         mixinStandardHelpOptions = true,
         description =
                 "Export your entire AI memory and database into a portable archive with auto-rotation (keeps last 5)")

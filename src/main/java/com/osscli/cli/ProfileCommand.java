@@ -39,6 +39,7 @@ import picocli.CommandLine.Option;
  */
 @Command(
         name = "profile",
+        hidden = true,
         mixinStandardHelpOptions = true,
         description = "Build or show a repository's language, build and convention profile")
 public class ProfileCommand implements Callable<Integer> {

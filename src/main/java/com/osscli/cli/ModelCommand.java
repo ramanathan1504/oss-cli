@@ -20,6 +20,7 @@ import picocli.CommandLine.Option;
  */
 @Command(
         name = "model",
+        hidden = true,
         mixinStandardHelpOptions = true,
         description = "The local model that upgrades search from words to meaning")
 public class ModelCommand implements Callable<Integer> {
