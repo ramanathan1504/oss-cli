@@ -478,17 +478,24 @@ public class DoctorCommand implements Callable<Integer> {
      * and that is the moment a health check should already have told them the route exists.
      */
     private void reportProviderClis() {
-        for (com.osscli.llm.CliClient.Spec spec : java.util.List.of(
-                com.osscli.llm.CliClient.CLAUDE, com.osscli.llm.CliClient.CODEX, com.osscli.llm.CliClient.GEMINI)) {
+        // Asked of every engine that has a tool, rather than of a list written by hand. Junie was
+        // added and this list was not, so `oss --help` offered an engine that `doctor` -- the
+        // command whose whole job is saying what is and is not reachable -- did not know existed.
+        for (com.osscli.llm.CliClient.Spec spec : com.osscli.llm.CliClient.ALL) {
             String name = spec.binary() + " cli";
+            // An engine with no endpoint of ours has no --cli to offer: its tool is the only road,
+            // so the advice names the prefix itself.
+            String how = spec.engine().hasApi()
+                    ? spec.engine().typed() + " --cli"
+                    : spec.engine().typed();
             if (!new com.osscli.llm.CliClient(spec, 1).available()) {
-                ok(name, "not installed — optional, only for " + spec.engine().typed() + " --cli");
+                ok(name, "not installed — optional, only for " + how);
             } else if (!spec.verified()) {
                 // Said plainly rather than reported as working: the invocation for this one was
                 // written from its documentation and never run, and a tick would claim otherwise.
                 ok(name, "installed — invocation not verified here");
             } else {
-                ok(name, "installed — " + spec.engine().typed() + " --cli answers on that subscription");
+                ok(name, "installed — " + how + " answers on that subscription");
             }
         }
     }

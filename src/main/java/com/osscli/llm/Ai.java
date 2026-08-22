@@ -59,21 +59,40 @@ public final class Ai {
     /** Where a sentence can come from. Ordered cheapest and most private first. */
     public enum Engine {
         /** In this process, no daemon, no key, no network. */
-        BUILTIN("oss", "built-in model", false),
+        BUILTIN("oss", "built-in model", false, false, false),
         /** A local daemon the user installed and manages. */
-        OLLAMA("oss llm", "local Ollama", false),
-        CLAUDE("oss claude", "Anthropic Claude", true),
-        GEMINI("oss gemini", "Google Gemini", true),
-        OPENAI("oss codex", "OpenAI", true);
+        OLLAMA("oss llm", "local Ollama", false, false, true),
+        CLAUDE("oss claude", "Anthropic Claude", true, true, true),
+        GEMINI("oss gemini", "Google Gemini", true, true, true),
+        OPENAI("oss codex", "OpenAI", true, true, true),
+        /**
+         * JetBrains Junie, which brings its own authentication and has no endpoint of ours.
+         *
+         * <p>The engine that proved these were three questions rather than one. It leaves this
+         * machine, so it is external; it holds its own token (or the provider key of your choice)
+         * behind {@code junie --auth}, so oss manages no key for it; and there is no HTTP route
+         * here to call, so its only road is the tool. Coupling "external" to "needs a key" would
+         * have filed it as local and let it answer where nothing is supposed to leave the machine.
+         */
+        JUNIE("oss junie", "JetBrains Junie", false, true, false);
 
         private final String typed;
         private final String label;
         private final boolean needsKey;
+        private final boolean external;
+        private final boolean hasApi;
 
-        Engine(String typed, String label, boolean needsKey) {
+        Engine(String typed, String label, boolean needsKey, boolean external, boolean hasApi) {
             this.typed = typed;
             this.label = label;
             this.needsKey = needsKey;
+            this.external = external;
+            this.hasApi = hasApi;
+        }
+
+        /** Whether oss has an endpoint of its own to call, as opposed to only the provider's tool. */
+        public boolean hasApi() {
+            return hasApi;
         }
 
         /** What a reader types to get here, so a message can quote the fix rather than describe it. */
@@ -97,7 +116,7 @@ public final class Ai {
          * reason this is not simply "anything but the built-in one".
          */
         public boolean isExternal() {
-            return needsKey;
+            return external;
         }
 
         /** The credential this engine needs, if any, and whether it is actually present. */
@@ -113,6 +132,7 @@ public final class Ai {
                 case OPENAI:
                     return present(CredentialManager.findOpenAiKey());
                 default:
+                    // Junie and the local rungs: nothing here to be missing. Junie signs itself in.
                     return true;
             }
         }
@@ -294,7 +314,12 @@ public final class Ai {
      */
     public static Route routeFor(Engine engine) {
         boolean external = engine != null && engine.isExternal();
-        return route(viaCli, external, external && engine.hasCredential(), external && cliInstalled(engine));
+        return route(
+                viaCli,
+                external,
+                external && engine.hasApi(),
+                external && engine.hasCredential(),
+                external && cliInstalled(engine));
     }
 
     /**
@@ -306,13 +331,25 @@ public final class Ai {
      * one of them is a rule nobody can check. Here all eight combinations are a table.
      */
     static Route route(boolean forcedCli, boolean external, boolean hasKey, boolean toolInstalled) {
+        return route(forcedCli, external, true, hasKey, toolInstalled);
+    }
+
+    /**
+     * As above, for an engine that may have no endpoint of ours at all.
+     *
+     * <p>Junie is the case: it leaves this machine, brings its own authentication, and offers no
+     * HTTP route here. Without {@code hasApi} the key branch would win by default — {@code
+     * hasCredential} is true for it, because there is no key of ours to be missing — and the engine
+     * would be sent to an endpoint that does not exist.
+     */
+    static Route route(boolean forcedCli, boolean external, boolean hasApi, boolean hasKey, boolean toolInstalled) {
         if (!external) {
             return Route.NONE;
         }
         if (forcedCli) {
             return Route.CLI;
         }
-        if (hasKey) {
+        if (hasApi && hasKey) {
             return Route.API;
         }
         return toolInstalled ? Route.CLI : Route.NONE;
@@ -379,6 +416,8 @@ public final class Ai {
                 return Optional.of(Engine.CLAUDE);
             case "gemini":
                 return Optional.of(Engine.GEMINI);
+            case "junie":
+                return Optional.of(Engine.JUNIE);
             case "codex":
                 return Optional.of(Engine.OPENAI);
             default:
@@ -388,7 +427,7 @@ public final class Ai {
 
     /** Every prefix word, for help text and for the gate's error messages. */
     public static Set<String> prefixes() {
-        return new java.util.LinkedHashSet<>(List.of("llm", "claude", "gemini", "codex"));
+        return new java.util.LinkedHashSet<>(List.of("llm", "claude", "gemini", "codex", "junie"));
     }
 
     /** What a command does with a model, defaulting to NEVER for anything unclassified. */

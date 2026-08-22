@@ -25,6 +25,7 @@
     "hub": ["--all", "--help", "--repo", "--version", "-V", "-h", "-r"],
     "inspect": ["--help", "--repo", "--version", "-V", "-h", "-r"],
     "issue": ["--comments", "--help", "--repo", "--version", "-V", "-h", "-r"],
+    "junie": [],
     "kb": ["--approve-upstream", "--help", "--name", "--version", "-V", "-h"],
     "llm": [],
     "memory": ["--approve-upstream", "--help", "--name", "--version", "-V", "-h"],

@@ -191,4 +191,25 @@ public abstract class EngineCommand implements Callable<Integer> {
             return Ai.Engine.OPENAI;
         }
     }
+
+    /**
+     * JetBrains Junie, which has only one road.
+     *
+     * <p>No {@code --cli} option, because there is nothing to choose between: Junie brings its own
+     * authentication and offers no endpoint of ours, so its tool is the only way there. A flag that
+     * selects between one thing and nothing is a flag that reads as a decision somebody has to
+     * make, and this one is already made.
+     */
+    @Command(name = "junie", description = "Let JetBrains Junie answer when the local rung cannot")
+    public static class Junie extends EngineCommand {
+        @Override
+        boolean cliRequested() {
+            return true;
+        }
+
+        @Override
+        Ai.Engine engine() {
+            return Ai.Engine.JUNIE;
+        }
+    }
 }

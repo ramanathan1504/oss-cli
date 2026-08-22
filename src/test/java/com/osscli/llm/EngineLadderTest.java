@@ -70,6 +70,29 @@ class EngineLadderTest {
     }
 
     @Test
+    @DisplayName("an engine with no endpoint of ours is never sent to one")
+    void anApiLessEngineOnlyEverTakesTheTool() {
+        // Junie is the case that separated three questions this enum had answered as one. It leaves
+        // the machine, so it is external. It brings its own authentication, so `hasCredential` is
+        // true -- there is no key of ours to be missing. And there is no HTTP route here at all.
+        //
+        // With the old two-argument rule that combination routed to API, because "has a credential"
+        // won, and the call would have gone to an endpoint that does not exist.
+        assertEquals(
+                Ai.Route.CLI,
+                Ai.route(false, true, false, true, true),
+                "no endpoint of ours, tool installed: the tool is the only road");
+        assertEquals(
+                Ai.Route.NONE,
+                Ai.route(false, true, false, true, false),
+                "no endpoint and no tool: unreachable, and it must say so rather than dial nothing");
+        assertEquals(Ai.Route.CLI, Ai.routeFor(Ai.Engine.JUNIE), "junie is installed on this machine");
+        assertFalse(Ai.Engine.JUNIE.hasApi());
+        assertTrue(Ai.Engine.JUNIE.isExternal(), "it leaves this machine, whatever it does about keys");
+        assertFalse(Ai.Engine.JUNIE.needsKey(), "and oss holds no key for it");
+    }
+
+    @Test
     @DisplayName("a key is never abandoned for a subscription without being asked")
     void aKeyIsPreferred() {
         // The one property that must not regress. An API key and a logged-in tool are two accounts;

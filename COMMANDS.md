@@ -8,7 +8,7 @@ inventory, not a menu.
 
 ```
 sync  search  review  triage  chat  hub  pr  ext  serve  run  memory  doctor  setup
-llm   claude  gemini  codex
+llm   claude  gemini  codex  junie
 ```
 
 **Nothing was removed.** Every command documented below still runs, still takes
@@ -1109,3 +1109,23 @@ declare — so the two paths agree.
 [OFFLINE.md](OFFLINE.md) for the full list of what opens a socket and what does not.
 
 **Embedder** means the built-in all-MiniLM-L6-v2 that runs in this process — `oss model --fetch`, once, and nothing is running afterwards. **Ollama** means local text generation, and nothing in this table indexes or searches through it.
+
+### `junie`
+
+```bash
+oss junie review 4249
+```
+
+JetBrains Junie as an engine prefix, on the same terms as `claude`, `gemini` and
+`codex`: naming it grants permission, it does not order a call. The local rung —
+your notes, the vector index, the built-in model — answers first, and Junie is
+reached only when that rung fails a stated test.
+
+It differs from the other three in one way: it brings its own sign-in and there is
+no endpoint of ours to call, so its command-line tool is the only road. That is why
+there is no `--cli` flag on it — a switch between one thing and nothing reads as a
+decision you have to make, and this one is already made.
+
+Junie is an agent that runs code tasks and has no read-only switch, so oss points
+it at an empty directory of its own with `--project`. It is being asked to judge
+something it was handed, not to edit whatever checkout your terminal is standing in.

@@ -56,7 +56,7 @@ class EveryCommandAnswersHelpTest {
      * {@code oss --help}. Listed here rather than skipped by a rule, so that a command which stops
      * answering {@code --help} for any OTHER reason still fails this test.
      */
-    private static final Set<String> PASSTHROUGH = Set.of("llm", "claude", "gemini", "codex");
+    private static final Set<String> PASSTHROUGH = Set.of("llm", "claude", "gemini", "codex", "junie");
 
     private static List<String> everyCommandPath() {
         List<String> paths = new ArrayList<>();
