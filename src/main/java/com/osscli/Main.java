@@ -84,6 +84,11 @@ public class Main {
         System.err.println("  Migrating is one way. Afterwards the installed oss refuses this store");
         System.err.println("  until a release carrying the new schema exists, and nothing warns you");
         System.err.println("  in between. Nothing has been read or changed.");
+        // True to the byte for any store oss made, which is every real one: verified by checksum on
+        // an unversioned WAL database, refused with no schema_version table created and no row
+        // touched. A database oss did NOT create -- one in rollback-journal mode -- has its journal
+        // mode set when any connection opens, which rewrites the header. That is not data, and it
+        // happens before this or any other command can decide anything.
         System.err.println();
         System.err.println("  Point it somewhere else:");
         System.err.println("    OSS_CLI_HOME=/tmp/oss-scratch <your command>");

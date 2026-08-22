@@ -44,38 +44,55 @@ class SchemaUpgradeGuardTest {
     @DisplayName("unreleased code plus the real store plus pending migrations is the one refusal")
     void theExactCombinationIsRefused() {
         // buildOutput, defaultStore, allowed, current, build
-        assertTrue(DatabaseManager.refuseUpgrade(true, true, false, 14, 15), "this is the afternoon that was lost");
+        assertTrue(
+                DatabaseManager.refuseUpgrade(true, true, false, true, 14, 15), "this is the afternoon that was lost");
     }
 
     @Test
     @DisplayName("an installed release migrating your store is the point of upgrading and never asks")
     void anInstalledBuildNeverAsks() {
-        assertFalse(DatabaseManager.refuseUpgrade(false, true, false, 14, 15));
-        assertFalse(DatabaseManager.refuseUpgrade(false, true, false, 1, 15), "however far behind it is");
+        assertFalse(DatabaseManager.refuseUpgrade(false, true, false, true, 14, 15));
+        assertFalse(DatabaseManager.refuseUpgrade(false, true, false, true, 1, 15), "however far behind it is");
     }
 
     @Test
     @DisplayName("a build output pointed somewhere else is what every test and experiment does")
     void aRedirectedStoreNeverAsks() {
-        assertFalse(DatabaseManager.refuseUpgrade(true, false, false, 14, 15));
+        assertFalse(DatabaseManager.refuseUpgrade(true, false, false, true, 14, 15));
     }
 
     @Test
     @DisplayName("saying yes on purpose is honoured, and is the second way forward the message names")
     void theOverrideWorks() {
-        assertFalse(DatabaseManager.refuseUpgrade(true, true, true, 14, 15));
+        assertFalse(DatabaseManager.refuseUpgrade(true, true, true, true, 14, 15));
     }
 
     @Test
     @DisplayName("a fresh store has nothing to lose, and an up-to-date one has nothing to do")
     void nothingToProtectIsNotRefused() {
-        // Zero means "there was no store here when this started". CI proved this branch matters:
-        // the bootstrap for a new database stamps an early version, so judging AFTER it made every
+        // Nothing there at all: no store, nothing to lose. CI proved this branch matters -- the
+        // bootstrap for a new database stamps an early version, so judging AFTER it made every
         // runner refuse the database it had just created a moment earlier.
-        assertFalse(DatabaseManager.refuseUpgrade(true, true, false, 0, 15), "a brand new database");
-        assertFalse(DatabaseManager.refuseUpgrade(true, true, false, 15, 15), "already current");
+        assertFalse(DatabaseManager.refuseUpgrade(true, true, false, false, 0, 15), "a brand new database");
+        assertFalse(DatabaseManager.refuseUpgrade(true, true, false, true, 15, 15), "already current");
         // Newer than this build is SchemaTooNewException's job, and it is thrown first.
-        assertFalse(DatabaseManager.refuseUpgrade(true, true, false, 16, 15));
+        assertFalse(DatabaseManager.refuseUpgrade(true, true, false, true, 16, 15));
+    }
+
+    @Test
+    @DisplayName("an unversioned store full of your work is protected; an empty one is not")
+    void anUnstampedStoreIsTwoDifferentSituations() {
+        // Both read version 0, and they need opposite answers. An old database from before schema
+        // stamping existed holds somebody's entire record; a database created this second holds
+        // nothing. Judging on the number alone protected the one that needed it least -- and the
+        // bootstrap for an unversioned store is not passive, it runs a migration and stamps 2, so
+        // getting this wrong meant writing to the store before anything asked whether it should.
+        assertTrue(
+                DatabaseManager.refuseUpgrade(true, true, false, true, 0, 15),
+                "unversioned, but it has your issues in it");
+        assertFalse(
+                DatabaseManager.refuseUpgrade(true, true, false, false, 0, 15),
+                "unversioned because there is nothing there yet");
     }
 
     @Test

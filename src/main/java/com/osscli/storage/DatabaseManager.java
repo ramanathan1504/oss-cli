@@ -638,27 +638,54 @@ public class DatabaseManager {
                 stmt.execute("PRAGMA foreign_keys = ON;");
             }
 
-            // Ensure version tracking table exists
-            try (Statement stmt = conn.createStatement()) {
-                stmt.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY);");
-            }
-
-            // Read current version
+            // Read the version WITHOUT creating anything.
+            //
+            // This used to CREATE TABLE IF NOT EXISTS first, which is harmless on any store that is
+            // about to be migrated anyway -- and a lie on one that is about to be refused. The
+            // refusal says "Nothing has been read or changed", and leaving an empty schema_version
+            // table behind made that sentence false in the one situation where somebody is deciding
+            // whether to trust it. The table is created below, once there is going to be a
+            // migration to record.
             int currentVersion = 0;
-            try (Statement stmt = conn.createStatement();
-                    ResultSet rs = stmt.executeQuery("SELECT MAX(version) AS version FROM schema_version;")) {
-                if (rs.next()) {
-                    currentVersion = rs.getInt("version");
+            if (tableExists(conn, "schema_version")) {
+                try (Statement stmt = conn.createStatement();
+                        ResultSet rs = stmt.executeQuery("SELECT MAX(version) AS version FROM schema_version;")) {
+                    if (rs.next()) {
+                        currentVersion = rs.getInt("version");
+                    }
                 }
             }
 
-            // What the store said before this method touched anything.
+            // Whether anything is in there already, asked before a single write.
             //
-            // The guard below has to judge on this rather than on `currentVersion`, because the
-            // bootstrap immediately underneath stamps an early version on a brand-new database --
-            // so by the time the guard ran, a store created seconds ago was indistinguishable from
-            // somebody's half-migrated one, and every CI runner refused its own fresh database.
-            final int versionAtEntry = currentVersion;
+            // An unstamped store is TWO different situations and they need opposite answers: a
+            // database created a moment ago, which has nothing to lose, and an old unversioned one
+            // full of somebody's work, which has everything to lose. Version alone reads 0 for
+            // both. The issues table is what separates them.
+            final boolean holdsData = tableExists(conn, "issues");
+
+            // Both refusals come BEFORE the bootstrap below, because that bootstrap writes: on an
+            // old unversioned store it runs a migration and stamps 2. Deciding afterwards meant the
+            // store had already been changed by the time anything asked whether it should be.
+            if (currentVersion > CURRENT_SCHEMA_VERSION) {
+                throw new SchemaTooNewException(currentVersion, CURRENT_SCHEMA_VERSION);
+            }
+            if (refuseUpgrade(
+                    runningFromBuildOutput(),
+                    AppPaths.isDefaultBaseDir(),
+                    System.getenv(SchemaUpgradeRefusedException.OVERRIDE) != null,
+                    holdsData || currentVersion > 0,
+                    currentVersion,
+                    CURRENT_SCHEMA_VERSION)) {
+                throw new SchemaUpgradeRefusedException(
+                        currentVersion, CURRENT_SCHEMA_VERSION, AppPaths.DB_PATH.toString());
+            }
+
+            // Past both refusals: this store is going to be migrated, so it needs somewhere to
+            // record that.
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY);");
+            }
 
             // Handle unversioned or legacy database migrations
             if (currentVersion == 0) {
@@ -688,26 +715,6 @@ public class DatabaseManager {
                     setVersion(conn, 2);
                     currentVersion = 2;
                 }
-            }
-
-            // Migrations only run forwards, so a store stamped higher than this build knows about
-            // cannot be understood -- and until this check existed, nothing said so. The loop below
-            // matched no migration, fell through in silence, and the command carried on reading
-            // tables whose meaning may have changed, then writing rows in the shape it believed in.
-            // Refusing costs one command; carrying on costs the store.
-            if (currentVersion > CURRENT_SCHEMA_VERSION) {
-                throw new SchemaTooNewException(currentVersion, CURRENT_SCHEMA_VERSION);
-            }
-
-            // The other direction of the same one-way door, and until now the silent one.
-            if (refuseUpgrade(
-                    runningFromBuildOutput(),
-                    AppPaths.isDefaultBaseDir(),
-                    System.getenv(SchemaUpgradeRefusedException.OVERRIDE) != null,
-                    versionAtEntry,
-                    CURRENT_SCHEMA_VERSION)) {
-                throw new SchemaUpgradeRefusedException(
-                        versionAtEntry, CURRENT_SCHEMA_VERSION, AppPaths.DB_PATH.toString());
             }
 
             // Sequentially execute any remaining migrations registered in the array
@@ -741,11 +748,19 @@ public class DatabaseManager {
      * scratch directory would otherwise need the override to be usable at all.
      */
     static boolean refuseUpgrade(
-            boolean buildOutput, boolean defaultStore, boolean allowed, int currentVersion, int buildVersion) {
+            boolean buildOutput,
+            boolean defaultStore,
+            boolean allowed,
+            boolean storeExists,
+            int currentVersion,
+            int buildVersion) {
         if (allowed || !buildOutput || !defaultStore) {
             return false;
         }
-        return currentVersion > 0 && currentVersion < buildVersion;
+        // storeExists rather than currentVersion > 0. An old unversioned database reads 0 and is
+        // somebody's whole record; a database created this second reads 0 and is nothing. Judging
+        // on the number alone protected the one that needed it least.
+        return storeExists && currentVersion < buildVersion;
     }
 
     /**
