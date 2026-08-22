@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.1.0
+
+_2026-08-22_
+
+- One local page: the board, the documentation, and a question about who answers (#164)
+- Fifty-five seconds to be wrong about something oss answers in eight (#163)
+- Three gaps closed with machinery this repository already had (#162)
+- An edit you can see before it happens (#161)
+- Three defects in the loop I shipped yesterday, found by auditing it rather than trusting the summary (#160)
+- oss ask: one CLI that reads, recalls and runs — on whichever rung you have (#159)
+
+
 ## 3.0.1
 
 _2026-08-22_
