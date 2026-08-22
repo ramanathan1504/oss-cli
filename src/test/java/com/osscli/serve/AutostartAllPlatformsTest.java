@@ -219,8 +219,10 @@ class AutostartAllPlatformsTest {
         restoreOs();
 
         pretend("Linux");
+        // Normalised for the same reason as the macOS branch above: the Path is built on the host,
+        // not on the platform being pretended.
         assertTrue(
-                Autostart.descriptor().toString().contains(".config/systemd/user"),
+                Autostart.descriptor().toString().replace('\\', '/').contains(".config/systemd/user"),
                 Autostart.descriptor().toString());
         assertTrue(Autostart.descriptor().toString().endsWith(".service"));
         restoreOs();

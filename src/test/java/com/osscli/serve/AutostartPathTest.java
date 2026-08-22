@@ -53,7 +53,13 @@ class AutostartPathTest {
         } else {
             // No launcher installed on this machine. The jar is then the only handle there is, and
             // a pinned path still beats no service at all.
-            assertEquals(List.of("/some/jvm/bin/java", "-jar", "/some/versioned/oss.jar"), start);
+            //
+            // Compared with separators normalised: Path.of("/some/jvm/bin/java") renders with
+            // backslashes on Windows, so a literal here asserted the host's separator rather than
+            // that the command keeps the jvm, the flag and the jar in that order.
+            List<String> normalised =
+                    start.stream().map(part -> part.replace('\\', '/')).toList();
+            assertEquals(List.of("/some/jvm/bin/java", "-jar", "/some/versioned/oss.jar"), normalised);
         }
     }
 
