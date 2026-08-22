@@ -652,6 +652,14 @@ public class DatabaseManager {
                 }
             }
 
+            // What the store said before this method touched anything.
+            //
+            // The guard below has to judge on this rather than on `currentVersion`, because the
+            // bootstrap immediately underneath stamps an early version on a brand-new database --
+            // so by the time the guard ran, a store created seconds ago was indistinguishable from
+            // somebody's half-migrated one, and every CI runner refused its own fresh database.
+            final int versionAtEntry = currentVersion;
+
             // Handle unversioned or legacy database migrations
             if (currentVersion == 0) {
                 if (!tableExists(conn, "issues")) {
@@ -696,10 +704,10 @@ public class DatabaseManager {
                     runningFromBuildOutput(),
                     AppPaths.isDefaultBaseDir(),
                     System.getenv(SchemaUpgradeRefusedException.OVERRIDE) != null,
-                    currentVersion,
+                    versionAtEntry,
                     CURRENT_SCHEMA_VERSION)) {
                 throw new SchemaUpgradeRefusedException(
-                        currentVersion, CURRENT_SCHEMA_VERSION, AppPaths.DB_PATH.toString());
+                        versionAtEntry, CURRENT_SCHEMA_VERSION, AppPaths.DB_PATH.toString());
             }
 
             // Sequentially execute any remaining migrations registered in the array

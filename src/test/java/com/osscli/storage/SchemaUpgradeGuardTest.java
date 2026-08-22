@@ -69,6 +69,9 @@ class SchemaUpgradeGuardTest {
     @Test
     @DisplayName("a fresh store has nothing to lose, and an up-to-date one has nothing to do")
     void nothingToProtectIsNotRefused() {
+        // Zero means "there was no store here when this started". CI proved this branch matters:
+        // the bootstrap for a new database stamps an early version, so judging AFTER it made every
+        // runner refuse the database it had just created a moment earlier.
         assertFalse(DatabaseManager.refuseUpgrade(true, true, false, 0, 15), "a brand new database");
         assertFalse(DatabaseManager.refuseUpgrade(true, true, false, 15, 15), "already current");
         // Newer than this build is SchemaTooNewException's job, and it is thrown first.
