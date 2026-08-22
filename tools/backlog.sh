@@ -95,6 +95,22 @@ fi
 RL_REM=$(printf '%s'  "$RL_JSON" | jq '.resources.core.remaining')
 RL_LIM=$(printf '%s'  "$RL_JSON" | jq '.resources.core.limit')
 RL_USED=$(printf '%s' "$RL_JSON" | jq '.resources.core.used')
+
+# jq prints the four letters `null` for a field that is not there, and bash then reads
+# that as a VARIABLE NAME inside $(( )). Under `set -u` the arithmetic at the rate-limit
+# bar dies with "line 404: null: unbound variable" -- after every fetch has been paid
+# for, at the last step before the report is written, over the colour of a progress bar.
+#
+# Any answer that is not a number becomes one here, once, rather than at each of the six
+# places these are read.
+for _rl in RL_REM RL_LIM RL_USED; do
+  case "${!_rl}" in
+    ''|*[!0-9]*) printf -v "$_rl" '%s' 0 ;;
+  esac
+done
+# A limit of zero would make the bar divide by zero as well as read wrong; 5000 is what
+# an authenticated token actually gets, and the bar is cosmetic either way.
+[[ "$RL_LIM" -eq 0 ]] && RL_LIM=5000
 RL_RST=$(printf '%s'  "$RL_JSON" | jq '.resources.core.reset')
 RL_RST_FMT=$(date -r  "$RL_RST" '+%H:%M UTC' 2>/dev/null \
            || date -d "@${RL_RST}" '+%H:%M UTC' 2>/dev/null || echo "N/A")
@@ -135,10 +151,51 @@ if [[ "$DRY_RUN" == 1 ]]; then
   echo "Dry-run: loaded data from cache $CACHE_DIR/  (0 API calls used)" >&2
 else
   echo "Fetching $REPO  ($RL_REM API calls remaining)…" >&2
-  gh pr list --repo "$REPO" --state open --limit "$PR_LIMIT" \
-    --json number,title,url,author,updatedAt,reviewDecision,mergeable,additions,deletions,isDraft,labels,reviews,statusCheckRollup,body \
-    > "$WORK/prs.json" \
-    || { echo "error: gh pr list failed for $REPO" >&2; exit 6; }
+
+  # `reviews` and `statusCheckRollup` are the two heaviest fields gh can ask for, and
+  # asking for both across 200 open pull requests is how this failed:
+  #
+  #     unexpected end of JSON input
+  #     error: gh pr list failed for apache/logging-log4j2
+  #
+  # A truncated response, not a rejected request -- the same command succeeded on the
+  # next run. Both fields are read further down (the check rollup at the mergeable
+  # filter, the review count at the waiting-on-you filter), so dropping them would
+  # quietly change the answer rather than fail; they stay, and the SIZE comes down
+  # instead.
+  #
+  # Retry, then halve, then halve again. Each attempt is a smaller body and so less
+  # likely to be cut off, and a shorter list is a real answer where an error is none.
+  # Saying which limit produced the output is the difference between "your backlog"
+  # and "the newest half of your backlog".
+  fetch_prs() {
+    local limit="$1"
+    gh pr list --repo "$REPO" --state open --limit "$limit" \
+      --json number,title,url,author,updatedAt,reviewDecision,mergeable,additions,deletions,isDraft,labels,reviews,statusCheckRollup,body \
+      > "$WORK/prs.json" 2>"$WORK/prs.err"
+  }
+
+  pr_limit_used="$PR_LIMIT"
+  if ! fetch_prs "$pr_limit_used"; then
+    echo "  gh pr list did not come back whole ($(tr -d '\n' < "$WORK/prs.err" | cut -c1-60)) — retrying" >&2
+    sleep 2
+    for smaller in "$PR_LIMIT" $(( PR_LIMIT / 2 )) $(( PR_LIMIT / 4 )); do
+      pr_limit_used="$smaller"
+      fetch_prs "$pr_limit_used" && break
+      echo "  still not whole at --limit $pr_limit_used" >&2
+      sleep 2
+      pr_limit_used=""
+    done
+    if [[ -z "$pr_limit_used" ]]; then
+      echo "error: gh pr list failed for $REPO after 4 attempts" >&2
+      sed 's/^/  /' "$WORK/prs.err" >&2
+      exit 6
+    fi
+    if [[ "$pr_limit_used" != "$PR_LIMIT" ]]; then
+      # Loud, because the number below is now a page of the answer rather than all of it.
+      echo "  fetched the newest $pr_limit_used pull request(s), not $PR_LIMIT — the full list would not come back whole" >&2
+    fi
+  fi
 
   gh issue list --repo "$REPO" --state open --limit "$ISSUE_LIMIT" \
     --json number,title,url,updatedAt,labels,comments,assignees,reactionGroups,body \
