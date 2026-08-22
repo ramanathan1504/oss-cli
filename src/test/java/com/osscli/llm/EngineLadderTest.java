@@ -86,7 +86,14 @@ class EngineLadderTest {
                 Ai.Route.NONE,
                 Ai.route(false, true, false, true, false),
                 "no endpoint and no tool: unreachable, and it must say so rather than dial nothing");
-        assertEquals(Ai.Route.CLI, Ai.routeFor(Ai.Engine.JUNIE), "junie is installed on this machine");
+        // Machine-independent, which the first version of this line was not: it asserted CLI
+        // because junie is installed on the machine that wrote it, and every CI runner disagreed.
+        // What must hold everywhere is that an engine with no endpoint of ours is never sent to
+        // one -- CLI where the tool exists, NONE where it does not, API never.
+        Ai.Route actual = Ai.routeFor(Ai.Engine.JUNIE);
+        assertTrue(
+                actual == Ai.Route.CLI || actual == Ai.Route.NONE,
+                "junie must never route to an API that does not exist, but was " + actual);
         assertFalse(Ai.Engine.JUNIE.hasApi());
         assertTrue(Ai.Engine.JUNIE.isExternal(), "it leaves this machine, whatever it does about keys");
         assertFalse(Ai.Engine.JUNIE.needsKey(), "and oss holds no key for it");
