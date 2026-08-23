@@ -32,7 +32,11 @@ defaults:
 
 - Use `owner/name`. **Never a real third-party repository** — a worked example
   naming somebody's project reads as "this tool is for that project", which is
-  the opposite of true.
+  the opposite of true. This covers **commit messages, pull request titles and
+  pull request bodies** as well as the code and the sites: those are published
+  the moment they are pushed, and a squashed commit on `main` cannot be edited
+  afterwards the way a description can. Say "a named upstream project" and move
+  on -- which repository it was is never the point being made.
 - No personal paths. Everything comes from config: `drive.paths`, `AppPaths`.
 - Never seed identity. A default ships to every machine, so a seeded username
   would harvest a stranger's history onto somebody else's laptop.
