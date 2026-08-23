@@ -201,7 +201,7 @@ repository you follow is already a pack, which is what makes this work before yo
 configure anything. A manifest only says which one it sits under:
 
 ```json
-{ "name": "log4j-workout", "kind": "runner", "supports": "apache/logging-log4j2" }
+{ "name": "orders-bench", "kind": "runner", "supports": "owner/name" }
 ```
 
 `oss ext list` renders the tree, and the assistant is told what is attached and to
@@ -368,20 +368,24 @@ oss gemini prompt 1666
 
 ### Conversations you can come back to
 
-`oss chat` talks an issue through with you. Every turn is written the moment it
+`oss ask` with no question is a conversation. Every turn is written the moment it
 is said, so ctrl-c, a closed lid or a dropped connection loses nothing — and
 tomorrow you carry on rather than starting again.
 
 ```bash
-oss chat 4129            # start on an issue
-oss chat --continue      # carry on with the most recent conversation
-oss chat --resume 7      # resume a specific one
-oss history              # browse them all, arrow keys and a preview, enter to resume
+oss ask                        # keep asking; ctrl-d leaves
+oss ask --issue 4129 -r owner/name   # about one issue, with what is already known
+oss ask --resume               # continue the last one in this directory
+oss history                    # browse them all, arrow keys and a preview, enter to resume
 ```
 
-Chat runs on **Ollama, a cloud API key, or both** — it refuses only when you have
-neither, and then names both ways to fix it. With only a key, every turn leaves
-your machine and the banner says so on its first line.
+It runs on **a local model, a signed-in provider CLI, a cloud API key, or any
+combination** — it refuses only when you have none of them, and then names every
+way to fix it. Whichever rung answers is printed on the first line, before
+anything is sent.
+
+`oss chat <n>` is still here and still works — `oss --help-all` lists it. It is
+`ask` narrowed to one issue and nothing else.
 
 `oss history --search "the flaky test one"` finds a conversation by what it was
 about, using the built-in embedder — no server, no account. Without the model it

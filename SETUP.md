@@ -492,8 +492,9 @@ oss inspect <number>        # what was retrieved, and will it escalate
 oss prompt <n> --copy       # prompt to clipboard
 oss prompt <n> --out f.md   # prompt to a file
 oss prompt <n> --force-prompt   # skip the local model entirely
-oss chat <number>           # talk it through; every turn is saved as it is said
-oss chat --continue         # carry on with the most recent conversation
+oss ask                     # ask anything; it looks before it answers
+oss ask --issue <number>    # about one issue, with what is already known
+oss ask --resume            # carry on with the most recent conversation
 oss history                 # browse saved conversations, enter resumes one
 oss backup                  # timestamped archive (keeps last 5)
 oss restore <archive.zip>   # restore, preserving local API keys
@@ -501,12 +502,15 @@ oss restore <archive.zip>   # restore, preserving local API keys
 
 ### Conversations, and several terminals
 
-`oss chat` writes every turn to SQLite the moment it is said, so ctrl-c or a
+`oss ask` writes every turn to SQLite the moment it is said, so ctrl-c or a
 closed terminal is a pause rather than a loss. `oss history` lists what you have
 saved — arrow keys, a preview of where each one got to, enter to resume — and
 `oss history --search "the flaky test one"` finds one by meaning using the
 built-in embedder. Without a terminal, the same list is numbered instead, and
-`oss chat --resume <id>` needs no list at all.
+`oss ask --resume` needs no list at all.
+
+The same is true of `oss chat <n>`, which is still here and still works. It is
+`ask` narrowed to one issue.
 
 Running several terminals at once is expected and supported:
 
