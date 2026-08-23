@@ -58,6 +58,16 @@ class SchemaTest {
             "chat_session",
             "chat_turn",
             "authored_comment",
+            "corpus_fts",
+            // FTS5 builds its own storage beside the virtual table and names it after it. Listed
+            // rather than pattern-matched away: the whole value of this check is that a table
+            // nobody meant to create fails the build, and a rule that ignores anything starting
+            // with "corpus_fts" would ignore a mistake with that prefix too.
+            "corpus_fts_config",
+            "corpus_fts_content",
+            "corpus_fts_data",
+            "corpus_fts_docsize",
+            "corpus_fts_idx",
             "cross_repo_links",
             "embeddings",
             "issue_references",
@@ -153,7 +163,7 @@ class SchemaTest {
             assertTrue(rs.next());
             // The number itself is not the point; that the tables exist at it is. Bump this with
             // CURRENT_SCHEMA_VERSION, and only after the two tests above still pass.
-            assertEquals(15, rs.getInt("v"));
+            assertEquals(16, rs.getInt("v"));
         }
     }
 
