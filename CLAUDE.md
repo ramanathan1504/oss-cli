@@ -166,6 +166,21 @@ created a second ago, and one from before stamping existed that holds everything
 somebody has. `tableExists(conn, "issues")` is what separates them, and both
 refusals run *before* the bootstrap, because that bootstrap writes.
 
+**The engine must not know what it walks.** That was the architecture from the
+start and it was not true of `runner/engine.sh` until 4.0: it defaulted to one
+project's pack, swept that project's application and configuration names when
+told nothing, built that project's Maven module before any Gradle app, exempted
+versions beginning `3.` from a module rule that belongs to that project, and
+took `--log4j` as a spelling of `--version`. None of it failed a test, because
+the only pack anybody ran had all those names in it.
+
+Two rules follow. **Every optional pack hook is defined by the engine before the
+pack is sourced** — bash cannot declare a hook optional, so "optional" has to
+mean "there is already one"; without that a minimal pack printed five
+`command not found` lines per cell and still exited 0. And **an empty axis is an
+error**: `0 pass, 0 fail, 0 skip` with exit 0 is the shape of a clean sweep, and
+it is what every pack but one used to get.
+
 **Vectors from different models are never comparable.** Every vector is stored
 with the model that produced it and every read filters on it. All models used
 here emit 384 dimensions, so nothing catches a mix by shape — it produces

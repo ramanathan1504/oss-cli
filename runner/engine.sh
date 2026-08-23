@@ -36,9 +36,11 @@
 #
 # The application names and versions above are placeholders: they come from YOUR
 # pack, and there is no list of them here because this engine does not know what
-# it is walking. `--version` is the spelling to learn; `--log4j` is accepted as
-# an alias for it and is what the first pack this engine ever ran happened to
-# call it.
+# it is walking. Run `oss run list` in a pack to see its own.
+#
+# `--log4j` was accepted as an alias for `--version` until 4.0, because the first
+# pack this engine ever ran called it that. It is gone: a flag named after one
+# project, in an engine whose whole design is not knowing what it walks.
 #
 # All of them need a pack — the applications, configurations and versions being
 # walked. Either stand in one, or name it:
@@ -101,7 +103,7 @@ mkdir -p "$CACHE"
 
 # ── The pack: what this bench tests ─────────────────────────────────────────
 # Everything above this line is the engine -- forking JVMs, walking a matrix,
-# caching classpaths -- and none of it is specific to Log4j. What IS specific
+# caching classpaths -- and none of it is specific to any one project. What IS specific
 # lives in a pack, so the same engine can be pointed at another project by
 # writing one file rather than by editing this one.
 #
@@ -130,8 +132,11 @@ elif [[ -f "$ROOT/pack.sh" ]]; then
   PACK_FILE="$ROOT/pack.sh"
   BENCH_PACK="$(basename "$ROOT")"
 else
-  PACK_FILE="$ROOT/packs/log4j/pack.sh"
-  BENCH_PACK="log4j"
+  # No pack here, and none named. There is deliberately no default: this used to
+  # fall back to packs/log4j, which is one project's pack, so a user standing in
+  # the wrong directory got "no pack in ..." naming a project they had never
+  # heard of. The check below prints what a pack is and both ways to point at one.
+  PACK_FILE="$ROOT/pack.sh"
 fi
 [[ -f $PACK_FILE ]] || {
   printf '%serror%s no pack in %s\n\n' "$C_RED" "$C_OFF" "$ROOT" >&2
@@ -159,7 +164,46 @@ fi
   printf '  The older shell form, if you prefer it: %s\n' "$ENGINE_DIR/packs/example/pack.sh" >&2
   exit 1
 }
-# shellcheck source=packs/log4j/pack.sh
+# ── What a pack may leave out ───────────────────────────────────────────────
+#
+# Defined before the pack is sourced, so the pack's own definitions replace
+# these simply by existing. Bash has no interface to implement and no way to
+# declare a hook optional, so "optional" has to mean "there is already one".
+#
+# Without this block, a pack that defined only the four required declarations
+# and pack_module_path -- which is exactly what the shipped example does, and
+# what the documentation tells people to write -- produced five
+# `command not found` lines PER CELL on stderr, went on to report FAIL for
+# every one of them, and exited 0. A run that never ran anything looked like a
+# run that ran and failed.
+#
+# Each default is the permissive answer: nothing is excluded, nothing is
+# required, no extra flags. A pack says otherwise by saying so.
+pack_skip_reason()          { :; }   # why this cell cannot run. Nothing: it can
+pack_min_java_for()         { echo 0; }
+pack_min_version_for()      { :; }
+pack_requires_config_for()  { :; }
+pack_requires_app_for()     { :; }
+pack_build_flags()          { :; }
+pack_jvm_args()             { :; }
+pack_always_jvm_args()      { :; }
+pack_config_args()          { :; }
+pack_gradle_version_flag()  { :; }
+pack_main_class_for()       { :; }
+pack_modules()              { :; }
+pack_modules_on_classpath() { cat >/dev/null; }
+pack_upstream_repo()        { :; }
+pack_source_clone()         { :; }
+pack_source_clone_hint()    { :; }
+
+# What has to be installed before a Gradle app in this pack can build. The one
+# pack this engine grew up with builds a Maven module first and installs it to
+# ~/.m2, because Gradle has no view of a Maven reactor -- which is a fact about
+# that pack's layout and was written into the engine as `mvn -pl apps/core-java`.
+# Any other pack reaching this line built somebody else's module.
+pack_gradle_prereq()        { :; }
+
+# shellcheck source=packs/example/pack.sh
 . "$PACK_FILE"
 
 # A pack that loads but declares nothing would produce an empty matrix, and an
@@ -223,8 +267,8 @@ version_lt() {
 }
 
 # ── Cell validity ───────────────────────────────────────────────────────────
-# Prints why a (app, config, java, log4j) cell cannot run, or nothing if it can.
-# Every exclusion here is a fact about Log4j or the app, not a convenience: a
+# Prints why a (app, config, java, version) cell cannot run, or nothing if it can.
+# Every exclusion here is a fact about the pack or the app, not a convenience: a
 # cell that is skipped for a stated reason is information, a cell that fails for
 # an unstated one is noise.
 cell_skip_reason() {
@@ -249,7 +293,7 @@ cell_skip_reason() {
   done
 
   # An app that asserts on a specific appender, paired with a config that has
-  # no such appender. The cell cannot pass however correct Log4j is.
+  # no such destination. The cell cannot pass however correct the library is.
   local needs; needs="$(pack_requires_config_for "$app")"
   if [[ -n "$needs" && "$config" != *"$needs"* ]]; then
     echo "$app asserts on $needs; $config cannot satisfy it"
@@ -263,9 +307,15 @@ cell_skip_reason() {
     return
   fi
 
-  # An app whose Log4j module is younger than the version under test.
+  # An app whose module is younger than the version under test.
+  #
+  # The `!= 3.*` that used to be here exempted one project's 3.x line, where the
+  # module had been reinstated -- a fact about that project, in the engine, that
+  # silently un-skipped cells for every other pack whose versions happen to start
+  # with a 3. A pack that needs an exemption says so in pack_skip_reason, which
+  # runs first and can say anything.
   local minv; minv="$(pack_min_version_for "$app")"
-  if [[ -n "$minv" && "$version" != 3.* ]] && version_lt "$version" "$minv"; then
+  if [[ -n "$minv" ]] && version_lt "$version" "$minv"; then
     echo "$app needs $PACK_NAME >= $minv (its module did not exist at $version)"
     return
   fi
@@ -282,7 +332,7 @@ cell_skip_reason() {
   fi
 
 
-  # The Java 8 module is deliberately small: it has log4j-api/core and the
+  # An old-JDK module is usually deliberately small: it has the core artifacts and the
   # config formats, and nothing that would drag in a Java 17 dependency.
   if [[ "$app" == java8-baseline ]]; then
     case "$config" in
@@ -333,22 +383,49 @@ java_home_for() {
   die "no JDK $want found (looked at java_home, JAVA_HOME_${want}_*, /usr/lib/jvm)"
 }
 
-# ── Maven flags for a given Log4j version ───────────────────────────────────
-# 3.x needs its profile: it pins a separate API line (2.24.3) and adds the
-# artifacts that were split out of log4j-core. -Dlog4j3=true additionally
-# suppresses the 2.x-only modules, which Maven cannot infer from the profile.
-# Sets the global MVN_FLAGS array. A global rather than a return value because
-# macOS ships bash 3.2, which has no mapfile/readarray to capture one.
+# ── Maven flags for a given version ─────────────────────────────────────────
+# What a major version needs -- a profile, a pinned API line, a property that
+# suppresses modules that do not exist yet -- is a fact about the project being
+# walked, so it comes from the pack. Sets the global MVN_FLAGS array: a global
+# rather than a return value because macOS ships bash 3.2, which has no
+# mapfile/readarray to capture one.
+# Expanded at the use site as ${MVN_FLAGS[@]+"${MVN_FLAGS[@]}"}, never bare.
+# macOS ships bash 3.2, where an EMPTY array is "unbound" under `set -u` -- so a
+# pack that adds no build flags, which is the ordinary case and what the default
+# pack_build_flags does, crashed the build with `MVN_FLAGS[@]: unbound variable`
+# instead of running Maven with no extra flags. The same rule already cost this
+# file a bug once, in PACK_INTERACTIVE_APPS.
 MVN_FLAGS=()
 set_mvn_flags() {
   # How a version reaches the build is the pack's business: the property name,
-  # the profile, whether a major needs either. An engine that hardcoded
-  # -Dlog4j.version could only ever build one project.
+  # the profile, whether a major needs either. An engine that hardcoded any one
+  # project's version property could only ever build that project.
   MVN_FLAGS=()
   local f
   while IFS= read -r f; do
     [[ -n "$f" ]] && MVN_FLAGS+=("$f")
   done < <(pack_build_flags "$1")
+}
+
+# The pack's first configuration, in the same order `list` prints them, or
+# nothing when the pack has none. A pack with no configs is legitimate -- the
+# shipped example has none -- and an empty config is what the run path already
+# treats as "the app's own defaults".
+first_config() {
+  local dir="$ROOT/$PACK_CONFIGS_DIR" f
+  [[ -d "$dir" ]] || return 0
+  for f in $(cd "$dir" && ls 2>/dev/null); do
+    if [[ -d "$dir/$f" ]]; then
+      local inner
+      for inner in $(cd "$dir/$f" && ls 2>/dev/null); do
+        printf '%s/%s\n' "$f" "${inner%.*}"
+        return 0
+      done
+    else
+      printf '%s\n' "${f%.*}"
+      return 0
+    fi
+  done
 }
 
 # The mapping itself is pack content; the error is the engine's, so that every
@@ -387,7 +464,7 @@ classpath_for() {
   # Always build. The build tools are incremental, so this is cheap when nothing
   # changed, and skipping it on a source-only edit would silently run stale
   # classes — the worst possible failure mode for a bench you are using to judge
-  # whether a Log4j change altered behaviour.
+  # whether a change in the library altered behaviour.
   #
   # The one exception is a matrix sweep, where the same (app, version) pair is
   # rebuilt for every config and JDK even though nothing between cells can have
@@ -407,14 +484,26 @@ classpath_for() {
   fi
 
   set_mvn_flags "$version"
+
+  # The pack said where this app lives; check it is there before handing the
+  # path to Maven. Without this the failure was a forty-line Maven stack ending
+  # in MavenExecutionException, for what is one sentence: the pack points at a
+  # directory that does not exist. Somebody writing their first pack meets this
+  # error, and it should tell them about their pack rather than about Maven.
+  if [[ ! -d "$ROOT/$module" ]]; then
+    die "pack $PACK_NAME maps app '$app' to '$module', and there is no directory at $ROOT/$module
+       pack_module_path() is what decides this. Either create the module, or point it somewhere real."
+  fi
+
   info "building: $app @ $PACK_NAME $version"
 
   if is_gradle "$app"; then
-    # The Gradle app consumes bench-core-java from ~/.m2, so the Maven side has
-    # to be installed first — Gradle has no view of the reactor.
-    ( cd "$ROOT" && mvn -q -pl apps/core-java -am \
-        "${MVN_FLAGS[@]}" -DskipTests install >&2 ) \
-      || die "installing bench-core-java failed (needed by $app)"
+    # Gradle has no view of a Maven reactor, so a Gradle app that depends on a
+    # module in the same pack needs that module installed first. WHICH module is
+    # the pack's business: this was `mvn -pl apps/core-java`, a path out of one
+    # project's tree, so any other pack's Gradle app tried to build somebody
+    # else's module and died saying so.
+    pack_gradle_prereq "$app" "$version" || die "gradle prerequisites failed for $app"
 
     command -v gradle >/dev/null || die "gradle not on PATH (needed by $app)"
     ( cd "$ROOT/$module" && gradle -q --console=plain \
@@ -428,7 +517,7 @@ classpath_for() {
   fi
 
   ( cd "$ROOT" && mvn -q -pl "$module" -am \
-      "${MVN_FLAGS[@]}" \
+      ${MVN_FLAGS[@]+"${MVN_FLAGS[@]}"} \
       -DskipTests install \
       org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath \
       -Dmdep.outputFile="$key" >&2 ) || die "build failed for $app @ $version"
@@ -437,8 +526,9 @@ classpath_for() {
 }
 
 # Accepts a full path, a repo-relative path, or a bare name like
-# "xml/layout-ecs" / "layout-ecs". Always emits an absolute path, because
-# Log4j resolves a relative log4j.configurationFile against the JVM's cwd.
+# "xml/layout-ecs" / "layout-ecs". Always emits an absolute path, because a
+# framework given a relative configuration file resolves it against the JVM's
+# cwd, and the JVM's cwd is not where the user typed the command.
 resolve_config() {
   local cfg="$1"
   [[ -z "$cfg" ]] && return 0
@@ -487,18 +577,18 @@ cmd_list() {
       echo; echo "$PACK_NAME versions:"; printf '  %s\n' "${VERSIONS[@]}"
       echo; echo "Configs:"; cmd_list --configs | sed 's/^/  /'
       echo; echo "Scenarios:"
-      cmd_run core-java --quiet-banner -- --list 2>/dev/null | sed 's/^/  /' || true
+      cmd_run "${APPS[0]:-}" --quiet-banner -- --list 2>/dev/null | sed 's/^/  /' || true
       ;;
   esac
 }
 
 cmd_run() {
-  local app="${1:-core-java}"; shift || true
+  local app="${1:-${APPS[0]:-}}"; shift || true
   local version="$DEFAULT_VERSION" config="" javaver="" args=()
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --version|--log4j)  version="$2"; shift 2 ;;
+      --version)          version="$2"; shift 2 ;;
       --config) config="$2";  shift 2 ;;
       --java)   javaver="$2"; shift 2 ;;
       --quiet-banner) shift ;;
@@ -521,14 +611,14 @@ cmd_run() {
   # Ad-hoc JVM flags, because unrecognised CLI arguments are passed to the app
   # rather than the JVM. Mainly for turning the StatusLogger all the way up
   # when an appender fails quietly:
-  #   BENCH_JVM_ARGS='-Dlog4j2.debug=true -Dlog4j2.StatusLogger.level=TRACE' oss run run nosql ...
+  #   BENCH_JVM_ARGS='-Dyour.framework.debug=true' oss run run <app> ...
   if [[ -n "${BENCH_JVM_ARGS:-}" ]]; then
     # Deliberately unquoted: the variable holds several space-separated flags.
     jvm_args+=(${BENCH_JVM_ARGS})
   fi
 
   if [[ -n "$config" ]]; then
-    # A comma-separated list is a COMPOSITE configuration: Log4j reads every
+    # A comma-separated list is a COMPOSITE configuration: the framework reads every
     # file and merges them, later files overriding earlier ones per the
     # MergeStrategy. Each element is resolved separately so the usual short
     # names still work: --config xml/baseline-console,xml/filter-all
@@ -567,7 +657,7 @@ cmd_run() {
     ${args[@]+"${args[@]}"}
 }
 
-# Sweep app × config × JDK × Log4j version.
+# Sweep app × config × JDK × version.
 #
 # Every axis defaults to a single representative value rather than to "all",
 # because the full cross product is thousands of forked JVMs and most of its
@@ -583,7 +673,7 @@ cmd_matrix() {
       --app|--apps)       apps_arg="$2";     shift 2 ;;
       --config|--configs) configs_arg="$2";  shift 2 ;;
       --java|--javas)     javas_arg="$2";    shift 2 ;;
-      --version|--log4j)  versions_arg="$2"; shift 2 ;;
+      --version)          versions_arg="$2"; shift 2 ;;
       --all)      all=1; shift ;;
       # Build each (app, version) once instead of once per cell. Safe for a
       # sweep, where nothing between cells changes the sources; see the note in
@@ -596,8 +686,8 @@ cmd_matrix() {
   local apps configs javas versions
   if [[ $all -eq 1 ]]; then
     apps="$(printf '%s\n' "${APPS[@]}" | tr '\n' ',')"
-    # Strip the extension only where doing so stays unambiguous. configs/log4j1
-    # holds both log4j.xml and log4j.properties, and stripping collapsed them
+    # Strip the extension only where doing so stays unambiguous. A config
+    # directory holding both name.xml and name.properties has stripping collapse them
     # into one name that resolve_config always answered with the XML — so the
     # 1.x properties format was never tested and the XML one ran twice.
     configs="$(cmd_list --configs | awk '
@@ -607,10 +697,14 @@ cmd_matrix() {
     javas="$(installed_javas | tr '\n' ',')"
     versions="$(printf '%s\n' "${VERSIONS[@]}" | tr '\n' ',')"
   else
-    # Defaults: one app, one config, this machine's default JDK, every Log4j
+    # Defaults: one app, one config, this machine's default JDK, every
     # line — the version axis is the one you almost always want swept.
-    apps="${apps_arg:-core-java}"
-    configs="${configs_arg:-xml/baseline-console}"
+    # The pack's own first app and first config. It used to be `core-java` and
+    # `xml/baseline-console`, which are two names out of one project's pack: any
+    # other pack got a matrix over apps it does not have, and every cell failed
+    # for a reason that was never its fault.
+    apps="${apps_arg:-${APPS[0]:-}}"
+    configs="${configs_arg:-$(first_config)}"
     javas="${javas_arg:-$(java_major_of "$(java_home_for '')")}"
     versions="${versions_arg:-$(printf '%s\n' "${VERSIONS[@]}" | tr '\n' ',')}"
   fi
@@ -643,9 +737,21 @@ cmd_matrix() {
     "$(csv_pretty "$apps")" "$(csv_pretty "$configs")" \
     "$(csv_pretty "$javas")" "$(csv_pretty "$versions")" | tee -a "$results"
 
+  # A pack with no configs at all is legitimate -- the shipped example has none,
+  # and an app run with no configuration file uses its own defaults. csv_split of
+  # an empty string yields nothing, so the config loop never entered, every
+  # product was empty, and the sweep reported "0 pass, 0 fail, 0 skip" and exited
+  # 0. This file's own comment says an empty matrix "reads exactly like a pass",
+  # and here it was doing precisely that for every pack but one.
+  #
+  # The sentinel is the empty string, which is what the run path already treats
+  # as "no --config".
+  local config_axis; config_axis="$(csv_split "$configs")"
+  [[ -z "$config_axis" ]] && config_axis=""
+
   local app config java version reason
   for app in $(csv_split "$apps"); do
-    for config in $(csv_split "$configs"); do
+    for config in ${config_axis:-""}; do
       for java in $(csv_split "$javas"); do
         for version in $(csv_split "$versions"); do
 
@@ -686,6 +792,19 @@ cmd_matrix() {
     done
   done
 
+  if (( pass + fail + skip == 0 )); then
+    # Nothing ran. This printed "0 pass, 0 fail, 0 skip" and exited 0, which is
+    # the shape of a clean sweep -- and it is what every pack but one got, for
+    # releases, because the config axis was empty and the loops never entered.
+    # A sweep that produced no cells has not passed; it has not started.
+    printf '\n%sno cells%s — the axes produced nothing to run.\n' "$C_RED" "$C_OFF" >&2
+    printf '  apps: %s\n  configs: %s\n  javas: %s\n  versions: %s\n' \
+      "$(csv_pretty "$apps")" "$(csv_pretty "$configs")" \
+      "$(csv_pretty "$javas")" "$(csv_pretty "$versions")" >&2
+    printf '  An empty axis is usually a pack that declares no APPS or no VERSIONS,\n' >&2
+    printf '  or a --apps/--versions naming something the pack does not have.\n' >&2
+    return 1
+  fi
   printf '\n%d pass, %d fail, %d skip\nFull output: %s\n' "$pass" "$fail" "$skip" "$results"
 
   # Exit non-zero when any cell failed. Without this a sweep is green whatever
@@ -746,7 +865,7 @@ cmd_clean() {
 # Where the bench actually reaches, as opposed to where it is meant to reach.
 #
 # Two different questions, answered separately because they fail differently:
-#   * which Log4j modules are on some app's classpath at all — a gap here means
+#   * which of the library's modules are on some app's classpath at all — a gap here means
 #     a module the bench cannot exercise however it is invoked;
 #   * which axis cells have actually been run — a gap here means a combination
 #     nobody has tried yet, on a classpath that could have tried it.
