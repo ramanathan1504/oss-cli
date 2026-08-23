@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.1.0
+
+_2026-08-23_
+
+- A pack could describe every application it has and start none of them (#187)
+
+
 ## 4.0.2
 
 _2026-08-23_
