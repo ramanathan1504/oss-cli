@@ -422,13 +422,23 @@ An interactive conversation about one issue, which survives the terminal it was 
 *   **Filed once.** On `exit` the transcript is written to your archive and embedded. Resuming rewrites *that same note* rather than filing a second overlapping copy.
 
 ```bash
+oss ask                        # keep asking; ctrl-d leaves
+oss ask --issue 4129 -r owner/name   # about one issue, with what is already known
+oss ask --resume               # continue the last one in this directory
+oss codex ask "…"              # let OpenAI answer instead
+```
+
+`oss chat` is the same conversation narrowed to one issue, and is not printed by
+`--help` any more. It works exactly as it did:
+
+```bash
 oss chat 4129                  # start on an issue
 oss chat --continue            # carry on with the most recent conversation
 oss chat -c                    # the same thing
 oss chat --resume 7            # resume a specific one
 oss chat --resume              # pick one from the list
 oss chat 4129 --resume         # the latest conversation about #4129
-oss codex chat 4129            # escalate to OpenAI instead of Gemini
+oss codex chat 4129            # escalate to OpenAI instead
 ```
 
 **Long conversations are folded, not silently truncated.** Once the transcript outgrows the model's context, the older turns are summarised into a running summary and the recent ones kept verbatim. With no generation model attached the oldest turns are dropped instead — and that is printed, because quietly forgetting the first half of a conversation while continuing to answer confidently is the failure worth shouting about. The full transcript stays readable in `oss history --show` either way.
@@ -962,7 +972,24 @@ version the project actually pins.
   pack       none — oss run init writes a starter one
 ```
 
-**What it deliberately does not do** is walk a version × config × app matrix. That needs a pack,
+#### The matrix engine, and what 4.0 changed about it
+
+The engine walks a version × configuration × application matrix and knows nothing
+about what it is walking — that is the whole design, and until 4.0 it was true of
+the architecture rather than of the file. It defaulted to one project's pack, swept
+one project's application and configuration names when told nothing, built one
+project's Maven module before any Gradle app, and accepted `--log4j` as a spelling
+of `--version`.
+
+| 4.0 | |
+|---|---|
+| `--log4j` | **removed.** `--version` has always been accepted and is unchanged. This is the whole of the break |
+| default pack | gone. No pack here and none named is an error that says what a pack is |
+| default axes | your own `APPS[0]` and your own first `configs/` entry, not two names out of somebody else's pack |
+| optional hooks | the engine defines every one before sourcing your pack, so a pack that declares only the required five no longer prints `command not found` per cell |
+| an empty axis | an error. `0 pass, 0 fail, 0 skip` and exit 0 is the shape of a clean sweep, and it was what an empty axis printed |
+
+**What the built-in deliberately does not do** is walk that matrix. That needs a pack,
 because only the person maintaining a project knows what a real application of it looks like, and
 no amount of detection invents that. What the built-in does is get you to the point where writing
 one is an edit rather than a blank page: `oss run init` writes a `pack.md` with everything it could
@@ -990,9 +1017,9 @@ is **data the tool reads**, not a program it runs:
   "name": "yourproject",
   "description": "Your project across a version x config x app matrix, on real JVMs",
   "useWhen": { "repository": "owner/name", "files": ["core/pom.xml"] },
-  "versions": ["2.24.1", "2.25.5", "2.26.1"],
-  "defaultVersion": "2.26.1",
-  "apps": ["core-java", "db", "network"],
+  "versions": ["3.6.0", "3.7.0", "3.8.1"],
+  "defaultVersion": "3.8.1",
+  "apps": ["consumer", "db", "network"],
   "appsDir": "apps",
   "configsDir": "configs",
   "modulePath": "apps/{app}"
