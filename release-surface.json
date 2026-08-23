@@ -46,6 +46,9 @@
     "search": ["--global", "--help", "--limit", "--repo", "--version", "-V", "-g", "-h", "-n", "-r"],
     "serve": ["--help", "--install", "--no-open", "--port", "--uninstall", "--version", "-V", "-h"],
     "setup": ["--help", "--version", "-V", "-h"],
+    "skill": ["--help", "--version", "-V", "-h"],
+    "skill new": ["--help", "--version", "-V", "-h"],
+    "skill show": ["--help", "--version", "-V", "-h"],
     "sync": ["--add", "--all", "--help", "--me", "--no-embed", "--remove", "--repo", "--version", "-V", "-a", "-h", "-r"],
     "trend": ["--help", "--repo", "--save", "--version", "-V", "-h", "-r", "-s"],
     "triage": ["--help", "--repo", "--version", "-V", "-h", "-r"]

@@ -33,6 +33,7 @@ import picocli.CommandLine.Command;
         subcommands = {
             SyncCommand.class,
             AskCommand.class,
+            SkillCommand.class,
             CriticalCommand.class,
             AnalyzeCommand.class,
             HiddenCriticalCommand.class,

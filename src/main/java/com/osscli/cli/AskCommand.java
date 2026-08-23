@@ -155,7 +155,8 @@ public class AskCommand implements Callable<Integer> {
                 // it. Both are decorations that must never cost the answer: each is a function that
                 // returns an empty string when it cannot do its job.
                 .remembering(AskCommand::searchThisMachine)
-                .inTheVoice(voiceOfThisMachine());
+                .inTheVoice(voiceOfThisMachine())
+                .withSkills(com.osscli.agent.Skills::forQuestion);
         StringBuilder carried = new StringBuilder(earlier == null ? "" : earlier);
 
         if (conversation) {

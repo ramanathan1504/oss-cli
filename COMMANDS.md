@@ -1164,3 +1164,25 @@ and `ask` says so plainly rather than turning without producing anything.
 
 If a local model is too small to emit the format, that is named as the model's
 limit rather than printed as an answer.
+
+### `skill`
+
+```bash
+oss skill                            # what oss ask has been told, and where it came from
+oss skill show reviewing-a-pull-request
+oss skill new my-own-review-rules    # a starter, front matter filled in
+```
+
+Instructions are markdown files, not prompts buried in Java. Four ship built in —
+using what you already know, choosing where to answer from, reviewing a pull
+request, changing code safely — and anything in `~/.oss-cli/skills` sits beside
+them.
+
+**A file of yours with the same name replaces one of ours entirely**, the same
+way an attached runner takes over the built-in one. It does not merge: merging
+two sets of instructions produces a third nobody wrote, and when the answer comes
+out wrong there is no file to point at.
+
+`when:` is a comma-separated list of words. The skill is included when the
+question mentions one of them, or on every question when it says `always`. What
+does not fit the budget is named rather than dropped silently.

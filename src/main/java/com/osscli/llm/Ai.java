@@ -203,6 +203,7 @@ public final class Ai {
                 "restore",
                 "run",
                 "search",
+                "skill",
                 "serve",
                 "setup",
                 "trend",

@@ -125,6 +125,21 @@ public final class Loop {
         return this;
     }
 
+    /**
+     * What this build has been told about how to do the work, for this question.
+     *
+     * <p>A function rather than a string, because which skills apply depends on what was asked and
+     * the loop is the only place that knows it. Failures give nothing rather than stopping: a
+     * missing instruction costs some quality, and there is no version of that worth failing a
+     * question over.
+     */
+    private java.util.function.Function<String, String> skills = question -> "";
+
+    public Loop withSkills(java.util.function.Function<String, String> skills) {
+        this.skills = skills == null ? question -> "" : skills;
+        return this;
+    }
+
     /** How the reader writes, so an answer sounds like them rather than like a manual. */
     private String voice = "";
 
@@ -323,6 +338,15 @@ public final class Loop {
         }
         if (!voice.isBlank()) {
             b.append('\n').append(voice.strip()).append('\n');
+        }
+        String how;
+        try {
+            how = skills.apply(question);
+        } catch (RuntimeException e) {
+            how = "";
+        }
+        if (how != null && !how.isBlank()) {
+            b.append('\n').append(how.strip()).append('\n');
         }
         if (!conversation.isBlank()) {
             b.append("\nWhat you have done so far:\n").append(conversation);
