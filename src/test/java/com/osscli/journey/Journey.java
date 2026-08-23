@@ -17,6 +17,7 @@
 package com.osscli.journey;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -89,7 +90,30 @@ public final class Journey {
         return run(home, cwd, token, "http://127.0.0.1:1", argv);
     }
 
+    /**
+     * The same, on a machine that genuinely has no GitHub token anywhere.
+     *
+     * <p>Clearing the environment is not enough, and the gap cost a red build. {@code
+     * CredentialManager} falls through to the macOS keychain, so a laptop with {@code oss setup}
+     * run on it answers "yes, here is a token" to a journey that carefully removed both variables
+     * -- and the branch for having none is then unreachable on the only machine anybody develops
+     * on. It looked correct here and threw on all four runners.
+     *
+     * <p>So the keychain is put out of reach the only way it can be: {@code security} is invoked
+     * through {@code sh -c} and found on the PATH, and the PATH here has nothing on it. Java is
+     * launched by absolute path, so the run itself is unaffected, and on Linux and Windows the
+     * keychain branch never ran in the first place -- which is exactly the state being reproduced.
+     */
+    public static Ran ossWithNoCredentialAnywhere(Path home, Path cwd, String... argv) throws Exception {
+        return run(home, cwd, null, "http://127.0.0.1:1", true, argv);
+    }
+
     private static Ran run(Path home, Path cwd, String token, String api, String... argv) throws Exception {
+        return run(home, cwd, token, api, false, argv);
+    }
+
+    private static Ran run(Path home, Path cwd, String token, String api, boolean noKeychain, String... argv)
+            throws Exception {
         String where = home.toAbsolutePath().toString();
         if (where.startsWith(System.getProperty("user.home") + "/.oss-cli")) {
             throw new IllegalStateException("refusing to run a journey against the real store: " + where);
@@ -116,6 +140,14 @@ public final class Journey {
         pb.environment().remove("GH_TOKEN");
         if (token != null) {
             pb.environment().put("GITHUB_TOKEN", token);
+        }
+
+        if (noKeychain) {
+            // An empty directory rather than an empty string: an unset or blank PATH is a shape
+            // some shells fill in with a default, and a default has /usr/bin on it.
+            Path nothing = Files.createTempDirectory("oss-journey-no-path");
+            nothing.toFile().deleteOnExit();
+            pb.environment().put("PATH", nothing.toAbsolutePath().toString());
         }
 
         Process p = pb.start();

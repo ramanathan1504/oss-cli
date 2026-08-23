@@ -134,11 +134,19 @@ class BugJourneyTest {
     void noTokenStillWorks(@TempDir Path home, @TempDir Path cwd) throws Exception {
         // The one requirement this tool has is a token, and this is the command most likely to be
         // run by somebody who has not set one up yet -- they are here because something broke.
-        Journey.Ran ran = Journey.oss(home, cwd, "bug", "sync hangs on a large repository");
+        //
+        // With no credential reachable at all, keychain included. The first version of this cleared
+        // the environment and passed on a laptop for the wrong reason: the keychain still answered,
+        // so the run took the "have a token" path and printed the same paste address by a different
+        // route. The branch this test is named after was reached first on a CI runner, where
+        // getGitHubToken() threw and the crash reporter offered to file a bug about it.
+        Journey.Ran ran = Journey.ossWithNoCredentialAnywhere(home, cwd, "bug", "sync hangs on a large repository");
 
         assertEquals(0, ran.code(), ran.all());
         assertTrue(ran.all().contains("sync hangs on a large repository"), ran.all());
+        assertTrue(ran.all().contains("No GitHub token"), "it did not take the no-token path: " + ran.all());
         assertTrue(ran.all().contains("issues/new"), "it did not say where to paste it: " + ran.all());
+        assertFalse(ran.all().contains("\tat com.osscli"), "a stack trace was printed: " + ran.all());
     }
 
     @Test

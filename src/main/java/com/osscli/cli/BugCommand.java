@@ -173,7 +173,10 @@ public class BugCommand implements Callable<Integer> {
     }
 
     private Integer offerToPost(BugReport report) {
-        String token = CredentialManager.getGitHubToken();
+        // findGitHubToken, never getGitHubToken: the latter throws when there is none, so the
+        // branch below -- the whole no-token path -- could not be reached by the machines that
+        // need it. It threw instead, and the crash reporter then offered to file a bug about it.
+        String token = CredentialManager.findGitHubToken();
         if (token == null || token.isBlank()) {
             // Degrade, do not refuse. The report is the same report; only the last step needs a
             // token, and pasting it is a step somebody can take right now.

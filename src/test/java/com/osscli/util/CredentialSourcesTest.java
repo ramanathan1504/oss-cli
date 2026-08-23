@@ -16,6 +16,7 @@
  */
 package com.osscli.util;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -181,5 +182,47 @@ class CredentialSourcesTest {
         assertEquals("sk-ant-123", clean.invoke(null, "'sk-ant-123'"));
         // Only the wrapping. A key this quietly rewrote inside would be worse than one it refused.
         assertEquals("sk-ant-1<2>3", clean.invoke(null, "sk-ant-1<2>3"));
+    }
+
+    @Test
+    @DisplayName("every credential you can demand, you can also merely ask about")
+    void everyGetterHasAFinder() {
+        // The getters throw when the credential is absent, which is right for a caller about to
+        // make a request and wrong for one deciding whether it can. Three of them grew a non-
+        // throwing sibling after `Ai.Engine.hasCredential` answered "do you have an Anthropic key?"
+        // by raising "Anthropic API Key is missing". The fourth did not, and the identical bug
+        // arrived by the identical route: `oss bug` degrades without a GitHub token -- it prints
+        // the report and the address to paste it at -- and asked with getGitHubToken(), so on a
+        // machine that has one the degraded branch is unreachable and it looks correct. Every CI
+        // runner, which is to say every machine the branch exists for, got a stack trace.
+        //
+        // Structural on purpose: the next credential added will have a getter, and this is what
+        // says it needs the other half before anybody has been bitten by which half is missing.
+        List<String> missing = new java.util.ArrayList<>();
+        for (java.lang.reflect.Method m : CredentialManager.class.getDeclaredMethods()) {
+            if (!java.lang.reflect.Modifier.isPublic(m.getModifiers())
+                    || !m.getName().startsWith("get")
+                    || m.getParameterCount() != 0
+                    || m.getReturnType() != String.class) {
+                continue;
+            }
+            String sibling = "find" + m.getName().substring("get".length());
+            try {
+                CredentialManager.class.getDeclaredMethod(sibling);
+            } catch (NoSuchMethodException e) {
+                missing.add(m.getName() + " throws when it is absent, and there is no " + sibling + "()");
+            }
+        }
+
+        assertTrue(missing.isEmpty(), String.join("\n", missing));
+    }
+
+    @Test
+    @DisplayName("asking about the GitHub token is never itself an error")
+    void findingTheTokenNeverThrows() {
+        // Whether this machine has one is not the point and cannot be asserted -- a laptop has a
+        // keychain and a runner does not, and both are correct. What must hold on both is that
+        // asking returns an answer rather than raising one.
+        assertDoesNotThrow(CredentialManager::findGitHubToken);
     }
 }

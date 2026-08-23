@@ -145,6 +145,19 @@ public class CredentialManager {
         return getKey("OPENAI_API_KEY", "openai_api_key");
     }
 
+    /**
+     * As {@link #findClaudeKey()}, for the GitHub token.
+     *
+     * <p>The sibling that was missing, and the same bug found it. {@code oss bug} degrades without a
+     * token -- it prints the report and the address to paste it at -- and it asked the question with
+     * {@link #getGitHubToken()}, which throws. On a machine with a token in the keychain the
+     * degraded branch is unreachable, so it looked right on the laptop it was written on and threw
+     * on every runner that had no token: the exact case the command exists to handle.
+     */
+    public static String findGitHubToken() {
+        return getKey(new String[] {"GITHUB_TOKEN", "GH_TOKEN"}, "github_token");
+    }
+
     private static String requireKey(String key, String displayName, String keychainName) {
         if (key == null) {
             String error = String.format("%s is missing. Run 'oss setup' to register it.", displayName);
