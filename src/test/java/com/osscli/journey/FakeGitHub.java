@@ -42,6 +42,8 @@ public final class FakeGitHub implements AutoCloseable {
 
     private final HttpServer server;
     private final List<String> asked = new CopyOnWriteArrayList<>();
+    private final List<String> posted = new CopyOnWriteArrayList<>();
+    private volatile boolean duplicateExists;
 
     public FakeGitHub() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -49,7 +51,20 @@ public final class FakeGitHub implements AutoCloseable {
             String path = exchange.getRequestURI().getPath();
             String query = exchange.getRequestURI().getRawQuery();
             asked.add(path + (query == null ? "" : "?" + query));
-            byte[] body = bodyFor(path).getBytes(StandardCharsets.UTF_8);
+            // A write, kept apart from every read above it. `oss bug` is the only thing in this
+            // program that POSTs anywhere, and a stub that answered 200 to everything would let a
+            // test claim "it filed the issue" without anything ever having been sent.
+            if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                posted.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+                byte[] created = "{ \"number\": 4321, \"html_url\": \"http://example.invalid/4321\" }"
+                        .getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().add("Content-Type", "application/json");
+                exchange.sendResponseHeaders(201, created.length);
+                exchange.getResponseBody().write(created);
+                exchange.close();
+                return;
+            }
+            byte[] body = bodyFor(path, query, duplicateExists).getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
             exchange.sendResponseHeaders(200, body.length);
             exchange.getResponseBody().write(body);
@@ -63,6 +78,21 @@ public final class FakeGitHub implements AutoCloseable {
         return "http://127.0.0.1:" + server.getAddress().getPort();
     }
 
+    /** Every body this server was asked to store, in order. Empty means nothing was written. */
+    public List<String> posted() {
+        return new ArrayList<>(posted);
+    }
+
+    /**
+     * Answer the duplicate search with a hit, so the "this is already filed" path can be walked.
+     *
+     * <p>Off by default: a search that always matches would make every filing journey report a
+     * duplicate and never post, which is the failure looking exactly like the success.
+     */
+    public void withADuplicateAlreadyFiled() {
+        duplicateExists = true;
+    }
+
     /** Every path this server was asked for, in order. */
     public List<String> asked() {
         return new ArrayList<>(asked);
@@ -73,7 +103,7 @@ public final class FakeGitHub implements AutoCloseable {
         return asked.stream().anyMatch(p -> p.contains(fragment));
     }
 
-    private static String bodyFor(String path) {
+    private static String bodyFor(String path, String query, boolean duplicateExists) {
         if (path.contains("/pulls/") && path.endsWith("/files")) {
             return """
                    [ { "filename": "src/main/java/com/example/Pool.java", "status": "modified",
@@ -84,6 +114,11 @@ public final class FakeGitHub implements AutoCloseable {
             return pullRequest();
         }
         if (path.startsWith("/search/issues")) {
+            // The duplicate check searches for a signature. Answering that with the stock issue
+            // would tell every reporter their bug was already filed.
+            if (query != null && query.contains("oss-signature") && !duplicateExists) {
+                return "{ \"total_count\": 0, \"incomplete_results\": false, \"items\": [] }";
+            }
             return "{ \"total_count\": 1, \"incomplete_results\": false, \"items\": [" + issue() + "] }";
         }
         if (path.contains("/issues")) {

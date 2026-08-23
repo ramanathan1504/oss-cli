@@ -129,6 +129,10 @@ public class Main {
         if (System.console() == null) {
             commandLine.setColorScheme(CommandLine.Help.defaultColorScheme(CommandLine.Help.Ansi.OFF));
         }
+        // An unexpected failure is the one thing this program learns nothing from. The trace still
+        // prints exactly as picocli printed it; what is added is that the crash is written down and
+        // the person in front of it is asked, once, whether to file it.
+        commandLine.setExecutionExceptionHandler(new com.osscli.bug.Reporter());
         java.util.List<String> dispatchers = new java.util.ArrayList<>(java.util.List.of("run", "memory", "backlog"));
         dispatchers.addAll(com.osscli.llm.Ai.prefixes());
         for (String dispatcher : dispatchers) {

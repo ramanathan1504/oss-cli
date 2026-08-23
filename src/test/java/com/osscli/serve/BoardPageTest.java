@@ -18,6 +18,7 @@ package com.osscli.serve;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.DisplayName;
@@ -136,6 +137,128 @@ class BoardPageTest {
         } catch (java.io.IOException e) {
             return -1;
         }
+    }
+
+    @Test
+    @DisplayName("the page's script parses, because every line of the board is drawn by it")
+    void scriptHasNoUnterminatedString() {
+        // The whole page went blank behind one character. `b.title=q.asks+'\n\nruns: '` was written
+        // inside a Java text block, where \n is an escape Java consumes -- so the browser received a
+        // real line break inside a quoted string. That is an unterminated literal, which is a
+        // SyntaxError, which means the <script> never runs at all. The board, the sweeps, the rows
+        // and the extension list are every one of them built by that script, so what a person saw
+        // was the single piece of static markup on the page: the extensions dropdown, on its own.
+        //
+        // Nothing failed. Every assertion in this class passed, `api/questions` answered correctly,
+        // and the service reported itself healthy while serving a page that could not run.
+        assertUnbrokenStrings(script(PAGE));
+    }
+
+    @Test
+    @DisplayName("the check itself fails on the newline it was written for")
+    void theCheckWouldHaveCaught() {
+        // A lint that never fires is indistinguishable from one that cannot. This is the exact
+        // text that shipped.
+        assertThrows(AssertionError.class, () -> assertUnbrokenStrings("var t=q.asks+'\n\nruns: '"));
+        assertThrows(AssertionError.class, () -> assertUnbrokenStrings("var t=\"open\n"));
+    }
+
+    /** Just the JavaScript, so the lint does not walk the HTML's own quotes. */
+    private static String script(String page) {
+        int open = page.indexOf("<script>");
+        int close = page.lastIndexOf("</script>");
+        assertTrue(open >= 0 && close > open, "the page has no script");
+        return page.substring(open + "<script>".length(), close);
+    }
+
+    /**
+     * No quoted string may span a line, and none may be left open.
+     *
+     * <p>A tiny scanner rather than a regex, because the thing that has to be got right is
+     * <em>which</em> quotes count: an apostrophe in a comment, a double quote inside the escaping
+     * regex, and a template literal that legitimately spans lines all appear in this page, and all
+     * three defeat counting. Templates are opaque to the next backtick -- there are no nested ones
+     * -- which is enough, and less than a JavaScript parser this repository has no business
+     * carrying.
+     */
+    private static void assertUnbrokenStrings(String js) {
+        final int normal = 0, single = 1, dbl = 2, tpl = 3, line = 4, block = 5, regex = 6;
+        int state = normal;
+        int startedAt = 0;
+        int row = 1;
+        boolean inClass = false;
+        char last = 0;
+        for (int i = 0; i < js.length(); i++) {
+            char c = js.charAt(i);
+            char next = i + 1 < js.length() ? js.charAt(i + 1) : 0;
+            if (c == '\n') {
+                row++;
+            }
+            switch (state) {
+                case normal -> {
+                    if (c == '/' && next == '/') {
+                        state = line;
+                        i++;
+                    } else if (c == '/' && next == '*') {
+                        state = block;
+                        i++;
+                    } else if (c == '/' && "(,=:[!&|?{};".indexOf(last) >= 0) {
+                        state = regex;
+                        inClass = false;
+                    } else if (c == '\'' || c == '"') {
+                        state = c == '\'' ? single : dbl;
+                        startedAt = row;
+                    } else if (c == '`') {
+                        state = tpl;
+                    }
+                }
+                case single, dbl -> {
+                    if (c == '\\') {
+                        i++;
+                    } else if (c == '\n') {
+                        throw new AssertionError("line " + startedAt
+                                + ": a quoted string runs past the end of its line — the browser reads that as"
+                                + " an unterminated literal and refuses the whole script");
+                    } else if (c == (state == single ? '\'' : '"')) {
+                        state = normal;
+                    }
+                }
+                case tpl -> {
+                    if (c == '\\') {
+                        i++;
+                    } else if (c == '`') {
+                        state = normal;
+                    }
+                }
+                case regex -> {
+                    if (c == '\\') {
+                        i++;
+                    } else if (c == '[') {
+                        inClass = true;
+                    } else if (c == ']') {
+                        inClass = false;
+                    } else if (c == '/' && !inClass) {
+                        state = normal;
+                    }
+                }
+                case line -> {
+                    if (c == '\n') {
+                        state = normal;
+                    }
+                }
+                case block -> {
+                    if (c == '*' && next == '/') {
+                        state = normal;
+                        i++;
+                    }
+                }
+                default -> throw new IllegalStateException();
+            }
+            if (!Character.isWhitespace(c)) {
+                last = c;
+            }
+        }
+        assertEquals(0, state, "the script ends inside a string, comment or regex");
     }
 
     @Test

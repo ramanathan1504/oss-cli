@@ -7,6 +7,7 @@
     "backlog": ["--dry-run", "--help", "--no-ai", "--repo", "--version", "-V", "-h", "-r"],
     "backup": ["--help", "--include", "--to", "--version", "-V", "-h"],
     "bench": ["--approve-upstream", "--help", "--name", "--pack", "--version", "-V", "-h"],
+    "bug": ["--help", "--last", "--model", "--print", "--version", "-V", "-h"],
     "chat": ["--continue", "--help", "--repo", "--resume", "--version", "-V", "-c", "-h", "-r"],
     "claude": ["--cli"],
     "codex": ["--cli"],

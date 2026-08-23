@@ -62,6 +62,50 @@ final class Autostart {
         return Files.exists(descriptor());
     }
 
+    /** Whether this machine has a mechanism at all, asked before anything is given up for one. */
+    static boolean supported() {
+        return platform() != Platforms.Platform.UNKNOWN;
+    }
+
+    /** Where the service's own output goes. Named once, because a failure is read from it. */
+    static Path outLog() {
+        return AppPaths.BASE_DIR.resolve("logs").resolve("serve.out.log");
+    }
+
+    static Path errLog() {
+        return AppPaths.BASE_DIR.resolve("logs").resolve("serve.err.log");
+    }
+
+    /**
+     * What makes an installed service start <em>now</em>, rather than at the next login.
+     *
+     * <p>Installing is not starting, and the gap between the two is where saying yes used to stop
+     * working. On Windows the task is registered {@code onlogon} and does not run until one; on
+     * macOS and Linux the service is started at install, but if that first start failed -- and it
+     * did, every time, because the terminal that asked the question still held the port -- the
+     * restart policy waits out its interval before trying again. A minute of nothing is what a
+     * person reads as "it did not work".
+     *
+     * <p>A value rather than a call, for the reason {@link #plistFor} is: two of these three can
+     * never be run on the machine you are on, and something unreadable is something unchecked.
+     */
+    static List<String> startNowCommand() {
+        return switch (platform()) {
+            // kickstart -k, not `launchctl start`: -k restarts it if it is already up and, the part
+            // that matters here, ignores the ThrottleInterval a failed first start just began.
+            case MAC -> List.of("launchctl", "kickstart", "-k", "gui/" + Platforms.uid() + "/" + LABEL);
+            case LINUX -> List.of("systemctl", "--user", "restart", UNIT + ".service");
+            case WINDOWS -> List.of("schtasks", "/run", "/tn", TASK);
+            case UNKNOWN -> List.of();
+        };
+    }
+
+    /** Start it now. Reports whether the platform's own tool said it did. */
+    static boolean startNow() {
+        List<String> cmd = startNowCommand();
+        return !cmd.isEmpty() && Platforms.exec(cmd.toArray(new String[0])) == 0;
+    }
+
     /** The stable name for this program — one lookup, shared with the daily job. */
     static Path launcher() {
         return Platforms.launcher();
@@ -143,8 +187,8 @@ final class Autostart {
      */
     static String install(Path jvm, Path jar, int port) throws IOException {
         Platforms.Platform platform = platform();
-        Path out = AppPaths.BASE_DIR.resolve("logs").resolve("serve.out.log");
-        Path err = AppPaths.BASE_DIR.resolve("logs").resolve("serve.err.log");
+        Path out = outLog();
+        Path err = errLog();
         Files.createDirectories(out.getParent());
 
         List<String> start = startCommand(jvm, jar);

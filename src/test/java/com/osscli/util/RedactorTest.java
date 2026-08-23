@@ -143,4 +143,22 @@ class RedactorTest {
         assertTrue(r.counts().containsKey("github-token"));
         assertTrue(r.summary().contains("aws-access-key"));
     }
+
+    @Test
+    @DisplayName("the two key shapes this program itself asks for")
+    void modelProviderKeys() {
+        // They were missing, and they are the ones a machine running oss is most likely to be
+        // holding: `--key sk-…` reaches a stack trace, and an assistant export pasted into a note
+        // carries them straight into the store.
+        Redactor.Result openai = Redactor.redact("OPENAI_API_KEY=sk-" + "a".repeat(48));
+        assertTrue(openai.counts().containsKey("openai-key"), openai.summary());
+        assertFalse(openai.text().contains("sk-a"), openai.text());
+
+        // Anthropic's prefix begins with OpenAI's, so the longer rule has to be tried first or
+        // every sk-ant- key is labelled as an OpenAI one and the tally lies about what leaked.
+        Redactor.Result anthropic = Redactor.redact("ANTHROPIC_API_KEY=sk-ant-" + "b".repeat(40));
+        assertTrue(anthropic.counts().containsKey("anthropic-key"), anthropic.summary());
+        assertFalse(anthropic.counts().containsKey("openai-key"), anthropic.summary());
+        assertFalse(anthropic.text().contains("sk-ant-b"), anthropic.text());
+    }
 }

@@ -62,6 +62,12 @@ public final class Redactor {
             new Rule("github-token", Pattern.compile("\\b(?:ghp|gho|ghs|github_pat)_[A-Za-z0-9_]{20,}")),
             new Rule("google-api-key", Pattern.compile("\\bAIza[0-9A-Za-z_\\-]{35}\\b")),
             new Rule("slack-token", Pattern.compile("\\bxox[baprs]-[A-Za-z0-9-]{10,}")),
+            // The two shapes this program itself asks for and can be handed on a command line.
+            // They were missing, which mattered in both directions: an assistant export pasted into
+            // a note carries them, and so does the stack of a command someone ran with --key.
+            // Anthropic's prefix begins with OpenAI's, so it is listed first or it never matches.
+            new Rule("anthropic-key", Pattern.compile("\\bsk-ant-[A-Za-z0-9_\\-]{20,}")),
+            new Rule("openai-key", Pattern.compile("\\bsk-[A-Za-z0-9_\\-]{20,}")),
             new Rule(
                     "private-key",
                     Pattern.compile("-----BEGIN [A-Z ]*PRIVATE KEY-----[\\s\\S]*?-----END [A-Z ]*PRIVATE KEY-----")),

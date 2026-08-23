@@ -1,8 +1,8 @@
 # Working offline
 
-**Of 43 commands, eleven can reach the network. Thirty-two never do.**
+**Of 44 commands, twelve can reach the network. Thirty-two never do.**
 
-And of those eleven, only one is part of ordinary use: `sync`. Six fetch one specific
+And of those twelve, only one is part of ordinary use: `sync`. Six fetch one specific
 thing you asked for by number, `model --fetch` downloads once in the life of the
 install, and four are the engine prefixes — `claude`, `gemini`, `codex` and `junie` —
 which reach outward only when the local rung cannot answer. (`run`, `bench`, `memory` and
@@ -33,6 +33,7 @@ are engines you named yourself.
 | `claude <cmd>` | Permission for Anthropic's API to answer, if the local rung cannot. Naming it is not a call. |
 | `gemini <cmd>` | The same, for Google Gemini. |
 | `codex <cmd>` | The same, for OpenAI. |
+| `bug` | Files a fault in oss itself, and only after you have read the whole issue and said yes. Without a token it prints the report instead and names the address to paste it at, so the command still works with the wifi off — it just stops one step short. |
 | `junie <cmd>` | The same, for JetBrains Junie — through its own tool, which brings its own sign-in. There is no endpoint of ours for it, so that tool is the only road. |
 
 The other thirty-two need no network to do their job:

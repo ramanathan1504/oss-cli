@@ -202,6 +202,40 @@ class AutostartAllPlatformsTest {
         assertTrue(cmd.contains("\"C:\\jdk\\bin\\java.exe\" \"-jar\" \"C:\\oss\\oss.jar\""), cmd);
     }
 
+    // ------------------------------------------------------ starting it now ---
+
+    @Test
+    @DisplayName("every platform has a way to start it now, not only at the next login")
+    void startNowPerPlatform() {
+        // Installing is not starting, and the gap is where saying yes stopped working. Windows is
+        // the plainest case -- the task is registered `onlogon` and would not have run until one --
+        // but all three needed it, because the first start races the terminal that is still holding
+        // the port and loses.
+        pretend("Mac OS X");
+        List<String> mac = Autostart.startNowCommand();
+        assertEquals("launchctl", mac.get(0));
+        // kickstart -k, not `launchctl start`: only kickstart overrides the ThrottleInterval that
+        // the failed first start has just begun, and waiting that out is the whole bug.
+        assertTrue(mac.contains("kickstart") && mac.contains("-k"), mac.toString());
+        assertTrue(mac.get(mac.size() - 1).endsWith("/com.osscli.serve"), mac.toString());
+        restoreOs();
+
+        pretend("Linux");
+        assertEquals(List.of("systemctl", "--user", "restart", "oss-serve.service"), Autostart.startNowCommand());
+        restoreOs();
+
+        pretend("Windows 11");
+        assertEquals(List.of("schtasks", "/run", "/tn", "oss serve"), Autostart.startNowCommand());
+        restoreOs();
+
+        pretend("Plan 9");
+        // Nothing to run, and startNow() reports false rather than pretending a machine with no
+        // mechanism was started.
+        assertTrue(Autostart.startNowCommand().isEmpty());
+        assertFalse(Autostart.startNow());
+        assertFalse(Autostart.supported());
+    }
+
     // ------------------------------------------------------- where it lives ---
 
     @Test

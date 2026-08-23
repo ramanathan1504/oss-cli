@@ -165,7 +165,13 @@ public class ServeCommand implements Callable<Integer> {
         if (!noOpen) {
             openBrowser(url);
         }
-        offerAutostart();
+        // Non-null when this process has finished: either it handed the port to the service that
+        // is now running in the background, or it tried to and could not. Both are reasons to stop,
+        // and neither is a reason to park a JVM that is no longer listening.
+        Integer done = offerAutostart(server);
+        if (done != null) {
+            return done;
+        }
         // The HttpServer runs on its own threads; park this one rather than returning, which would
         // exit the JVM and take the server with it.
         Thread.currentThread().join();
@@ -653,14 +659,17 @@ public class ServeCommand implements Callable<Integer> {
      * outlives the terminal they typed into, survives reboots, and is invisible afterwards. So it is
      * offered rather than assumed, and never in a non-interactive run, where "no answer" would
      * otherwise be read as consent.
+     *
+     * @return null to carry on serving in this terminal, or the exit code for a process that has
+     *     handed the port to the background service and has nothing left to do
      */
-    private void offerAutostart() {
+    private Integer offerAutostart(HttpServer server) {
         if (Autostart.isInstalled() || Files.exists(askedMarker())) {
-            return;
+            return null;
         }
         Console console = System.console();
         if (console == null) {
-            return;
+            return null;
         }
         System.out.println();
         System.out.println("  This stops when you close this terminal.");
@@ -674,13 +683,86 @@ public class ServeCommand implements Callable<Integer> {
         } catch (IOException ignored) {
             // Not being able to remember the answer is not a reason to fail the serve.
         }
-        if (yes) {
-            doInstall();
-        } else {
+        if (!yes) {
             System.out.println("  Left as-is. Change your mind later with: oss serve --install");
+            System.out.println();
+            return null;
         }
         System.out.println();
+        return handOver(server) ? 0 : 1;
     }
+
+    /** How long the service gets to take the port before this reports that it did not. */
+    private static final java.time.Duration HANDOVER = java.time.Duration.ofSeconds(20);
+
+    /**
+     * Give the port to the service, and do not claim success until the service has it.
+     *
+     * <p>Saying yes used to install a service that could not start. The order was: keep serving,
+     * write the definition, let the platform launch it -- and the platform launched it into a port
+     * this very process was still holding, so it failed to bind and its restart policy waited out
+     * the throttle. The whole of that was invisible: the terminal said {@code ✓ starts at login},
+     * the page kept working because <em>this</em> process was still answering, and the failure only
+     * showed up as the page being gone for up to a minute after the terminal was closed. Which is
+     * the one moment nobody is looking at a log.
+     *
+     * <p>So the port is released <em>first</em>, and this waits until something is answering on it
+     * again before saying anything about success. If nothing does, that is said plainly: the
+     * definition is installed and the port is free, which is the state the service's own next
+     * restart can recover from -- taking the port back here would guarantee it never could.
+     */
+    private boolean handOver(HttpServer server) {
+        if (!Autostart.supported()) {
+            System.err.println("error  " + Autostart.unsupportedAdvice(port));
+            return false;
+        }
+        String url = "http://localhost:" + port + "/";
+        System.out.println("  handing this port to the background service…");
+        // Zero seconds of grace: the only thing in flight is the board's own first `hub`, and the
+        // service is about to answer it again anyway.
+        server.stop(0);
+        if (!doInstall()) {
+            System.err.println("       nothing is serving now — start it again with:  oss serve");
+            return false;
+        }
+        Autostart.startNow();
+        if (answers(port, HANDOVER)) {
+            System.out.println("  ✓ " + url + " is answering — you can close this terminal");
+            System.out.println("    stop it with: oss serve --uninstall");
+            return true;
+        }
+        System.err.println(
+                "error  installed, but nothing answered on " + url + " within " + HANDOVER.toSeconds() + "s");
+        System.err.println("       what it printed:  " + Autostart.errLog());
+        System.err.println("       serve here instead:  oss serve --uninstall && oss serve");
+        return false;
+    }
+
+    /**
+     * Wait for <em>this</em> service to be the thing on the port.
+     *
+     * <p>A TCP connect would be satisfied by anything that binds, including the half-second in
+     * which a process that is about to fail is still up. The title is what tells one surface of
+     * this tool from another, and it is already how a port conflict is diagnosed.
+     */
+    static boolean answers(int port, java.time.Duration budget) {
+        long deadline = System.nanoTime() + budget.toNanos();
+        do {
+            if (("\"" + TITLE + "\"").equals(whoIsOn(port))) {
+                return true;
+            }
+            try {
+                Thread.sleep(400);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        } while (System.nanoTime() < deadline);
+        return false;
+    }
+
+    /** The page's own title. {@link #titleOf} quotes what it finds, so this is compared quoted. */
+    private static final String TITLE = "oss";
 
     private boolean doInstall() {
         Path jar = jarPath();
@@ -1006,7 +1088,12 @@ public class ServeCommand implements Callable<Integer> {
                     return;
                   }
                   const b=document.createElement('button');
-                  b.className='ask'; b.textContent=q.key; b.title=q.asks+'\n\nruns:  '+q.runs;
+                  // Doubled, because this page is a Java text block: a single \\n is an escape Java
+                  // consumes, so what reached the browser was a real line break inside a quoted
+                  // string -- an unterminated literal, a SyntaxError, and with it the whole script.
+                  // The board, the sweeps and every button are drawn by that script, so the page
+                  // rendered as its one piece of static markup: the extensions dropdown, alone.
+                  b.className='ask'; b.textContent=q.key; b.title=q.asks+'\\n\\nruns:  '+q.runs;
                   b.onclick=()=>ask(q.key,null,out(),ran(),b);
                   (onBoard?board:asks).appendChild(b);
                 });
