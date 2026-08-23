@@ -108,6 +108,10 @@ public final class Journey {
         // Nothing in a journey may reach the network by accident. A test that quietly starts
         // working because the developer happened to be online is worse than one that fails.
         pb.environment().put("GITHUB_API_URL", api);
+        // And nothing in a journey may file an issue against the real repository. `oss bug` is the
+        // only command here that writes anywhere outward, so the destination is pointed somewhere
+        // that does not exist for every journey rather than only the ones that thought to.
+        pb.environment().put("OSS_BUG_REPO", "owner/name");
         pb.environment().remove("GITHUB_TOKEN");
         pb.environment().remove("GH_TOKEN");
         if (token != null) {

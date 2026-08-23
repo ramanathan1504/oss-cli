@@ -169,7 +169,12 @@ public final class Ai {
             m.put(c, Use.ALWAYS);
         }
         // Answers on its own; an engine adds a verdict, a narrative, or steps.
-        for (String c : List.of("review", "onboard", "sync")) {
+        //
+        // `bug` is here rather than under ALWAYS because the report is complete without a model --
+        // the stack, the build and the command are copied verbatim, and a model only writes the
+        // title and the paragraph above them. Classifying it ALWAYS would gate filing a bug on
+        // having a key, which is the mistake `chat` and `guide` each shipped once.
+        for (String c : List.of("bug", "review", "onboard", "sync")) {
             m.put(c, Use.OPTIONAL);
         }
         // Everything else reports, stores, dispatches or measures.

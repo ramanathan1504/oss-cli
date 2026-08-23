@@ -359,6 +359,52 @@ public class GitHubClient {
         return body;
     }
 
+    /**
+     * Open an issue, and return its number.
+     *
+     * <p>The only call in this class that writes, and the only one anywhere in this program that
+     * writes to a repository at all. It is reachable from exactly one place -- {@code oss bug},
+     * after the whole body has been printed and confirmed -- and that is the arrangement the rule
+     * "never act unasked" turns into here: not "no writes", but no write whose text the person did
+     * not read first.
+     *
+     * <p>A 403 is called out by name. Filing needs a token with issue write on the target
+     * repository, and the default read-only token most people have gives exactly that status with a
+     * body nobody can act on.
+     */
+    public long createIssue(String owner, String repo, String title, String body, List<String> labels)
+            throws IOException, InterruptedException {
+        String payload = MAPPER.writeValueAsString(
+                Map.of("title", title, "body", body, "labels", labels == null ? List.of() : labels));
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(apiBase() + "/repos/" + owner + "/" + repo + "/issues"))
+                .header("Accept", "application/vnd.github+json")
+                .header("Authorization", "Bearer " + token)
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .header("Content-Type", "application/json")
+                .timeout(java.time.Duration.ofSeconds(30))
+                .POST(HttpRequest.BodyPublishers.ofString(payload, java.nio.charset.StandardCharsets.UTF_8))
+                .build();
+
+        HttpResponse<String> response;
+        try {
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException e) {
+            throw Reachability.asFailure(e);
+        }
+        if (response.statusCode() == 403 || response.statusCode() == 404) {
+            throw new IOException("GitHub refused the issue (" + response.statusCode()
+                    + "). A token that can file needs issue write on " + owner + "/" + repo + ".");
+        }
+        if (response.statusCode() != 201) {
+            throw new IOException(describeApiFailure(response));
+        }
+        Map<?, ?> created = MAPPER.readValue(response.body(), Map.class);
+        Object number = created.get("number");
+        return number instanceof Number n ? n.longValue() : -1;
+    }
+
     /** Shared GET returning the body, null on 404, and a described failure otherwise. */
     private String get(String url, String accept) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()

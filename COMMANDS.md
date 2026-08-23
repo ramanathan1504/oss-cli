@@ -633,6 +633,34 @@ oss doctor
 
 #### The schema check, and why it can fail
 
+### `bug`
+Files a fault in **oss itself** as a GitHub issue, from the terminal. No browser, no account setup, no template to fill in.
+
+```bash
+oss bug "the board page is blank — only the extensions dropdown shows"
+oss bug --last      # report the last unexpected error, instead of describing one
+oss bug --print     # build the report and stop; post nothing
+```
+
+It exists because the distance between somebody hitting a bug and a maintainer hearing about it was a browser, an account and about four minutes — and almost nobody pays that. The board page shipped dead for a release on exactly that arithmetic.
+
+**Nothing is posted that you have not read.** The whole issue body is printed first — not a summary of it — and only then are you asked. Answering no leaves nothing on the network and nothing on disk but a note you can pick up later with `oss bug --last`.
+
+**What is taken out before you are shown it:**
+
+*   your home directory, and the account name inside it
+*   API keys, in every shape GitHub, Google, OpenAI and Anthropic issue — including whatever an `Authorization` header carried
+*   email addresses
+*   **the name of every repository you follow.** A stack trace from `oss hub` would otherwise publish the list of projects you work on, none of which is the bug. Each becomes `owner/name`.
+
+**No model is required.** If one is reachable it writes the title and a short summary; the stack, the build and the command are copied verbatim either way, because those are the parts a maintainer acts on. The confirmation says which of the two you got.
+
+**No token is required either.** Without one, the report is printed along with the address to paste it at — the same report, one step short.
+
+Before filing, it searches for the same fault already reported. Two people hitting one bug describe it two ways, so the match is on a signature — the command, the exception and the first frame inside oss — carried in the body of the issue rather than on the title.
+
+When a command dies of something unexpected, oss writes the crash down and offers this once. A pulled cable, a timeout and a rejected key are not offered: those are oss working correctly against a world that is not, and asking about them would teach you to say no to the question that mattered.
+
 ### `serve`
 Runs the local page on `http://localhost:1504`: the board, the questions you can ask, and a palette of whatever extensions are attached.
 

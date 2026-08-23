@@ -219,6 +219,28 @@ escape sequences: `grep -c` counts *lines*, so a colour test that pipes through
 CI asserts the exit codes now, on all four platforms, so this is checked rather
 than remembered.
 
+**A Java text block eats the escapes you meant for the browser.** `serve`'s page is
+one 280-line text block, and `b.title=q.asks+'\n\nruns: '` inside it does not send
+`\n` to the browser -- Java consumes the escape and emits a real line break, inside a
+quoted JavaScript string. That is an unterminated literal, which is a SyntaxError,
+which means the `<script>` never runs. The board, the sweeps, the rows and the
+extension list are every one of them drawn by that script, so the page rendered as its
+one piece of static markup: the extensions dropdown, alone, for a release. Six tests
+asserted on the page's content and all six passed, because the string they searched
+for was there -- it just could not execute. `BoardPageTest.scriptHasNoUnterminatedString`
+scans the served script for a quote that outlives its line. Write `\\n`.
+
+**Installing a service is not starting one, and the port is why.** `serve` offered
+"keep it running", wrote the launchd plist, and kept listening -- so the agent it had
+just installed could not bind, exited 1, and sat out its 60-second `ThrottleInterval`.
+All of that was invisible: the terminal printed a tick, and the page kept working
+because *this* process was still answering it. The failure surfaced a minute later as
+the page being gone right after the terminal closed, which reads as "the install did
+nothing". The port is released **first** now, and nothing is claimed until something
+answers on it again -- checked by page title, not by TCP connect, because `oss run hub`
+defaults to the same port and a connect cannot tell the two apart.
+
+
 **Vectors from different models are never comparable.** Every vector is stored
 with the model that produced it and every read filters on it. All models used
 here emit 384 dimensions, so nothing catches a mix by shape — it produces
@@ -234,6 +256,7 @@ storage/     SQLite and the migration chain
 llm/         Ollama and cloud clients — generation only, never embedding
 ui/          Live: the status line for anything slower than a second
              Picker: the keyboard list, with a numbered fallback that always works
+bug/         `oss bug`: the only outward write there is, and the redaction before it
 ext/         extensions, attached by path
 runner/      the matrix engine; a pack supplies what to run
 ```
@@ -258,7 +281,11 @@ Failures must be loud. A warning that scrolls past inside a command which then
 prints success is worse than no warning. Refuse, or report honestly.
 
 Prefer one implementation over two. Two embedders, two reference parsers and two
-copies of a web page have each caused a real bug here.
+copies of a web page have each caused a real bug here. `com.osscli.bug.Publishable`
+was nearly a fourth: it grew its own credential patterns before anyone noticed
+`com.osscli.util.Redactor` already had more of them. It calls that instead, and adds
+only what is specific to going outward -- the home path, the account name, and the
+repositories somebody follows.
 
 ## Before you finish
 

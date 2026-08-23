@@ -696,7 +696,7 @@ td .need,td.need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)
     <ul class="hero-facts">
       <li><strong>A GitHub token is the only requirement.</strong> Everything else is a layer you add when you want it.</li>
       <li><strong>Nothing leaves the machine</strong> unless you attach a cloud key and ask it to.</li>
-      <li><strong>Sync once, then the network is optional</strong> — 32 of the 43 commands never need it.</li>
+      <li><strong>Sync once, then the network is optional</strong> — 32 of the 44 commands never need it.</li>
       <li><strong>Ollama, a Claude key, or the CLI you already sign in to</strong> — the name goes in front of the command, and none of them is required.</li>
     </ul>
 
@@ -973,8 +973,8 @@ oss junie triage 4129</pre>
           <span class="cable-label">Pull the cable</span>
         </button>
         <p class="cable-read">
-          <span class="cable-num" id="cable-num">43</span>
-          <span class="cable-of">of 43 commands still work</span>
+          <span class="cable-num" id="cable-num">44</span>
+          <span class="cable-of">of 44 commands still work</span>
         </p>
       </div>
 
@@ -1022,13 +1022,16 @@ oss junie triage 4129</pre>
         <li class="cmd net" style="--i:40" title="pulls one issue you have not synced">issue</li>
         <li class="cmd" style="--i:41" title="the same command as run">bench</li>
         <li class="cmd" style="--i:42" title="the same command as memory">kb</li>
+        <li class="cmd net" style="--i:43" title="files a fault in oss itself — after you have read the whole issue and said yes">bug</li>
       </ul>
 
       <p class="offline-note" id="cable-note">
-        Connected, all forty-three answer. <strong>Pull the cable</strong> and eleven go
+        Connected, all forty-four answer. <strong>Pull the cable</strong> and twelve go
         dark — six fetch something you asked for by number or by list, the four cloud
-        engines call their providers, and <code>model</code> downloads the embedder
-        once in the life of the install.
+        engines call their providers, <code>model</code> downloads the embedder
+        once in the life of the install, and <code>bug</code> files a fault in oss itself.
+        <code>bug</code> is the only one of the twelve that <em>writes</em> anywhere, and it
+        writes nothing until it has printed the whole issue — redacted — and you have said yes.
         The other thirty-two never needed it: <code>doctor</code> pings and reports rather
         than depends, <code>llm</code> talks to a daemon on this machine, <code>serve</code>
         binds to localhost over the corpus already on disk,
