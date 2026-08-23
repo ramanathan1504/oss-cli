@@ -174,6 +174,16 @@ if [ -n "$(git status --porcelain)" ]; then
     exit 1
 fi
 
+# The documentation site is a second repository and does not follow this one. It is
+# checked here rather than hoped for: publishing a release whose site still teaches
+# the previous surface is how somebody arrives at ubuos.com and is taught a command
+# that no longer appears in --help.
+#
+# Reported, never fatal. A network hiccup must not stop a release, and the site is
+# not this repository's to fix in the middle of one.
+echo "→ Checking the documentation site still describes this build..."
+tools/check-site.sh || true
+
 echo "→ main is protected: sending the release commit through a pull request..."
 git push -u origin "$RELEASE_BRANCH"
 gh pr create --title "Release v$VERSION" \

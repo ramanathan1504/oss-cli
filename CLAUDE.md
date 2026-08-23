@@ -46,7 +46,20 @@ setting it from outside redirects nothing at all. A test once "redirected" itsel
 with the property and deleted a real 496 MB database. If code must not touch the
 real store, assert where it is pointing and refuse — do not trust configuration.
 
-**The deployed website is `site/` in this repository.** `ubuos.com` links to a
+**There are TWO sites, and only one of them lives here.** `site/index.html` is the
+landing page, folded into ubuos.com by the ubuos-site repository's Deploy
+workflow. The *documentation* site — ubuos.com/docs — is a separate Astro
+project in `ramanathan1504/ubuos-site` under `docs/`, and **nothing here updates
+it**. Add or hide a command and that site keeps teaching the old surface until
+somebody changes it by hand: on 2026-08-23 it was still teaching `oss chat` as
+the way to hold a conversation, three releases after `oss ask` replaced it.
+
+`tools/check-site.sh` fetches the live pages and names any shown command they do
+not mention. `release.sh` runs it before the release pull request is opened —
+reported, never fatal, because a network hiccup must not stop a release and the
+other repository is not this one's to fix mid-release.
+
+**The deployed landing page is `site/` in this repository.** `ubuos.com` links to a
 Cloudflare Pages project published from here by the `deploy-site` job. A copy of
 the same page exists in the ubuos-site repository and is served by nothing. Edit
 the one here.
