@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.0.2
+
+_2026-08-23_
+
+- Routine bumps: jackson-databind 2.22.2, spotless 3.10.0 (#185)
+- Exit codes are half the interface and nothing checked them (#184)
+
+
 ## 4.0.1
 
 _2026-08-23_
