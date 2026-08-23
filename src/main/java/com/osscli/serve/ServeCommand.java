@@ -249,7 +249,71 @@ public class ServeCommand implements Callable<Integer> {
                 return;
             }
             String markdown = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            send(x, 200, "text/html; charset=utf-8", docPage(wanted, Markdown.toHtml(markdown)));
+            send(x, 200, "text/html; charset=utf-8", docPage(wanted, onThisMachine() + Markdown.toHtml(markdown)));
+        }
+    }
+
+    /**
+     * What the documents mean on this particular machine.
+     *
+     * <p>The files themselves ship generic and stay that way — they say {@code owner/name} because
+     * a worked example naming somebody's project reads as "this tool is for that project", which is
+     * this repository's oldest rule. But a reader looking at {@code owner/name} still has to
+     * translate it, and the machine already knows what it would be for them.
+     *
+     * <p>So the substitution happens here, at render time, from their own store: the same document
+     * says something different to each reader without a personal word ever being written into it.
+     * Nothing is shown when nothing is synced, because a panel of zeroes teaches nobody anything.
+     */
+    private static String onThisMachine() {
+        java.util.List<String> repos;
+        try {
+            repos = com.osscli.storage.SqliteStorage.loadMonitoredRepositories();
+        } catch (Exception e) {
+            return "";
+        }
+        if (repos.isEmpty()) {
+            return "<div class=\"mine\"><strong>Nothing synced yet.</strong> Where these pages say "
+                    + "<code>owner/name</code>, that will be whatever you add: "
+                    + "<code>oss sync --add owner/name</code>.</div>";
+        }
+        StringBuilder b = new StringBuilder("<div class=\"mine\"><strong>On this machine</strong> — where these "
+                + "pages say <code>owner/name</code>, yours are: ");
+        for (int i = 0; i < Math.min(3, repos.size()); i++) {
+            b.append(i > 0 ? ", " : "").append("<code>").append(repos.get(i)).append("</code>");
+        }
+        if (repos.size() > 3) {
+            b.append(" and ").append(repos.size() - 3).append(" more");
+        }
+        b.append(". ").append(counts()).append("</div>");
+        return b.toString();
+    }
+
+    /** The reader's own numbers, so the pages describe their corpus rather than an imagined one. */
+    private static String counts() {
+        StringBuilder b = new StringBuilder();
+        long issues = one("SELECT count(*) FROM issues;");
+        long notes = one("SELECT count(*) FROM personal_chat_memory;");
+        long asked = one("SELECT count(*) FROM chat_turn;");
+        if (issues > 0) {
+            b.append(issues).append(" issues");
+        }
+        if (notes > 0) {
+            b.append(b.length() > 0 ? " · " : "").append(notes).append(" notes");
+        }
+        if (asked > 0) {
+            b.append(b.length() > 0 ? " · " : "").append(asked).append(" questions asked here");
+        }
+        return b.toString();
+    }
+
+    private static long one(String sql) {
+        try (java.sql.Connection conn = com.osscli.storage.DatabaseManager.getConnection();
+                java.sql.PreparedStatement ps = conn.prepareStatement(sql);
+                java.sql.ResultSet rs = ps.executeQuery()) {
+            return rs.next() ? rs.getLong(1) : 0;
+        } catch (Exception e) {
+            return 0;
         }
     }
 
@@ -288,6 +352,8 @@ public class ServeCommand implements Callable<Integer> {
                 + "th,td{border-bottom:1px solid var(--rule);padding:.5rem .7rem;text-align:left;vertical-align:top}"
                 + "th{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--soft)}"
                 + "hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}a{color:var(--acc)}"
+                + ".mine{background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--acc);"
+                + "border-radius:3px;padding:.7rem .9rem;margin:0 0 1.5rem;font-size:.9rem}"
                 + "</style></head><body><div class=\"w\"><nav><a href=\"/\">← board</a>" + docLinks()
                 + "</nav>" + body + "</div></body></html>";
     }
