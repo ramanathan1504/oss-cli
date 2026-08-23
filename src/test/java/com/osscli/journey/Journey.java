@@ -80,7 +80,16 @@ public final class Journey {
         return run(home, cwd, "ghp_notarealtokenusedonlyintests", argv);
     }
 
+    /** The same, against a GitHub that answers -- see {@link FakeGitHub}. */
+    public static Ran ossAgainst(FakeGitHub github, Path home, Path cwd, String... argv) throws Exception {
+        return run(home, cwd, "ghp_notarealtokenusedonlyintests", github.url(), argv);
+    }
+
     private static Ran run(Path home, Path cwd, String token, String... argv) throws Exception {
+        return run(home, cwd, token, "http://127.0.0.1:1", argv);
+    }
+
+    private static Ran run(Path home, Path cwd, String token, String api, String... argv) throws Exception {
         String where = home.toAbsolutePath().toString();
         if (where.startsWith(System.getProperty("user.home") + "/.oss-cli")) {
             throw new IllegalStateException("refusing to run a journey against the real store: " + where);
@@ -98,7 +107,7 @@ public final class Journey {
         pb.environment().put("OSS_CLI_HOME", where);
         // Nothing in a journey may reach the network by accident. A test that quietly starts
         // working because the developer happened to be online is worse than one that fails.
-        pb.environment().put("GITHUB_API_URL", "http://127.0.0.1:1");
+        pb.environment().put("GITHUB_API_URL", api);
         pb.environment().remove("GITHUB_TOKEN");
         pb.environment().remove("GH_TOKEN");
         if (token != null) {
