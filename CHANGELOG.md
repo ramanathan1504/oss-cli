@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.0.0
+
+_2026-08-23_
+
+- The example pack's cache got committed by its own tests (#180)
+- The engine did not know what it was walking, except for the six places it did (#179)
+- The offline agent refused instead of answering, and 783 tests were happy (#178)
+- The first thing on the page replayed the command --help stopped printing (#177)
+- Naming somebody else's project in a commit message publishes it too (#176)
+- The site check reported a page that documents the command it said was missing (#175)
+- The landing page still opened with the product from three releases ago (#174)
+- The other site does not follow this one, so stop hoping somebody remembers (#173)
+
+
 ## 3.3.0
 
 _2026-08-23_
