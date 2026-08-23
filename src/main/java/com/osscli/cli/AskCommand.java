@@ -253,6 +253,51 @@ public class AskCommand implements Callable<Integer> {
     }
 
     /**
+     * Past questions and their answers, added to the same index.
+     *
+     * <p>Paired, so a hit returns the exchange rather than half of it: a question on its own says
+     * what was wondered and never what was found, which is the half worth keeping.
+     */
+    private static int conversations(com.osscli.retrieval.TextIndex into) {
+        int added = 0;
+        String sql = "SELECT session_id, seq, role, content FROM chat_turn ORDER BY session_id, seq;";
+        try (java.sql.Connection conn = com.osscli.storage.DatabaseManager.getConnection();
+                java.sql.PreparedStatement ps = conn.prepareStatement(sql);
+                java.sql.ResultSet rs = ps.executeQuery()) {
+            String pendingQuestion = null;
+            long pendingSession = 0;
+            while (rs.next()) {
+                String role = rs.getString("role");
+                String content = rs.getString("content");
+                if (content == null || content.isBlank()) {
+                    continue;
+                }
+                if ("you".equalsIgnoreCase(role)) {
+                    pendingQuestion = content;
+                    pendingSession = rs.getLong("session_id");
+                    continue;
+                }
+                if (pendingQuestion == null) {
+                    continue;
+                }
+                String id = "asked:" + pendingSession + "#" + rs.getInt("seq");
+                into.add(id, pendingQuestion, pendingQuestion + " " + content);
+                excerpts.put(id, "you asked: " + oneLine(pendingQuestion) + " → " + excerpt(content));
+                pendingQuestion = null;
+                added++;
+            }
+        } catch (Exception ignored) {
+            // A store without conversations still answers from notes and issues.
+        }
+        return added;
+    }
+
+    private static String oneLine(String text) {
+        String flat = text.replaceAll("\\s+", " ").strip();
+        return flat.length() > 90 ? flat.substring(0, 89) + "…" : flat;
+    }
+
+    /**
      * The readable part of a note chunk.
      *
      * <p>Front matter first: harvested notes open with tags, a source path and a date, and a
@@ -500,6 +545,12 @@ public class AskCommand implements Callable<Integer> {
                 // wrote afterwards. Indexing only the issues meant the corpus could answer "who
                 // else hit this" and never "what did I do about it".
                 count += notes(built);
+
+                // And every question already asked, with the answer it got. These were durable but
+                // invisible: chat and ask both write chat_turn, and nothing ever searched it -- so
+                // the one place that knows "I asked this last week and here is what we concluded"
+                // was the one place the loop could not reach.
+                count += conversations(built);
 
                 built.build();
                 indexed = count;
