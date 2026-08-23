@@ -1349,6 +1349,28 @@ oss review 4234 -r owner/name</pre>
       tells no model anything, and says so.
     </p>
 
+    <h2>One command that asks, and skills you can edit</h2>
+    <p class="sub">
+      <code>oss ask</code> reads files, searches everything this machine has
+      indexed, runs your project's own build, and can propose an edit shown as a
+      diff and confirmed by you. Give it no question and it opens a conversation;
+      <code>--resume</code> picks the last one up. Five commands used to need a
+      model — <code>chat</code>, <code>guide</code> and <code>prompt</code> are
+      covered by this one now, and still work unchanged.
+    </p>
+    <p class="sub">
+      Every question starts with what you already worked out: your notes, your
+      synced issues, and every question asked here with the answer it got. The
+      instruction is explicit — <em>if one of these already solved it, point at it
+      before proposing anything new.</em>
+    </p>
+    <p class="sub">
+      How it works is four markdown files, not a prompt buried in Java.
+      <code>oss skill</code> lists them, and a file of yours in
+      <code>~/.oss-cli/skills</code> with the same name replaces one of ours
+      entirely — the same takeover an attached runner has over the built-in one.
+    </p>
+
     <h2>Packs, and the support packs under them</h2>
     <p class="sub">
       A pack is a subject; a support pack is something attached to it. Every
