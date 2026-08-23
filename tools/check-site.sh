@@ -91,9 +91,20 @@ if [[ "$LOCAL_ONLY" == 0 ]]; then
   if [[ -z "$SITE" ]]; then
     echo "  docs check skipped — ubuos.com did not answer" >&2
   else
+    # What comes back is RENDERED HTML, so there are no backticks in it at all --
+    # the original pattern looked for a markdown form that cannot appear in the
+    # thing being searched, and `>triage<` missed the same page because the cell
+    # reads `<code>triage &lt;n&gt;</code>`. So `triage` was reported missing from
+    # a page that documents it in a table. A check that reports a correct page is
+    # a check that gets ignored, which is worse than not having one.
+    #
+    # Two forms, both anchored: the command written out after `oss`, or the name
+    # opening a <code> element. Deliberately not a bare word match -- "run" and
+    # "search" appear in ordinary prose on every page, and matching those would
+    # make the check pass whatever the site said.
     missing=""
     for cmd in $SHOWN; do
-      grep -qi "oss $cmd\|\`$cmd\`\|>$cmd<" <<<"$SITE" || missing="$missing $cmd"
+      grep -qiE "oss $cmd([^a-z]|$)|<code[^>]*>$cmd([^a-z]|$)" <<<"$SITE" || missing="$missing $cmd"
     done
     if [[ -z "$missing" ]]; then
       echo "  ubuos.com/docs names every shown command."

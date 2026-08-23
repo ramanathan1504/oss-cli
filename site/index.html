@@ -1942,7 +1942,7 @@ oss review 4234 -r owner/name</pre>
         'the eviction sweep, so above the point where the sweep overlaps a',
         'borrow they can wait on each other.',
         '',
-        '<span class="c">(still open — oss chat --resume 7)</span>',
+        '<span class="c">(still open — oss ask --resume)</span>',
         ''
       ]);
       return;
@@ -1983,7 +1983,7 @@ oss review 4234 -r owner/name</pre>
       '  <span class="c">↑↓ or j/k move   enter open   q cancel</span>',
       '',
       '<span class="c">  Without a terminal — cron, CI, a pipe, Windows — the same list is</span>',
-      '<span class="c">  numbered instead, and </span><span class="sp">oss chat --resume 7</span><span class="c"> needs no list at all.</span>',
+      '<span class="c">  numbered instead, and </span><span class="sp">oss ask --resume</span><span class="c"> needs no list at all.</span>',
       ''
     ]);
   }
@@ -2049,13 +2049,14 @@ oss review 4234 -r owner/name</pre>
       '  <span class="sp">oss sync --all</span>                 <span class="c">pull issues and PRs, then update the index</span>',
       '  <span class="sp">oss prompt &lt;n&gt;</span>                 <span class="c">answer locally, or build an expert prompt</span>',
       '  <span class="sp">oss review &lt;n&gt;</span>                 <span class="c">review a pull request with what you have</span>',
-      '  <span class="sp">oss chat &lt;n&gt;</span>                   <span class="c">talk it through — saved as you go</span>',
+      '  <span class="sp">oss ask</span>                        <span class="c">ask anything — it looks before it answers</span>',
+      '  <span class="sp">oss ask --issue &lt;n&gt;</span>            <span class="c">about one issue, with what is already known</span>',
       '  <span class="sp">oss history</span>                    <span class="c">every conversation, and the way back into one</span>',
-      '  <span class="sp">oss chat --resume &lt;id&gt;</span>         <span class="c">carry on where you stopped</span>',
+      '  <span class="sp">oss ask --resume</span>               <span class="c">carry on where you stopped</span>',
       '  <span class="sp">help</span>  <span class="sp">clear</span>                   <span class="c">this, and a fresh screen</span>',
       '',
       '  <span class="c">↑ ↓ walk your history · Tab completes a command · Esc leaves the terminal</span>',
-      '  <span class="c">The real thing has more: profile, onboard, triage, duplicates, pick, serve.</span>',
+      '  <span class="c">The real thing has more: skill, triage, profile, onboard, duplicates, pick, serve.</span>',
       ''
     ]);
   }
@@ -2076,6 +2077,7 @@ oss review 4234 -r owner/name</pre>
     'oss doctor', 'oss search ', 'oss model', 'oss model --fetch',
     'oss sync --all', 'oss prompt ', 'oss review ', 'oss --help',
     'oss history', 'oss history --list', 'oss history --search ',
+    'oss ask', 'oss ask --issue ', 'oss ask --resume',
     'oss chat ', 'oss chat --resume', 'oss chat --continue'
   ];
 
