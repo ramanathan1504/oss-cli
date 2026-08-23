@@ -181,6 +181,25 @@ mean "there is already one"; without that a minimal pack printed five
 error**: `0 pass, 0 fail, 0 skip` with exit 0 is the shape of a clean sweep, and
 it is what every pack but one used to get.
 
+**A step that passes is not a journey that works.** `oss run init` passed its
+test, `oss run list` passed its test, `PackFile` passed its tests, and the three
+in a row did not work: the declarative pack format had no field for a main class,
+so the documented path from an empty directory to a running application had no
+end. Nothing failed. The step *between* the steps had no owner.
+
+`src/test/java/com/osscli/journey/` types what a person types, in order, and
+asserts on what they see -- extensions, memory, the offline promise -- and
+`PackJourneyTest` does the same for packs. Add one whenever a capability is
+reached through more than one command.
+
+Two rules they exist under. **Run the compiled classes, never the packaged jar**:
+the first journey test shelled out to `target/oss-cli-*.jar`, which only exists
+after `package`, so during `mvn verify` it found no jar, assumed itself away and
+reported as SKIPPED -- a test written because an untested step was broken, itself
+not running. The test JVM's own classpath already has `target/classes` and every
+dependency. And **`OSS_CLI_HOME` is asserted before anything is written**, for the
+reason the next trap gives.
+
 **Never read `$?` through a pipe.** `oss run list | head; echo $?` reports
 *head's* status. This has produced a wrong answer twice — once concluding a
 working command was broken, once concluding a broken one was fine — and both
