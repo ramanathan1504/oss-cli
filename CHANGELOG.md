@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.3.0
+
+_2026-08-23_
+
+- The same page, saying something different to each reader (#171)
+- Fourteen seconds before the question, and one project's name in everybody's migration (#170)
+
+
 ## 3.2.0
 
 _2026-08-23_
