@@ -105,6 +105,34 @@ public final class Loop {
         return this;
     }
 
+    /**
+     * What this machine already knows about the question, put in front of the model unasked.
+     *
+     * <p>{@code recall} exists and the model may call it — but <em>may</em> is the problem. A model
+     * that does not think to look answers from nothing, and the whole reason this loop lives inside
+     * oss rather than beside it is that the answer to "have I already solved this" is on the same
+     * disk. Asked about a Kafka appender that will not start, the useful reply begins <em>"you
+     * fixed this last time by changing this in the config — try that first"</em>, and it cannot
+     * begin that way if the corpus was never opened.
+     *
+     * <p>So every question starts with what a search for it returns. The tool stays, for the
+     * follow-up searches only the model knows it needs.
+     */
+    private java.util.function.Function<String, String> memory = question -> "";
+
+    public Loop remembering(java.util.function.Function<String, String> memory) {
+        this.memory = memory == null ? question -> "" : memory;
+        return this;
+    }
+
+    /** How the reader writes, so an answer sounds like them rather than like a manual. */
+    private String voice = "";
+
+    public Loop inTheVoice(String voice) {
+        this.voice = voice == null ? "" : voice;
+        return this;
+    }
+
     /** What happened, in order, and the answer if there was one. */
     public record Transcript(String answer, List<String> steps, boolean ranOut, boolean couldNotFollow) {
 
@@ -275,6 +303,27 @@ public final class Loop {
         }
         b.append("When you can answer, reply in prose with no block at all.\n\n");
         b.append("Question: ").append(question).append('\n');
+
+        // Before the model decides anything, what this machine already holds. Failures swallow to
+        // an empty block: an unreadable corpus should cost the answer some depth, never the answer.
+        String known;
+        try {
+            known = memory.apply(question);
+        } catch (RuntimeException e) {
+            known = "";
+        }
+        if (known != null && !known.isBlank()) {
+            b.append("\nWhat this machine already holds about this:\n");
+            b.append(known.strip()).append('\n');
+            // The order matters and is stated, because the reverse is what a model does by default:
+            // answer from its own knowledge and mention the user's history as a footnote, if at all.
+            b.append("\nIf one of these already solved it, say so and point at it by number before\n");
+            b.append("proposing anything new. Only when none of them applies should you answer from\n");
+            b.append("scratch — and say that is what you are doing.\n");
+        }
+        if (!voice.isBlank()) {
+            b.append('\n').append(voice.strip()).append('\n');
+        }
         if (!conversation.isBlank()) {
             b.append("\nWhat you have done so far:\n").append(conversation);
         }
