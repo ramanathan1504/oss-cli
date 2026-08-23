@@ -181,6 +181,17 @@ mean "there is already one"; without that a minimal pack printed five
 error**: `0 pass, 0 fail, 0 skip` with exit 0 is the shape of a clean sweep, and
 it is what every pack but one used to get.
 
+**Never read `$?` through a pipe.** `oss run list | head; echo $?` reports
+*head's* status. This has produced a wrong answer twice — once concluding a
+working command was broken, once concluding a broken one was fine — and both
+times the mistake was in the measurement, not the code. Run the command bare,
+redirect both streams, then read the status. The same applies to grepping for
+escape sequences: `grep -c` counts *lines*, so a colour test that pipes through
+`head -1` first can report zero on output that is full of them. `od -c` settles it.
+
+CI asserts the exit codes now, on all four platforms, so this is checked rather
+than remembered.
+
 **Vectors from different models are never comparable.** Every vector is stored
 with the model that produced it and every read filters on it. All models used
 here emit 384 dimensions, so nothing catches a mix by shape — it produces

@@ -103,7 +103,41 @@ jobs:
             }
           done
 
-          echo "All commands reachable and loadable."
+          # Exit codes, on every platform.
+          #
+          # These are the half of the interface a script reads, and nothing
+          # checked them. They were verified by hand twice today and got the
+          # WRONG answer both times, because `oss ... | head; echo $?` reports
+          # head's status, not oss's -- so a passing command read as failing and
+          # a failing one read as passing. A person cannot reliably measure this
+          # at a terminal; a runner can.
+          #
+          # Windows is the reason this runs on the matrix rather than once. An
+          # earlier release shipped a command that exited 0 on failure there and
+          # non-zero everywhere else, and nobody noticed until a pipeline did.
+          code() { "$@" >/dev/null 2>&1; echo $?; }
+
+          for cmd in "--version" "--help" "doctor" "skill" "ext list" "memory"; do
+            # shellcheck disable=SC2086
+            got=$(code java -jar "$JAR" $cmd)
+            [ "$got" = "0" ] || {
+              echo "::error::'oss $cmd' succeeded but exited $got; a script would treat that as failure"
+              exit 1
+            }
+          done
+
+          # A command that did not do what was asked must say so in the status,
+          # whether it refused, could not parse, or was never a command.
+          for cmd in "nosuchcommand" "ask --nosuchflag x" "review" "pr" "triage" "skill show nosuchskill"; do
+            # shellcheck disable=SC2086
+            got=$(code java -jar "$JAR" $cmd)
+            [ "$got" != "0" ] || {
+              echo "::error::'oss $cmd' failed but exited 0; a script would treat that as success"
+              exit 1
+            }
+          done
+
+          echo "All commands reachable, loadable, and honest about their status."
 
       # The landing page is the first thing anybody reads about oss, and ubuos.com
       # serves this exact file. It kept building perfectly while claiming 43
