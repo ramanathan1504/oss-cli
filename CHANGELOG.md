@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.0.1
+
+_2026-08-23_
+
+- The docs on localhost still taught the front door we stopped printing (#182)
+
+
 ## 4.0.0
 
 _2026-08-23_
