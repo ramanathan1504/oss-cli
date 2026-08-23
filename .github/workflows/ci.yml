@@ -75,7 +75,7 @@ jobs:
           java -jar "$JAR" --version
 
           # The everyday dozen must be reachable from the root command.
-          for cmd in sync review search chat triage hub pr doctor ext serve; do
+          for cmd in sync review search ask triage hub pr doctor ext serve; do
             grep -q "^  $cmd" help.txt || {
               echo "::error::'$cmd' is missing from --help; the subcommand is not wired up"
               cat help.txt
@@ -87,7 +87,7 @@ jobs:
           # decision; this is what keeps it from quietly becoming a removal, which is the
           # failure this whole smoke test exists to catch one release earlier than a user does.
           java -jar "$JAR" --help-all > all.txt
-          for cmd in profile onboard prompt backup restore history followup backlog critical; do
+          for cmd in profile onboard prompt backup restore history followup backlog critical chat guide; do
             grep -q "^  $cmd" all.txt || {
               echo "::error::'$cmd' is gone, not hidden — --help-all does not list it"
               cat all.txt

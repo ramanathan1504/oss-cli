@@ -52,8 +52,10 @@ import picocli.CommandLine.Parameters;
  */
 @Command(
         name = "chat",
+        hidden = true,
         mixinStandardHelpOptions = true,
-        description = "Talk through an issue. Conversations are saved as you go and can be resumed.")
+        description =
+                "Talk through an issue. Conversations are saved as you go and can be resumed.  ·  now covered by: oss ask --issue <n>  (or oss ask, for a conversation)")
 public class ChatCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(ChatCommand.class);

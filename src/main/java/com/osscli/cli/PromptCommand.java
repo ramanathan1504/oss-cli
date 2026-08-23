@@ -46,7 +46,7 @@ public class PromptCommand implements Callable<Integer> {
     private static final Logger LOGGER = LogManager.getLogger(PromptCommand.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    @Parameters(index = "0", description = "The issue number to investigate")
+    @Parameters(index = "0", description = "The issue number to investigate  ·  now covered by: oss ask")
     private long issueNumber;
 
     @Option(
