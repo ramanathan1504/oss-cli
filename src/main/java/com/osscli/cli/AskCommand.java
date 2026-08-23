@@ -72,6 +72,14 @@ public class AskCommand implements Callable<Integer> {
     @Option(names = "--resume", description = "Continue the last ask in this directory")
     private boolean resume;
 
+    @Option(names = "--issue", description = "Ask about one issue, with everything already known about it")
+    private Long issue;
+
+    @Option(
+            names = {"-r", "--repo"},
+            description = "With --issue: which repository, as owner/name")
+    private String repository;
+
     @Override
     public Integer call() {
         boolean conversation = question == null || question.isEmpty();
@@ -154,7 +162,7 @@ public class AskCommand implements Callable<Integer> {
                 // The corpus in front of every question, and the reader's own measured voice with
                 // it. Both are decorations that must never cost the answer: each is a function that
                 // returns an empty string when it cannot do its job.
-                .remembering(AskCommand::searchThisMachine)
+                .remembering(this::whatIsKnown)
                 .inTheVoice(voiceOfThisMachine())
                 .withSkills(com.osscli.agent.Skills::forQuestion);
         StringBuilder carried = new StringBuilder(earlier == null ? "" : earlier);
@@ -324,6 +332,38 @@ public class AskCommand implements Callable<Integer> {
         }
         String out = b.toString().strip();
         return out.length() > 300 ? out.substring(0, 299) + "…" : out;
+    }
+
+    /**
+     * What this machine holds about the question — and about the issue, when one was named.
+     *
+     * <p>{@code --issue} is what makes one asking command enough. {@code chat} and {@code guide}
+     * are about an issue and go through {@link com.osscli.retrieval.MemoryContext}, which ranks
+     * past work against it and says how much of what matched actually fitted. Calling the same
+     * function rather than writing a second one is what makes this a consolidation instead of a
+     * fourth thing that nearly does the same job.
+     */
+    private String whatIsKnown(String question) {
+        String corpus = searchThisMachine(question);
+        if (issue == null) {
+            return corpus;
+        }
+        String repo = repository;
+        if (repo == null || repo.isBlank()) {
+            try {
+                repo = com.osscli.storage.SqliteStorage.loadConfig("default.repository");
+            } catch (Exception e) {
+                repo = null;
+            }
+        }
+        if (repo == null || repo.isBlank()) {
+            // Named rather than guessed. Picking a repository for somebody who asked about issue
+            // 4249 is how an answer ends up being about a different project's 4249.
+            return corpus + "\n(--issue " + issue + " was given with no repository, and none is configured:"
+                    + " add -r owner/name)";
+        }
+        String aboutTheIssue = com.osscli.retrieval.MemoryContext.forIssue(issue, repo);
+        return aboutTheIssue.isBlank() ? corpus : aboutTheIssue + "\n" + corpus;
     }
 
     /** How the reader writes, when enough of their writing exists to have measured it. */

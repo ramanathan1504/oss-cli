@@ -36,7 +36,8 @@ import picocli.CommandLine.Parameters;
         name = "guide",
         hidden = true,
         mixinStandardHelpOptions = true,
-        description = "Generate a personalized resolution blueprint using local memory and Omni-Cloud escalation")
+        description =
+                "Generate a personalized resolution blueprint using local memory and Omni-Cloud escalation  ·  now covered by: oss ask --issue <n>")
 public class GuideCommand implements Callable<Integer> {
 
     private static final Logger LOGGER = LogManager.getLogger(GuideCommand.class);

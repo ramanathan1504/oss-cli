@@ -69,7 +69,9 @@ class EndToEndCommandTest {
         Cli.Result r = Cli.run("--help");
 
         assertTrue(r.ok(), "--help should exit 0, got " + r.exitCode());
-        for (String expected : new String[] {"sync", "review", "search", "chat", "doctor", "hub", "triage"}) {
+        // `ask` rather than `chat`: one command that asks is the whole point of the consolidation,
+        // and chat is now one of the four hidden ones that still work and say where they went.
+        for (String expected : new String[] {"sync", "review", "search", "ask", "doctor", "hub", "triage"}) {
             assertTrue(r.says(expected), "--help should list " + expected + ":\n" + r.all());
         }
     }
@@ -87,7 +89,7 @@ class EndToEndCommandTest {
 
         Cli.Result everything = Cli.run("--help-all");
         assertTrue(everything.ok(), "--help-all should exit 0, got " + everything.exitCode());
-        for (String hidden : new String[] {"history", "backlog", "followup", "critical", "prompt"}) {
+        for (String hidden : new String[] {"history", "backlog", "followup", "critical", "prompt", "chat", "guide"}) {
             assertTrue(everything.says(hidden), "--help-all should list " + hidden + ":\n" + everything.all());
         }
 
