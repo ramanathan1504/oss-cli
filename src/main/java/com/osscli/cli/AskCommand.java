@@ -50,7 +50,7 @@ import picocli.CommandLine.Parameters;
         description = "Ask about this project, and let it look — reads files, your corpus, and the build")
 public class AskCommand implements Callable<Integer> {
 
-    @Parameters(index = "0", arity = "1..*", description = "What you want to know")
+    @Parameters(index = "0", arity = "0..*", description = "What you want to know. Omit it to keep asking.")
     private List<String> question;
 
     @Option(
@@ -74,7 +74,15 @@ public class AskCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        String asked = String.join(" ", question);
+        boolean conversation = question == null || question.isEmpty();
+        if (conversation && !com.osscli.ui.Picker.canAsk()) {
+            // Nothing to read from. A REPL in a pipe would sit waiting for a line that never comes,
+            // which reads as a hang rather than as the mistake it is.
+            System.err.println("  oss ask with no question opens a conversation, and this is not a terminal.");
+            System.err.println("  Give it the question instead:  oss ask \"why does the build fail?\"");
+            return 2;
+        }
+        String asked = conversation ? "" : String.join(" ", question);
         Workspace workspace = new Workspace(Path.of("").toAbsolutePath());
 
         // The same model the rest of the tool uses, not a name invented here. Hardcoding one made
@@ -142,11 +150,44 @@ public class AskCommand implements Callable<Integer> {
             System.out.println("  nothing to resume in this directory — starting fresh");
         }
 
+        Loop loop = new Loop(workspace, tools, allowRun || allowEdit, steps)
+                // The corpus in front of every question, and the reader's own measured voice with
+                // it. Both are decorations that must never cost the answer: each is a function that
+                // returns an empty string when it cannot do its job.
+                .remembering(AskCommand::searchThisMachine)
+                .inTheVoice(voiceOfThisMachine())
+                .withSkills(com.osscli.agent.Skills::forQuestion);
+        StringBuilder carried = new StringBuilder(earlier == null ? "" : earlier);
+
+        if (conversation) {
+            // One rung, one workspace, one session, many questions. Everything below the prompt is
+            // the same code the single-shot path runs -- a second implementation of "ask, look,
+            // answer" is exactly the kind of drift this repository keeps paying for.
+            System.out.println("  Ask anything about this project. Blank line or ctrl-d to leave.");
+            System.out.println();
+            while (true) {
+                String line = System.console().readLine("  › ");
+                if (line == null || line.isBlank() || line.strip().matches("exit|quit|:q")) {
+                    System.out.println();
+                    System.out.println("  kept — oss ask --resume picks this up.");
+                    return 0;
+                }
+                Loop.Transcript turn = turn(loop, chosen, line.strip(), carried.toString());
+                if (turn == null) {
+                    continue;
+                }
+                remember(session, line.strip(), turn.answer());
+                carried.append("\n> you asked earlier:\n")
+                        .append(line.strip())
+                        .append("\n> you answered:\n")
+                        .append(turn.answer())
+                        .append('\n');
+            }
+        }
+
         Loop.Transcript transcript;
         try (com.osscli.ui.Live live = com.osscli.ui.Live.start("looking")) {
-            transcript = new Loop(workspace, tools, allowRun || allowEdit, steps)
-                    .watching(live::step)
-                    .run(asked, chosen.ask(), earlier);
+            transcript = loop.watching(live::step).run(asked, chosen.ask(), carried.toString());
             live.done(transcript.steps().size() + (transcript.steps().size() == 1 ? " look" : " looks"));
         }
 
@@ -184,6 +225,151 @@ public class AskCommand implements Callable<Integer> {
      * <p>Static and defensive: a corpus that cannot be read is a sentence the loop reads and works
      * around, never an exception that ends somebody's question.
      */
+    /**
+     * Your notes, added to the same index as the issues.
+     *
+     * <p>Keyed by the file so a hit reads back as something you can open. Chunk-level rather than
+     * whole-note, because a 40 KB session log matching on one paragraph should return that
+     * paragraph's note, not bury the ranking under its other thirty-nine.
+     */
+    private static int notes(com.osscli.retrieval.TextIndex into) {
+        int added = 0;
+        String sql = "SELECT file_path, chunk_index, content FROM personal_chat_chunk WHERE length(content) > 120;";
+        try (java.sql.Connection conn = com.osscli.storage.DatabaseManager.getConnection();
+                java.sql.PreparedStatement ps = conn.prepareStatement(sql);
+                java.sql.ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                String path = rs.getString("file_path");
+                String name = path == null ? "note" : path.substring(path.lastIndexOf('/') + 1);
+                String id = "note:" + name + "#" + rs.getInt("chunk_index");
+                String content = rs.getString("content");
+                into.add(id, name, content);
+                excerpts.put(id, excerpt(content));
+                added++;
+            }
+        } catch (Exception ignored) {
+            // A corpus without notes still answers from the issues.
+        }
+        return added;
+    }
+
+    /**
+     * Past questions and their answers, added to the same index.
+     *
+     * <p>Paired, so a hit returns the exchange rather than half of it: a question on its own says
+     * what was wondered and never what was found, which is the half worth keeping.
+     */
+    private static int conversations(com.osscli.retrieval.TextIndex into) {
+        int added = 0;
+        String sql = "SELECT session_id, seq, role, content FROM chat_turn ORDER BY session_id, seq;";
+        try (java.sql.Connection conn = com.osscli.storage.DatabaseManager.getConnection();
+                java.sql.PreparedStatement ps = conn.prepareStatement(sql);
+                java.sql.ResultSet rs = ps.executeQuery()) {
+            String pendingQuestion = null;
+            long pendingSession = 0;
+            while (rs.next()) {
+                String role = rs.getString("role");
+                String content = rs.getString("content");
+                if (content == null || content.isBlank()) {
+                    continue;
+                }
+                if ("you".equalsIgnoreCase(role)) {
+                    pendingQuestion = content;
+                    pendingSession = rs.getLong("session_id");
+                    continue;
+                }
+                if (pendingQuestion == null) {
+                    continue;
+                }
+                String id = "asked:" + pendingSession + "#" + rs.getInt("seq");
+                into.add(id, pendingQuestion, pendingQuestion + " " + content);
+                excerpts.put(id, "you asked: " + oneLine(pendingQuestion) + " → " + excerpt(content));
+                pendingQuestion = null;
+                added++;
+            }
+        } catch (Exception ignored) {
+            // A store without conversations still answers from notes and issues.
+        }
+        return added;
+    }
+
+    private static String oneLine(String text) {
+        String flat = text.replaceAll("\\s+", " ").strip();
+        return flat.length() > 90 ? flat.substring(0, 89) + "…" : flat;
+    }
+
+    /**
+     * The readable part of a note chunk.
+     *
+     * <p>Front matter first: harvested notes open with tags, a source path and a date, and a
+     * fragment of that tells the reader nothing about what was done. Skipped to the first line that
+     * looks like prose, then capped — this goes into a prompt, and eight of them uncapped is the
+     * budget the question needed.
+     */
+    private static String excerpt(String content) {
+        if (content == null) {
+            return "";
+        }
+        String[] lines = content.split("\n");
+        StringBuilder b = new StringBuilder();
+        for (String line : lines) {
+            String t = line.strip();
+            if (t.isEmpty() || t.startsWith("---") || t.startsWith("#") || t.matches("^[a-z_]+:.*")) {
+                continue;
+            }
+            b.append(t).append(' ');
+            if (b.length() > 260) {
+                break;
+            }
+        }
+        String out = b.toString().strip();
+        return out.length() > 300 ? out.substring(0, 299) + "…" : out;
+    }
+
+    /** How the reader writes, when enough of their writing exists to have measured it. */
+    private static String voiceOfThisMachine() {
+        try {
+            return com.osscli.memory.VoiceProfile.ofThisMachine().forPrompt();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * One question inside a conversation, printed the way a single-shot run prints it.
+     *
+     * <p>Returns null when the turn produced nothing usable — a model that could not follow the
+     * format, or one that ran out of looks. The conversation carries on rather than ending, because
+     * a bad turn is not a reason to throw away the session and the rung behind it.
+     */
+    private Loop.Transcript turn(Loop loop, Rungs.Chosen chosen, String asked, String carried) {
+        Loop.Transcript transcript;
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("looking")) {
+            transcript = loop.watching(live::step).run(asked, chosen.ask(), carried);
+            live.done(transcript.steps().size() + (transcript.steps().size() == 1 ? " look" : " looks"));
+        }
+        for (String step : transcript.steps()) {
+            System.out.println("  · " + step);
+        }
+        if (!transcript.steps().isEmpty()) {
+            System.out.println();
+        }
+        if (transcript.couldNotFollow()) {
+            System.out.println("  " + chosen.label() + " could not produce a tool call in the required format.");
+            System.out.println();
+            return null;
+        }
+        if (transcript.ranOut()) {
+            int looks = transcript.steps().size();
+            System.out.println("  Stopped after " + looks + (looks == 1 ? " look" : " looks") + " without an answer.");
+            System.out.println();
+            return null;
+        }
+        System.out.println(transcript.answer());
+        System.out.println();
+        return transcript;
+    }
+
     /**
      * One rung, chosen the way the user would choose it.
      *
@@ -321,6 +507,17 @@ public class AskCommand implements Callable<Integer> {
 
     private static int indexed;
 
+    /**
+     * A readable fragment per indexed item, kept beside the index.
+     *
+     * <p>Because a hit that returns only a filename is a dead end here: a note lives under the
+     * memory directory, which is outside the workspace the loop may read, so the model asked to
+     * open `kafka-bug.md` and was correctly refused. The point of the search is the sentence that
+     * says what was done — returning its address instead makes the reader fetch what the search
+     * already had in its hand.
+     */
+    private static final java.util.Map<String, String> excerpts = new java.util.HashMap<>();
+
     private static String searchThisMachine(String query) {
         try {
             // The same index `oss search` uses, over the issues already synced. Building it per
@@ -337,9 +534,27 @@ public class AskCommand implements Callable<Integer> {
                     return "nothing is synced on this machine yet — oss sync --all";
                 }
                 com.osscli.retrieval.TextIndex built = new com.osscli.retrieval.TextIndex();
-                issues.forEach((key, issue) -> built.add(key, issue.title(), issue.body()));
+                issues.forEach((key, issue) -> {
+                    built.add(key, issue.title(), issue.body());
+                    excerpts.put(key, issue.title());
+                });
+                int count = issues.size();
+
+                // Your own notes as well as the upstream issues, and this is the half that matters
+                // for "have I solved this before". The fix for a Kafka appender that would not
+                // start is not in Apache's issue tracker under your name -- it is in the note you
+                // wrote afterwards. Indexing only the issues meant the corpus could answer "who
+                // else hit this" and never "what did I do about it".
+                count += notes(built);
+
+                // And every question already asked, with the answer it got. These were durable but
+                // invisible: chat and ask both write chat_turn, and nothing ever searched it -- so
+                // the one place that knows "I asked this last week and here is what we concluded"
+                // was the one place the loop could not reach.
+                count += conversations(built);
+
                 built.build();
-                indexed = issues.size();
+                indexed = count;
                 index = built;
             }
 
@@ -349,7 +564,9 @@ public class AskCommand implements Callable<Integer> {
             }
             StringBuilder b = new StringBuilder(hits.size() + " of " + indexed + " indexed items match:\n");
             for (com.osscli.retrieval.TextIndex.Hit hit : hits) {
-                b.append("  ").append(hit.id()).append("  ").append(hit.title()).append('\n');
+                b.append("\n— ").append(hit.id()).append('\n');
+                String excerpt = excerpts.get(hit.id());
+                b.append("  ").append(excerpt == null ? hit.title() : excerpt).append('\n');
             }
             return b.toString();
         } catch (Exception e) {

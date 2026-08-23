@@ -223,6 +223,52 @@ class LoopTest {
     }
 
     @Test
+    @DisplayName("what this machine knows is in front of the model before it decides anything")
+    void memoryLeadsEveryQuestion(@TempDir Path dir) {
+        // recall exists and the model MAY call it, and "may" is the problem: one that does not
+        // think to look answers from nothing, on a machine holding the note that solved it.
+        Function model = ask("answered");
+        new Loop(new Workspace(dir), List.of(new ReadFile()), false)
+                .remembering(q ->
+                        "— note:kafka-bug.md\n  changed break to return so a successful retry stops reporting an error")
+                .run("kafka appender keeps failing", model);
+
+        String prompt = model.prompts.get(0);
+        assertTrue(prompt.contains("What this machine already holds"), prompt);
+        assertTrue(prompt.contains("changed break to return"), "the fix itself, not a filename:\n" + prompt);
+    }
+
+    @Test
+    @DisplayName("a known fix is offered before anything new is invented")
+    void whatIsKnownComesFirst(@TempDir Path dir) {
+        // The order is stated because the reverse is what a model does by default: answer from its
+        // own knowledge and mention the reader's history as a footnote, if at all.
+        Function model = ask("answered");
+        new Loop(new Workspace(dir), List.of(new ReadFile()), false)
+                .remembering(q -> "— note:something.md\n  the fix")
+                .run("anything", model);
+
+        String prompt = model.prompts.get(0);
+        assertTrue(prompt.contains("If one of these already solved it"), prompt);
+        assertTrue(prompt.contains("point at it by number before"), prompt);
+        assertTrue(prompt.contains("Only when none of them applies"), prompt);
+    }
+
+    @Test
+    @DisplayName("an unreadable corpus costs depth, never the answer")
+    void memoryFailureIsNotFatal(@TempDir Path dir) {
+        Function model = ask("answered anyway");
+        Loop.Transcript t = new Loop(new Workspace(dir), List.of(new ReadFile()), false)
+                .remembering(q -> {
+                    throw new IllegalStateException("the store is locked");
+                })
+                .run("anything", model);
+
+        assertEquals("answered anyway", t.answer());
+        assertFalse(model.prompts.get(0).contains("already holds"), "no empty block either");
+    }
+
+    @Test
     @DisplayName("the model is told to check this machine before reasoning from nothing")
     void thePromptPutsLocalFirst(@TempDir Path dir) {
         Function model = ask("done");
