@@ -7,7 +7,7 @@ four engine prefixes, rather than all forty at once — a list that long is an
 inventory, not a menu.
 
 ```
-sync  search  review  triage  chat  hub  pr  ext  serve  run  memory  doctor  setup
+sync  search  review  triage  ask   hub  pr  ext  serve  run  memory  doctor  setup
 llm   claude  gemini  codex  junie
 ```
 

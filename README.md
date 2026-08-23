@@ -95,7 +95,7 @@ Since **3.0** the help shows the twelve that carry the daily work, plus the four
 engine prefixes that go in front of them:
 
 ```
-sync  search  review  triage  chat  hub  pr  ext  serve  run  memory  doctor  setup
+sync  search  review  triage  ask   hub  pr  ext  serve  run  memory  doctor  setup
 llm   claude  gemini  codex
 ```
 
@@ -111,6 +111,43 @@ oss --help-all      # every command, grouped: the everyday set and the rest
 That line is printed in the footer of `oss --help`, because a hidden command
 nobody can find again is a removed command with extra steps. CI checks both
 halves — that the twelve are listed, *and* that the twenty-three are still there.
+
+---
+
+## 💬 One command that asks
+
+```bash
+oss ask "why does the Kafka appender fail on startup?"
+oss ask                              # no question: a conversation, until you leave
+oss ask --resume                     # pick the last one up
+oss ask --issue 4249 -r owner/name   # about one issue, with everything known about it
+oss ask --allow-run                  # let it run this project's own build or tests
+oss ask --allow-edit                 # let it propose edits — each shown as a diff, confirmed by you
+```
+
+It reads files, searches everything this machine has indexed, runs your project's
+own build, and can propose an edit you approve one diff at a time. Five commands
+used to need a model; `chat`, `guide` and `prompt` are all covered by this one now
+and keep working unchanged — `oss --help-all` says where each went.
+
+**What you already worked out comes first.** Every question starts with what a
+search for it returns — your notes, your synced issues, and every question you
+have asked here with the answer it got. The instruction is explicit: *if one of
+these already solved it, point at it before proposing anything new.*
+
+---
+
+## 🧠 Skills — the instructions, in files you can edit
+
+```bash
+oss skill                            # what oss ask has been told, and where it came from
+oss skill new my-review-rules        # start one of your own
+```
+
+Four ship inside the jar; anything in `~/.oss-cli/skills` sits beside them, and a
+file of yours with the same name **replaces ours entirely** — the same takeover an
+attached runner has over the built-in one. A prompt buried in Java is one only
+somebody who can rebuild the jar may correct.
 
 ---
 
