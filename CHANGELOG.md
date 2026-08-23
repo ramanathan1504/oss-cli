@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.1.1
+
+_2026-08-23_
+
+- Two more journeys, and the one call that had a host written into it (#190)
+- Journey tests: extensions, memory, and the offline promise (#189)
+
+
 ## 4.1.0
 
 _2026-08-23_
