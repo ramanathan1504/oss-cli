@@ -54,10 +54,22 @@ it**. Add or hide a command and that site keeps teaching the old surface until
 somebody changes it by hand: on 2026-08-23 it was still teaching `oss chat` as
 the way to hold a conversation, three releases after `oss ask` replaced it.
 
-`tools/check-site.sh` fetches the live pages and names any shown command they do
-not mention. `release.sh` runs it before the release pull request is opened —
-reported, never fatal, because a network hiccup must not stop a release and the
-other repository is not this one's to fix mid-release.
+`DocumentedCommandsTest` already derives every figure on the landing page from
+`release-surface.json`: the board's two halves must partition the whole command
+set, and each stated total must be the length of its own list. Add a command and
+that test fails until the board has it — which is why the board is right and the
+prose around it is what drifts.
+
+So `tools/check-site.sh` covers what a unit test cannot reach. Locally, and
+fatally: a command that `--help` shows, that the board lists, and that no
+paragraph on the page ever explains — the state `ask` was in for three releases.
+Remotely, and only as a report: whether ubuos.com/docs names each shown command,
+with the two files to change. A network hiccup must not stop a release, and
+another repository is not this one's to fix mid-release.
+
+Do not add a second counter in shell. Two implementations of one thing is how
+this repository got two embedders, two reference parsers and two copies of a
+web page.
 
 **The deployed landing page is `site/` in this repository.** `ubuos.com` links to a
 Cloudflare Pages project published from here by the `deploy-site` job. A copy of
@@ -198,6 +210,12 @@ copies of a web page have each caused a real bug here.
   `mvn test -Dtest=ReleaseSurfaceTest -Dsurface.update=true`, then commit it.
   `ReleaseSurfaceTest` fails the pull request otherwise, which is the point --
   the record is updated by the person making the change, not months later
+- **Same change, same commit: `site/index.html`.** `DocumentedCommandsTest` fails
+  until the command board has your command on the right side of the partition.
+  Then `tools/check-site.sh --local` — fatal in CI and in `release.sh` — asks the
+  question the test cannot: does any paragraph actually *explain* it. Finally
+  run `tools/check-site.sh` in full; it names what ubuos.com/docs is missing, and
+  that is a pull request in the other repository
 - Examples use `owner/name`
 - No new required prerequisite
 - Anything slower than a second reports what it is doing

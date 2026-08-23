@@ -105,6 +105,20 @@ jobs:
 
           echo "All commands reachable and loadable."
 
+      # The landing page is the first thing anybody reads about oss, and ubuos.com
+      # serves this exact file. It kept building perfectly while claiming 43
+      # commands when there were 41, teaching `oss chat` after it stopped being
+      # printed, and telling readers they needed Java 17 when every download has
+      # carried its own runtime since 1.0. None of that breaks a build, which is
+      # why it needs one.
+      #
+      # Primary leg only: it reads the jar this job just built, and the answer is
+      # the same on all four.
+      - name: The landing page must describe this build
+        if: success() && matrix.primary
+        shell: bash
+        run: tools/check-site.sh --local
+
       - name: Keep the jar for inspection
         # From the primary job only. Four jobs uploading the same artifact name is an
         # error, and the jar is identical anyway -- the pom compiles to release 17

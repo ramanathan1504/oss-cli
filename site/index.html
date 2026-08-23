@@ -670,7 +670,8 @@ td .need,td.need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)
       oss-cli
     </a>
     <nav class="nav">
-      <a href="#demo" class="nav-keep">Try it</a>
+      <a href="#ask" class="nav-keep">Ask</a>
+      <a href="#demo">Try it</a>
       <a href="#how">How it works</a>
       <a href="#offline">Offline</a>
       <a href="#install">Install</a>
@@ -688,13 +689,15 @@ td .need,td.need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)
   <div class="hero-left">
     <h1>Your repositories<br>and your notes,<br><span class="em">on your machine.</span></h1>
     <p class="lede">
-      OSS-CLI indexes the projects you follow and the notes you already keep, then
-      reviews pull requests against what it finds.
+      One command that answers from what is already on your machine — the projects
+      you follow, the notes you keep, the files in front of you — and only reaches
+      for a model when it needs one.
     </p>
     <ul class="hero-facts">
       <li><strong>A GitHub token is the only requirement.</strong> Everything else is a layer you add when you want it.</li>
       <li><strong>Nothing leaves the machine</strong> unless you attach a cloud key and ask it to.</li>
       <li><strong>Sync once, then the network is optional</strong> — 32 of the 43 commands never need it.</li>
+      <li><strong>Ollama, a Claude key, or the CLI you already sign in to</strong> — the name goes in front of the command, and none of them is required.</li>
     </ul>
 
     <div class="install-line">
@@ -724,6 +727,50 @@ td .need,td.need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)
       </p>
       <button class="replay-replay" type="button" id="replay-again">Play again</button>
     </div>
+  </div>
+</section>
+
+<!-- ══════════════ what you type first ══════════════ -->
+<section class="band" id="ask">
+  <div class="shell">
+    <p class="eyebrow">What you type first</p>
+    <h2>One command that asks — and looks before it asks anyone else.</h2>
+    <p class="sub">
+      <code>oss ask</code> reads files, searches everything this machine has
+      indexed, runs your project's own build, and can propose an edit shown as a
+      diff and confirmed by you. Give it no question and it opens a conversation;
+      <code>--resume</code> picks the last one up. Five commands used to need a
+      model — <code>chat</code>, <code>guide</code> and <code>prompt</code> are
+      covered by this one now, and still work unchanged.
+    </p>
+    <p class="sub">
+      Every question starts with what you already worked out: your notes, your
+      synced issues, and every question asked here with the answer it got. The
+      instruction is explicit — <em>if one of these already solved it, point at it
+      before proposing anything new.</em>
+    </p>
+<pre class="block"><span class="c"># no question, and it keeps asking</span>
+oss ask
+
+<span class="c"># one issue, with everything already known about it</span>
+oss ask --issue 4129 -r owner/name
+
+<span class="c"># let it run this project's own build — never an arbitrary command</span>
+oss ask --allow-run "do the tests pass?"
+
+<span class="c"># let it propose one edit, shown as a diff, confirmed by you</span>
+oss ask --allow-edit "fix the null check in the parser"</pre>
+
+    <p class="sub">
+      Neither permission is on unless you type it, and neither is a setting: there
+      is nowhere to leave them on by accident.
+    </p>
+    <p class="sub">
+      How it works is four markdown files, not a prompt buried in Java.
+      <code>oss skill</code> lists them, and a file of yours in
+      <code>~/.oss-cli/skills</code> with the same name replaces one of ours
+      entirely — the same takeover an attached runner has over the built-in one.
+    </p>
   </div>
 </section>
 
@@ -780,9 +827,9 @@ td .need,td.need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)
           <button class="chip" type="button" data-cmd="oss model">oss model</button>
           <button class="chip" type="button" data-cmd="oss model --fetch">oss model --fetch</button>
           <button class="chip" type="button" data-cmd="oss sync --all">oss sync --all</button>
-          <button class="chip" type="button" data-cmd="oss prompt 812">oss prompt 812</button>
+          <button class="chip" type="button" data-cmd="oss ask">oss ask</button>
+          <button class="chip" type="button" data-cmd="oss skill">oss skill</button>
           <button class="chip" type="button" data-cmd="oss history">oss history</button>
-          <button class="chip" type="button" data-cmd="oss chat --resume 7">oss chat --resume 7</button>
           <button class="chip" type="button" data-cmd="help">help</button>
           <button class="chip" type="button" data-cmd="clear">clear</button>
         </div>
@@ -866,7 +913,21 @@ oss claude review 4249
 oss llm claude review 4249
 
 <span class="c"># the provider's own CLI — your subscription, no API key</span>
-oss claude --cli review 4249</pre>
+oss claude --cli review 4249
+
+<span class="c"># the same sentence, whichever provider you have</span>
+oss gemini ask "why does the retry loop give up?"
+oss codex review 4249
+oss junie triage 4129</pre>
+
+    <p class="sub">
+      Five names, and each works in front of <em>any</em> command:
+      <code>oss llm</code> is a local daemon, <code>oss claude</code> is Anthropic,
+      <code>oss gemini</code> is Google, <code>oss codex</code> is OpenAI and
+      <code>oss junie</code> is JetBrains. Which one you have decides nothing about
+      what you may ask — that is the point of putting the name in front rather than
+      building a different flag into each command.
+    </p>
 
     <p class="sub">
       <strong>May, not will.</strong> Naming an engine grants permission; it does not order a call.
@@ -918,56 +979,58 @@ oss claude --cli review 4249</pre>
 
       <ul class="cmd-board" id="cmd-board">
         <li class="cmd net" style="--i:0" title="fetches issues, PRs and comments — the one that matters">sync</li>
-        <li class="cmd net" style="--i:1" title="pulls one issue you have not synced">issue</li>
         <li class="cmd" style="--i:1" title="asks about this project and looks: your corpus, the files, the build">ask</li>
-        <li class="cmd" style="--i:1" title="what oss ask has been told about how to work — yours override ours">skill</li>
-        <li class="cmd net" style="--i:2" title="pulls one pull request you have not synced">pr</li>
-        <li class="cmd net" style="--i:3" title="reads across the repositories you follow">hub</li>
-        <li class="cmd net" style="--i:4" title="checks whether a branch moved since you reviewed it">followup</li>
-        <li class="cmd net" style="--i:5" title="asks for the PR's head commit; unchanged, and it answers from cache">review</li>
-        <li class="cmd net" style="--i:6" title="lets Claude answer, if the local rung cannot">claude</li>
-        <li class="cmd net" style="--i:7" title="lets Gemini answer, if the local rung cannot">gemini</li>
-        <li class="cmd net" style="--i:8" title="lets OpenAI answer, if the local rung cannot">codex</li>
-        <li class="cmd net" style="--i:8" title="lets JetBrains Junie answer, if the local rung cannot">junie</li>
-        <li class="cmd" style="--i:9" title="lets a local Ollama daemon answer — never leaves this machine">llm</li>
-        <li class="cmd net" style="--i:10" title="downloads the embedder. Once, ever. 22 MB">model --fetch</li>
-        <li class="cmd" style="--i:11">search</li>
-        <li class="cmd" style="--i:12">prompt</li>
-        <li class="cmd" style="--i:13">inspect</li>
-        <li class="cmd" style="--i:14">history</li>
-        <li class="cmd" style="--i:15">chat</li>
-        <li class="cmd" style="--i:16">critical</li>
-        <li class="cmd" style="--i:17">duplicates</li>
-        <li class="cmd" style="--i:18">triage</li>
-        <li class="cmd" style="--i:19">guide</li>
-        <li class="cmd" style="--i:20">profile</li>
-        <li class="cmd" style="--i:21">onboard</li>
-        <li class="cmd" style="--i:22">report</li>
-        <li class="cmd" style="--i:23">trend</li>
-        <li class="cmd" style="--i:24">analyze</li>
-        <li class="cmd" style="--i:25">backlog</li>
-        <li class="cmd" style="--i:26">pick</li>
-        <li class="cmd" style="--i:27">hidden-critical</li>
-        <li class="cmd" style="--i:28">prs</li>
-        <li class="cmd" style="--i:29">serve</li>
-        <li class="cmd" style="--i:30">backup</li>
-        <li class="cmd" style="--i:31">restore</li>
-        <li class="cmd" style="--i:32">doctor</li>
-        <li class="cmd" style="--i:33">alias</li>
-        <li class="cmd" style="--i:34">ext</li>
-        <li class="cmd" style="--i:35">setup</li>
-        <li class="cmd" style="--i:36">run</li>
-        <li class="cmd" style="--i:37">memory</li>
-        <li class="cmd" style="--i:38">bench</li>
-        <li class="cmd" style="--i:39">kb</li>
+        <li class="cmd" style="--i:2" title="what oss ask has been told about how to work — yours override ours">skill</li>
+        <li class="cmd" style="--i:3" title="by meaning with the model, by shared terms without it">search</li>
+        <li class="cmd net" style="--i:4" title="asks for the PR's head commit; unchanged, and it answers from cache">review</li>
+        <li class="cmd" style="--i:5" title="a consolidated audit of one issue">triage</li>
+        <li class="cmd" style="--i:6" title="models, paths and settings, interactively">setup</li>
+        <li class="cmd" style="--i:7" title="pings and reports rather than depends">doctor</li>
+        <li class="cmd net" style="--i:8" title="reads across the repositories you follow">hub</li>
+        <li class="cmd net" style="--i:9" title="pulls one pull request you have not synced">pr</li>
+        <li class="cmd" style="--i:10" title="attach and inspect runners and memories">ext</li>
+        <li class="cmd" style="--i:11" title="binds to localhost over the corpus already on disk">serve</li>
+        <li class="cmd" style="--i:12" title="as offline as the pack it walks">run</li>
+        <li class="cmd" style="--i:13" title="file, index and search what you keep">memory</li>
+        <li class="cmd" style="--i:14" title="lets a local Ollama daemon answer — never leaves this machine">llm</li>
+        <li class="cmd net" style="--i:15" title="lets Claude answer, if the local rung cannot">claude</li>
+        <li class="cmd net" style="--i:16" title="lets Gemini answer, if the local rung cannot">gemini</li>
+        <li class="cmd net" style="--i:17" title="lets OpenAI answer, if the local rung cannot">codex</li>
+        <li class="cmd net" style="--i:18" title="lets JetBrains Junie answer, if the local rung cannot">junie</li>
+        <li class="cmd" style="--i:19" title="what arrived that matters most">critical</li>
+        <li class="cmd" style="--i:20" title="batch severity, local model only — a metered API over a whole backlog spends money nobody agreed to">analyze</li>
+        <li class="cmd" style="--i:21" title="what matters that nobody has labelled">hidden-critical</li>
+        <li class="cmd" style="--i:22" title="which of these are the same issue">duplicates</li>
+        <li class="cmd" style="--i:23" title="cached open pull requests: stale, unreviewed, critical">prs</li>
+        <li class="cmd" style="--i:24" title="a project's language, build and conventions — or how you write">profile</li>
+        <li class="cmd" style="--i:25" title="what a project expects before you contribute to it">onboard</li>
+        <li class="cmd" style="--i:26" title="a consolidated weekly health report">report</li>
+        <li class="cmd" style="--i:27" title="the same, week over week">trend</li>
+        <li class="cmd" style="--i:28" title="a resolution blueprint — oss ask --issue is the shorter route">guide</li>
+        <li class="cmd" style="--i:29" title="one issue in conversation — oss ask --issue is the shorter route">chat</li>
+        <li class="cmd" style="--i:30" title="which conversations do I have, and where did each get to">history</li>
+        <li class="cmd" style="--i:31" title="the same context, as a prompt you can paste anywhere">prompt</li>
+        <li class="cmd" style="--i:32" title="everything retrieved for an issue, before anything is asked">inspect</li>
+        <li class="cmd" style="--i:33" title="the whole archive, rotating the last five">backup</li>
+        <li class="cmd" style="--i:34" title="put one back">restore</li>
+        <li class="cmd" style="--i:35" title="give this command your own name">alias</li>
+        <li class="cmd net" style="--i:36" title="checks whether a branch moved since you reviewed it">followup</li>
+        <li class="cmd" style="--i:37" title="clusters, mergeable, one fix away, what to pick">backlog</li>
+        <li class="cmd" style="--i:38" title="what to work on next, scored against what you have already done">pick</li>
+        <li class="cmd net" style="--i:39" title="downloads the embedder. Once, ever. 22 MB">model</li>
+        <li class="cmd net" style="--i:40" title="pulls one issue you have not synced">issue</li>
+        <li class="cmd" style="--i:41" title="the same command as run">bench</li>
+        <li class="cmd" style="--i:42" title="the same command as memory">kb</li>
       </ul>
 
       <p class="offline-note" id="cable-note">
-        Connected, all forty answer. <strong>Pull the cable</strong> and the ten that
-        reach out go dark — six fetch something you asked for by number, and
-        <code>model --fetch</code> downloads the embedder once in the life of the install.
-        The other thirty never needed it: <code>doctor</code> pings and reports rather
-        than depends, <code>serve</code> binds to localhost over the corpus already on disk,
+        Connected, all forty-three answer. <strong>Pull the cable</strong> and eleven go
+        dark — six fetch something you asked for by number or by list, the four cloud
+        engines call their providers, and <code>model</code> downloads the embedder
+        once in the life of the install.
+        The other thirty-two never needed it: <code>doctor</code> pings and reports rather
+        than depends, <code>llm</code> talks to a daemon on this machine, <code>serve</code>
+        binds to localhost over the corpus already on disk,
         and <code>run</code> and <code>memory</code> are as offline as the extension you attached &mdash; type either on its own and it lists the verbs that extension actually declares, read from the manifest on your machine rather than from this page.
       </p>
     </div>
@@ -1160,7 +1223,7 @@ oss serve</pre>
       <div class="card">
         <span class="k">localhost:1504</span>
         <h3>What is waiting on you</h3>
-        <p>Every pull request you own or review, across every project you follow, in one list. Two of its signals exist nowhere on GitHub: which reviews you wrote and never posted, and whose head has moved since you looked.</p>
+        <p>Every pull request you own or review, across every project you follow, in one list — the same list <code>oss hub</code> prints in the terminal. Two of its signals exist nowhere on GitHub: which reviews you wrote and never posted, and whose head has moved since you looked.</p>
       </div>
       <div class="card">
         <span class="k">On the row</span>
@@ -1180,10 +1243,10 @@ oss serve</pre>
 <section class="band band-dark" id="install">
   <div class="shell">
     <p class="eyebrow">Install</p>
-    <h2>Java 17 and a GitHub token. That's the whole requirement.</h2>
+    <h2>A GitHub token. That's the whole requirement.</h2>
     <p class="sub">
-      OSS-CLI ships as a single self-contained jar, so the Linux and Windows steps are the
-      same file Homebrew installs for you on macOS.
+      Every download carries its own Java, so there is no runtime to install first — and
+      the Linux and Windows archives are the same build Homebrew installs for you on macOS.
     </p>
 
     <div class="tabs">
@@ -1309,8 +1372,8 @@ oss review 4234 -r owner/name</pre>
 <!-- ══════════════ 3.0 ══════════════ -->
 <section class="band" id="three">
   <div class="shell">
-    <p class="eyebrow">New in 3.0</p>
-    <h2>One interface, whichever backend you have</h2>
+    <p class="eyebrow">Whichever backend you have</p>
+    <h2>One interface, and it says which rung answered</h2>
     <p class="sub">
       Naming an engine grants permission; it does not order a call. Every ask starts
       on the local rung and climbs only when that rung fails a stated test — and the
@@ -1347,28 +1410,6 @@ oss review 4234 -r owner/name</pre>
       arithmetic over your text, never a model asked what you “sound like”, because
       that returns flattery and flattery cannot be checked. Under twenty samples it
       tells no model anything, and says so.
-    </p>
-
-    <h2>One command that asks, and skills you can edit</h2>
-    <p class="sub">
-      <code>oss ask</code> reads files, searches everything this machine has
-      indexed, runs your project's own build, and can propose an edit shown as a
-      diff and confirmed by you. Give it no question and it opens a conversation;
-      <code>--resume</code> picks the last one up. Five commands used to need a
-      model — <code>chat</code>, <code>guide</code> and <code>prompt</code> are
-      covered by this one now, and still work unchanged.
-    </p>
-    <p class="sub">
-      Every question starts with what you already worked out: your notes, your
-      synced issues, and every question asked here with the answer it got. The
-      instruction is explicit — <em>if one of these already solved it, point at it
-      before proposing anything new.</em>
-    </p>
-    <p class="sub">
-      How it works is four markdown files, not a prompt buried in Java.
-      <code>oss skill</code> lists them, and a file of yours in
-      <code>~/.oss-cli/skills</code> with the same name replaces one of ours
-      entirely — the same takeover an attached runner has over the built-in one.
     </p>
 
     <h2>Packs, and the support packs under them</h2>
