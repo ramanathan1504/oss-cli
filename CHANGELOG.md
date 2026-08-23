@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.2.0
+
+_2026-08-23_
+
+- A newline where an escape was meant, and saying yes handed over nothing (#193)
+- Rungs had no test, which is where the route becomes something you can call (#192)
+
+
 ## 4.1.1
 
 _2026-08-23_
