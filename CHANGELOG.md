@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.2.0
+
+_2026-08-23_
+
+- The documents still showed chat where ask now stands (#168)
+- Five commands needed a model; one of them is enough (#167)
+- A conversation, memory in front of every question, and skills you can edit (#166)
+
+
 ## 3.1.0
 
 _2026-08-22_
