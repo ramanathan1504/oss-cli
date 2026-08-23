@@ -174,15 +174,27 @@ if [ -n "$(git status --porcelain)" ]; then
     exit 1
 fi
 
-# The documentation site is a second repository and does not follow this one. It is
-# checked here rather than hoped for: publishing a release whose site still teaches
-# the previous surface is how somebody arrives at ubuos.com and is taught a command
-# that no longer appears in --help.
+# The web surfaces are checked here rather than hoped for. A release whose landing
+# page still claims the previous surface is how somebody arrives at ubuos.com and
+# is taught a command that no longer appears in --help -- and it is only ever
+# noticed by a stranger, because the page keeps building perfectly either way.
 #
-# Reported, never fatal. A network hiccup must not stop a release, and the site is
-# not this repository's to fix in the middle of one.
-echo "→ Checking the documentation site still describes this build..."
-tools/check-site.sh || true
+# Two halves, deliberately different:
+#   site/index.html   is source in THIS repository and ubuos.com serves that exact
+#                     file, so a mismatch is fatal. It is two minutes to fix and
+#                     nobody else can fix it.
+#   ubuos.com/docs    is another repository. Reported, never fatal: a network
+#                     hiccup must not stop a release, and that repo is not this
+#                     one's to fix in the middle of one.
+echo "→ Checking the landing page and the docs site still describe this build..."
+if ! tools/check-site.sh; then
+    echo ""
+    echo "❌ The landing page describes a different build than the one being released."
+    echo "   Fix site/index.html, commit it, and run this again. The command board is"
+    echo "   the list that claims to be exhaustive; the counter above it is prose that"
+    echo "   no test reaches, which is exactly why it went stale."
+    exit 1
+fi
 
 echo "→ main is protected: sending the release commit through a pull request..."
 git push -u origin "$RELEASE_BRANCH"
