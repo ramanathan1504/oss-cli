@@ -76,3 +76,7 @@ triage-*.html
 # illegal path character on Windows, so committing one breaks git checkout on every
 # Windows runner — which is exactly how v2.2.4 shipped without a Windows build.
 *.ses
+
+# The engine writes its per-pack cache here. Running the example pack -- which the
+# tests now do -- left a coverage ledger in the source tree and it was committed.
+.bench/
