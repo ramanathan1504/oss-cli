@@ -22,28 +22,55 @@
 # this engine's verb for running one app.
 #
 #   oss run list                                    what exists
-#   oss run run core-java --config xml/layout-ecs   run scenarios under a config
-#   oss run run core-java --log4j 2.25.4 exceptions run one scenario on one version
-#   oss run matrix --scenario exceptions            same scenario, every version
-#   oss run matrix --apps core-java,db --javas 17,21
+#   oss run run consumer --config xml/layout-ecs    run scenarios under a config
+#   oss run run consumer --version 3.8.1 startup    run one scenario on one version
+#   oss run matrix --scenario startup               same scenario, every version
+#   oss run matrix --apps consumer,db --javas 17,21
 #   oss run matrix --all                            every valid cell — hours
 #   oss run coverage                                what is reached, what is not
-#   oss run repro 4143 --log4j 2.26.0               build a standalone repro zip
+#   oss run repro 4143 --version 3.8.1              build a standalone repro zip
 #   oss run pr 4133 --checkout --install            read a PR, and run it here
 #   oss run review 4133                             every mechanical fact about a PR
-#   oss run hub                                     all three repos, one local page
+#   oss run hub                                     every repo you follow, one local page
 #   oss run hub --pr 4133                           write and send the review, on the page
+#
+# The application names and versions above are placeholders: they come from YOUR
+# pack, and there is no list of them here because this engine does not know what
+# it is walking. `--version` is the spelling to learn; `--log4j` is accepted as
+# an alias for it and is what the first pack this engine ever ran happened to
+# call it.
 #
 # All of them need a pack — the applications, configurations and versions being
 # walked. Either stand in one, or name it:
 #
-#   cd ~/apache/log4j2-workout && oss run list
-#   oss run --pack ~/apache/log4j2-workout list
+#   cd ~/my-project && oss run list
+#   oss run --pack ~/my-project list
 #
 # Every run forks a real JVM with an explicit classpath rather than running
 # inside Maven's, so what executes here is exactly what a repro zip would ship.
 
 set -euo pipefail
+
+# Colour only when somebody is there to see it.
+#
+# Fourteen printf calls in this file emitted their escapes unconditionally, so
+# every error, every PASS/FAIL row and every coverage heading went into a
+# redirected log, a CI transcript and a cron mail carrying raw control bytes. The
+# Java half of this tool has been careful about exactly this for releases --
+# `Live` checks for a terminal and honours NO_COLOR, and its comment explains why
+# -- while this half, the one that runs the builds and therefore the one whose
+# output actually gets redirected, never did.
+#
+# Gated on stderr, because that is where the messages go, and a run whose stdout
+# is piped to a file while stderr is still the terminal should stay readable.
+# NO_COLOR is honoured for the same reason the Java side honours it: somebody has
+# said, once, for every tool on their machine.
+if [[ -t 2 && -z "${NO_COLOR:-}" ]]; then
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'
+  C_CYAN=$'\033[36m'; C_BOLD=$'\033[1m';  C_OFF=$'\033[0m'
+else
+  C_RED=""; C_GREEN=""; C_YELLOW=""; C_CYAN=""; C_BOLD=""; C_OFF=""
+fi
 
 # Resolve the symlink chain before taking a directory. Installed on PATH as a
 # symlink, $BASH_SOURCE is ~/.local/bin/bench and a naive dirname makes ROOT
@@ -107,7 +134,7 @@ else
   BENCH_PACK="log4j"
 fi
 [[ -f $PACK_FILE ]] || {
-  printf '\033[31merror\033[0m no pack in %s\n\n' "$ROOT" >&2
+  printf '%serror%s no pack in %s\n\n' "$C_RED" "$C_OFF" "$ROOT" >&2
   printf '  A pack is a directory with a pack.json in it — your applications, your\n' >&2
   printf '  configurations, your versions. Point at one:\n\n' >&2
   printf '    oss run --pack /path/to/your/pack <verb> ...\n' >&2
@@ -139,12 +166,12 @@ fi
 # empty matrix reports "0 cells, 0 failures" -- which reads exactly like a pass.
 for _required in PACK_NAME VERSIONS DEFAULT_VERSION APPS; do
   if ! declare -p "$_required" >/dev/null 2>&1; then
-    printf '\033[31merror\033[0m pack %s does not set %s\n' "$BENCH_PACK" "$_required" >&2
+    printf '%serror%s pack %s does not set %s\n' "$C_RED" "$C_OFF" "$BENCH_PACK" "$_required" >&2
     exit 1
   fi
 done
 declare -F pack_module_path >/dev/null 2>&1 || {
-  printf '\033[31merror\033[0m pack %s does not define pack_module_path()\n' "$BENCH_PACK" >&2
+  printf '%serror%s pack %s does not define pack_module_path()\n' "$C_RED" "$C_OFF" "$BENCH_PACK" >&2
   exit 1
 }
 # Optional, with the historic layout as the default so an older pack still works.
@@ -264,8 +291,8 @@ cell_skip_reason() {
   fi
 }
 
-die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
-info() { printf '\033[36m▸\033[0m %s\n' "$*" >&2; }
+die()  { printf '%serror:%s %s\n' "$C_RED" "$C_OFF" "$*" >&2; exit 1; }
+info() { printf '%s▸%s %s\n' "$C_CYAN" "$C_OFF" "$*" >&2; }
 
 # ── JDK selection ───────────────────────────────────────────────────────────
 # Resolve a JDK home for a major version. macOS has java_home; Linux does not,
@@ -607,7 +634,7 @@ cmd_matrix() {
   elif command -v gtimeout >/dev/null 2>&1; then
     CELL_RUNNER=(gtimeout -k 10 "$secs")
   else
-    printf '  \033[33mnote\033[0m  no timeout(1) found — cells run unbounded; an app that does not exit will stall the sweep\n'
+    printf '  %snote%s  no timeout(1) found — cells run unbounded; an app that does not exit will stall the sweep\n' "$C_YELLOW" "$C_OFF"
   fi
 
   local pass=0 fail=0 skip=0
@@ -624,7 +651,7 @@ cmd_matrix() {
 
           reason="$(cell_skip_reason "$app" "$config" "$java" "$version")"
           if [[ -n "$reason" ]]; then
-            printf '  \033[33mSKIP\033[0m  %-18s %-30s java%-3s %-16s  %s\n' \
+            printf '  %sSKIP%s  %-18s %-30s java%-3s %-16s  %s\n' "$C_YELLOW" "$C_OFF" \
               "$app" "$config" "$java" "$version" "$reason"
             printf 'SKIP\t%s\t%s\t%s\t%s\t%s\n' "$app" "$config" "$java" "$version" "$reason" >>"$results"
             skip=$((skip + 1))
@@ -644,12 +671,12 @@ cmd_matrix() {
           # exactly like slow progress. A cell that outruns the limit is a FAIL
           # with a stated cause, which is information; a sweep that hangs is not.
           if ( ${CELL_RUNNER[@]+"${CELL_RUNNER[@]}"} "$0" run "${run_args[@]}" ) >>"$results" 2>&1; then
-            printf '  \033[32mPASS\033[0m  %-18s %-30s java%-3s %s\n' \
+            printf '  %sPASS%s  %-18s %-30s java%-3s %s\n' "$C_GREEN" "$C_OFF" \
               "$app" "$config" "$java" "$version"
             printf '%s\tPASS\t%s\t%s\t%s\t%s\n' "$stamp" "$app" "$config" "$java" "$version" >>"$ledger"
             pass=$((pass + 1))
           else
-            printf '  \033[31mFAIL\033[0m  %-18s %-30s java%-3s %s\n' \
+            printf '  %sFAIL%s  %-18s %-30s java%-3s %s\n' "$C_RED" "$C_OFF" \
               "$app" "$config" "$java" "$version"
             printf '%s\tFAIL\t%s\t%s\t%s\t%s\n' "$stamp" "$app" "$config" "$java" "$version" >>"$ledger"
             fail=$((fail + 1))
@@ -749,20 +776,20 @@ cmd_coverage() {
   total="$(wc -l < "$tmp/all" | tr -d ' ')"
   covered="$(comm -12 "$tmp/all" "$tmp/on-classpath" | wc -l | tr -d ' ')"
 
-  printf '\033[1mModule coverage\033[0m  (%s)\n' "$clone"
+  printf '%sModule coverage%s  (%s)\n' "$C_BOLD" "$C_OFF" "$clone"
   printf '  %s of %s shippable modules are on some app classpath\n\n' "$covered" "$total"
 
-  printf '  \033[31mnot on any classpath:\033[0m\n'
+  printf '  %snot on any classpath:%s\n' "$C_RED" "$C_OFF"
   comm -23 "$tmp/all" "$tmp/on-classpath" | sed 's/^/    /'
 
-  printf '\n  \033[32mon a classpath:\033[0m\n'
+  printf '\n  %son a classpath:%s\n' "$C_GREEN" "$C_OFF"
   comm -12 "$tmp/all" "$tmp/on-classpath" | tr '\n' ' ' | fold -s -w 76 | sed 's/^/    /'
   printf '\n'
 
   # Note: a module being present says the bench *can* reach it. Whether any
   # config actually drives it is a separate question the ledger cannot answer,
   # since a classpath entry is not proof a plugin was instantiated.
-  printf '\n\033[1mAxis coverage\033[0m  (from %s)\n' "$CACHE/coverage.tsv"
+  printf '\n%sAxis coverage%s  (from %s)\n' "$C_BOLD" "$C_OFF" "$CACHE/coverage.tsv"
   if [[ ! -s "$CACHE/coverage.tsv" ]]; then
     printf '  no matrix runs recorded yet — run oss run matrix\n'
     return
@@ -792,7 +819,7 @@ cmd_coverage() {
   failed="$(awk -F'\t' '$2=="FAIL" {printf "    %s %s java%s %s\n", $3, $4, $5, $6}' \
     "$CACHE/coverage.tsv" | sort -u)"
   if [[ -n "$failed" ]]; then
-    printf '\n  \033[31mfailing cells:\033[0m\n%s\n' "$failed"
+    printf '\n  %sfailing cells:%s\n%s\n' "$C_RED" "$C_OFF" "$failed"
   fi
 }
 
