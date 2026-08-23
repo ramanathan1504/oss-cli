@@ -30,7 +30,7 @@ import java.util.Map;
  * ordinarily a repository being followed, and every repository in
  * {@code monitored_repositories} is therefore already a pack — which is what makes this work
  * before anyone configures anything. Nothing has to be declared to have packs; a manifest saying
- * {@code "supports": "apache/logging-log4j2"} only says which one it belongs under.
+ * {@code "supports": "owner/name"} only says which one it belongs under.
  *
  * <p>Before this there was a flat list. Three registered runners looked equally applicable to
  * fourteen repositories, and matching one to the issue in front of you was a thing you knew or did
@@ -135,9 +135,9 @@ public final class Attachments {
     /**
      * Resolves what a manifest wrote to what the corpus calls it.
      *
-     * <p>Exact first, then the name after the slash, so a bench may say {@code logging-log4j2}
+     * <p>Exact first, then the name after the slash, so a bench may say {@code core-utils}
      * without also having to know whose fork it is being followed from. Nothing fuzzier than that:
-     * a bench claiming {@code log4j} and silently attaching to {@code apache/logging-log4j2} would
+     * a bench claiming {@code core} and silently attaching to {@code owner/core-utils} would
      * be right here and wrong the first time somebody follows two repositories with a word in
      * common, and the failure would be a confident answer rather than an error.
      *

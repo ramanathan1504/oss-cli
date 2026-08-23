@@ -129,7 +129,7 @@ public class Extension {
      * reader's job every single time.
      *
      * <p>Deliberately a free string rather than a checked reference. The pack it names is usually a
-     * repository being followed -- {@code apache/logging-log4j2} -- and then OSS-CLI can say so, but
+     * repository being followed -- {@code owner/name} -- and then OSS-CLI can say so, but
      * an author may equally name a subject that spans several, and a manifest that fails to load
      * because a repository has not been synced <em>yet</em> would make attaching things depend on
      * the order they were done in. Where it matches nothing, {@link Attachments} says that out loud

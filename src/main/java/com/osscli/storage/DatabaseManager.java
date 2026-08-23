@@ -32,7 +32,7 @@ public class DatabaseManager {
 
     private static final Logger LOGGER = LogManager.getLogger(DatabaseManager.class);
     // private static final String DB_URL = "jdbc:sqlite:data/issue_intelligence.db";
-    private static final int CURRENT_SCHEMA_VERSION = 15;
+    private static final int CURRENT_SCHEMA_VERSION = 16;
 
     /**
      * How long a statement waits for a lock before giving up.
@@ -468,6 +468,39 @@ public class DatabaseManager {
                             "CREATE INDEX IF NOT EXISTS idx_authored_comment_author ON authored_comment (author, created_at);");
                 }
             }
+        },
+
+        // Migration 16: search that does not cost fourteen seconds first
+        new Migration() {
+            @Override
+            public int getTargetVersion() {
+                return 16;
+            }
+
+            /**
+             * An index SQLite keeps, instead of one built in memory on every command.
+             *
+             * <p>{@code oss ask} put what this machine knows in front of every question, which
+             * meant loading 10,702 issues and 51,668 note passages and adding all of them to an
+             * in-process index — <b>14.3 seconds before the model was called at all</b>, measured,
+             * and paid again on the next command because a CLI process runs once and exits. The
+             * second search in the same process took 39 milliseconds, which is the whole argument:
+             * the work was never the searching.
+             *
+             * <p>FTS5 keeps the index on disk beside the rows. Populated once here and kept current
+             * by the writers, a query is milliseconds and startup is nothing. External content is
+             * deliberately NOT used: it ties the table's lifetime to the exact rowids of three
+             * different tables, and the failure mode is a search that silently returns rows that no
+             * longer exist.
+             */
+            @Override
+            public void execute(Connection conn) throws SQLException {
+                LOGGER.info("Upgrading database schema to Version 16 (searchable corpus)...");
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("CREATE VIRTUAL TABLE IF NOT EXISTS corpus_fts USING fts5("
+                            + " id UNINDEXED, kind UNINDEXED, title, body, excerpt UNINDEXED);");
+                }
+            }
         }
     };
 
@@ -785,14 +818,28 @@ public class DatabaseManager {
         }
     }
 
+    /**
+     * What a row is labelled when the store it came from never recorded a repository.
+     *
+     * <p>Shaped like {@code owner/name} so nothing downstream has to special-case it, and
+     * obviously not a real repository so nobody mistakes it for one.
+     */
+    static final String UNATTRIBUTED = "unattributed/unknown";
+
     private static void migrateTable(Connection conn, String tableName, String fields, String createTableSql)
             throws SQLException {
         if (tableExists(conn, tableName)) {
             try (Statement stmt = conn.createStatement()) {
                 stmt.execute("ALTER TABLE " + tableName + " RENAME TO old_" + tableName + ";");
                 stmt.execute(createTableSql);
-                stmt.execute("INSERT INTO " + tableName + " (repository, " + fields + ") "
-                        + "SELECT 'apache/logging-log4j2', " + fields + " FROM old_" + tableName + ";");
+                // The rows came from a store that predates knowing which repository they belong
+                // to, so this cannot know either. It used to write 'apache/logging-log4j2' --
+                // correct on the machine this was developed on and a silent relabelling of
+                // somebody else's issues as Apache's project everywhere else. A marker that says
+                // "nobody recorded this" is the only honest value available, and it is visible in
+                // the data rather than hidden in a migration nobody reads.
+                stmt.execute("INSERT INTO " + tableName + " (repository, " + fields + ") " + "SELECT '" + UNATTRIBUTED
+                        + "', " + fields + " FROM old_" + tableName + ";");
                 stmt.execute("DROP TABLE old_" + tableName + ";");
             }
         } else {

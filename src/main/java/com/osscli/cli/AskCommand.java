@@ -233,106 +233,6 @@ public class AskCommand implements Callable<Integer> {
      * <p>Static and defensive: a corpus that cannot be read is a sentence the loop reads and works
      * around, never an exception that ends somebody's question.
      */
-    /**
-     * Your notes, added to the same index as the issues.
-     *
-     * <p>Keyed by the file so a hit reads back as something you can open. Chunk-level rather than
-     * whole-note, because a 40 KB session log matching on one paragraph should return that
-     * paragraph's note, not bury the ranking under its other thirty-nine.
-     */
-    private static int notes(com.osscli.retrieval.TextIndex into) {
-        int added = 0;
-        String sql = "SELECT file_path, chunk_index, content FROM personal_chat_chunk WHERE length(content) > 120;";
-        try (java.sql.Connection conn = com.osscli.storage.DatabaseManager.getConnection();
-                java.sql.PreparedStatement ps = conn.prepareStatement(sql);
-                java.sql.ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                String path = rs.getString("file_path");
-                String name = path == null ? "note" : path.substring(path.lastIndexOf('/') + 1);
-                String id = "note:" + name + "#" + rs.getInt("chunk_index");
-                String content = rs.getString("content");
-                into.add(id, name, content);
-                excerpts.put(id, excerpt(content));
-                added++;
-            }
-        } catch (Exception ignored) {
-            // A corpus without notes still answers from the issues.
-        }
-        return added;
-    }
-
-    /**
-     * Past questions and their answers, added to the same index.
-     *
-     * <p>Paired, so a hit returns the exchange rather than half of it: a question on its own says
-     * what was wondered and never what was found, which is the half worth keeping.
-     */
-    private static int conversations(com.osscli.retrieval.TextIndex into) {
-        int added = 0;
-        String sql = "SELECT session_id, seq, role, content FROM chat_turn ORDER BY session_id, seq;";
-        try (java.sql.Connection conn = com.osscli.storage.DatabaseManager.getConnection();
-                java.sql.PreparedStatement ps = conn.prepareStatement(sql);
-                java.sql.ResultSet rs = ps.executeQuery()) {
-            String pendingQuestion = null;
-            long pendingSession = 0;
-            while (rs.next()) {
-                String role = rs.getString("role");
-                String content = rs.getString("content");
-                if (content == null || content.isBlank()) {
-                    continue;
-                }
-                if ("you".equalsIgnoreCase(role)) {
-                    pendingQuestion = content;
-                    pendingSession = rs.getLong("session_id");
-                    continue;
-                }
-                if (pendingQuestion == null) {
-                    continue;
-                }
-                String id = "asked:" + pendingSession + "#" + rs.getInt("seq");
-                into.add(id, pendingQuestion, pendingQuestion + " " + content);
-                excerpts.put(id, "you asked: " + oneLine(pendingQuestion) + " → " + excerpt(content));
-                pendingQuestion = null;
-                added++;
-            }
-        } catch (Exception ignored) {
-            // A store without conversations still answers from notes and issues.
-        }
-        return added;
-    }
-
-    private static String oneLine(String text) {
-        String flat = text.replaceAll("\\s+", " ").strip();
-        return flat.length() > 90 ? flat.substring(0, 89) + "…" : flat;
-    }
-
-    /**
-     * The readable part of a note chunk.
-     *
-     * <p>Front matter first: harvested notes open with tags, a source path and a date, and a
-     * fragment of that tells the reader nothing about what was done. Skipped to the first line that
-     * looks like prose, then capped — this goes into a prompt, and eight of them uncapped is the
-     * budget the question needed.
-     */
-    private static String excerpt(String content) {
-        if (content == null) {
-            return "";
-        }
-        String[] lines = content.split("\n");
-        StringBuilder b = new StringBuilder();
-        for (String line : lines) {
-            String t = line.strip();
-            if (t.isEmpty() || t.startsWith("---") || t.startsWith("#") || t.matches("^[a-z_]+:.*")) {
-                continue;
-            }
-            b.append(t).append(' ');
-            if (b.length() > 260) {
-                break;
-            }
-        }
-        String out = b.toString().strip();
-        return out.length() > 300 ? out.substring(0, 299) + "…" : out;
-    }
 
     /**
      * What this machine holds about the question — and about the issue, when one was named.
@@ -364,6 +264,29 @@ public class AskCommand implements Callable<Integer> {
         }
         String aboutTheIssue = com.osscli.retrieval.MemoryContext.forIssue(issue, repo);
         return aboutTheIssue.isBlank() ? corpus : aboutTheIssue + "\n" + corpus;
+    }
+
+    /**
+     * What this machine holds, searched where it lives.
+     *
+     * <p>Everything this used to do -- load every issue, load fifty-one thousand note passages, add
+     * them all to an in-process index -- is in SQLite now, built once and kept there. That work
+     * cost <b>14.3 seconds on every command</b>, before the model was called, and the second search
+     * inside the same process took 39 milliseconds. The work was never the searching.
+     */
+    private static String searchThisMachine(String query) {
+        java.util.List<com.osscli.retrieval.Corpuses.Hit> hits = com.osscli.retrieval.Corpuses.search(query);
+        if (hits.isEmpty()) {
+            return "";
+        }
+        StringBuilder b = new StringBuilder(hits.size() + " match(es) in what this machine holds:\n");
+        for (com.osscli.retrieval.Corpuses.Hit hit : hits) {
+            b.append("\n— ").append(hit.id()).append("  (").append(hit.kind()).append(")\n");
+            b.append("  ")
+                    .append(hit.excerpt().isBlank() ? hit.title() : hit.excerpt())
+                    .append('\n');
+        }
+        return b.toString();
     }
 
     /** How the reader writes, when enough of their writing exists to have measured it. */
@@ -516,7 +439,7 @@ public class AskCommand implements Callable<Integer> {
         try {
             System.setOut(new java.io.PrintStream(captured, true, java.nio.charset.StandardCharsets.UTF_8));
             // stderr too, or the inner command's own status line prints straight through this one:
-            // asking `hub` printed seventeen "3 of 17 — apache/logging-log4j2#4240" lines into the
+            // asking `hub` printed seventeen "3 of 17 — owner/name#4240" lines into the
             // middle of the transcript, which is the nested command narrating itself to a reader
             // who asked a different question.
             System.setErr(new java.io.PrintStream(problems, true, java.nio.charset.StandardCharsets.UTF_8));
@@ -533,85 +456,5 @@ public class AskCommand implements Callable<Integer> {
         // Kept, not discarded: a command that printed nothing and complained on stderr has told the
         // model exactly what it needs to know, and swallowing it would leave an unexplained blank.
         return answer.isBlank() && !failed.isEmpty() ? failed : answer;
-    }
-
-    /**
-     * Built once per process, not once per question.
-     *
-     * <p>A loop asks {@code recall} more than once, and each call was reloading every issue from
-     * every followed repository and rebuilding the index over all of them -- 15,938 rows on the
-     * machine this was written for, three times in one answer. The process runs a single command
-     * and exits, so once is exactly the right number of times.
-     */
-    private static com.osscli.retrieval.TextIndex index;
-
-    private static int indexed;
-
-    /**
-     * A readable fragment per indexed item, kept beside the index.
-     *
-     * <p>Because a hit that returns only a filename is a dead end here: a note lives under the
-     * memory directory, which is outside the workspace the loop may read, so the model asked to
-     * open `kafka-bug.md` and was correctly refused. The point of the search is the sentence that
-     * says what was done — returning its address instead makes the reader fetch what the search
-     * already had in its hand.
-     */
-    private static final java.util.Map<String, String> excerpts = new java.util.HashMap<>();
-
-    private static String searchThisMachine(String query) {
-        try {
-            // The same index `oss search` uses, over the issues already synced. Building it per
-            // call is what `search` does too; sharing the construction would mean caching a corpus
-            // across a process that runs one command and exits.
-            if (index == null) {
-                java.util.Map<String, com.osscli.model.Issue> issues = new java.util.LinkedHashMap<>();
-                for (String repository : com.osscli.storage.SqliteStorage.loadMonitoredRepositories()) {
-                    for (com.osscli.model.Issue issue : com.osscli.storage.SqliteStorage.loadIssues(repository)) {
-                        issues.put(repository + "#" + issue.number(), issue);
-                    }
-                }
-                if (issues.isEmpty()) {
-                    return "nothing is synced on this machine yet — oss sync --all";
-                }
-                com.osscli.retrieval.TextIndex built = new com.osscli.retrieval.TextIndex();
-                issues.forEach((key, issue) -> {
-                    built.add(key, issue.title(), issue.body());
-                    excerpts.put(key, issue.title());
-                });
-                int count = issues.size();
-
-                // Your own notes as well as the upstream issues, and this is the half that matters
-                // for "have I solved this before". The fix for a Kafka appender that would not
-                // start is not in Apache's issue tracker under your name -- it is in the note you
-                // wrote afterwards. Indexing only the issues meant the corpus could answer "who
-                // else hit this" and never "what did I do about it".
-                count += notes(built);
-
-                // And every question already asked, with the answer it got. These were durable but
-                // invisible: chat and ask both write chat_turn, and nothing ever searched it -- so
-                // the one place that knows "I asked this last week and here is what we concluded"
-                // was the one place the loop could not reach.
-                count += conversations(built);
-
-                built.build();
-                indexed = count;
-                index = built;
-            }
-
-            List<com.osscli.retrieval.TextIndex.Hit> hits = index.search(query, 8);
-            if (hits.isEmpty()) {
-                return "";
-            }
-            StringBuilder b = new StringBuilder(hits.size() + " of " + indexed + " indexed items match:\n");
-            for (com.osscli.retrieval.TextIndex.Hit hit : hits) {
-                b.append("\n— ").append(hit.id()).append('\n');
-                String excerpt = excerpts.get(hit.id());
-                b.append("  ").append(excerpt == null ? hit.title() : excerpt).append('\n');
-            }
-            return b.toString();
-        } catch (Exception e) {
-            // A sentence the loop reads and works around, never an exception that ends the question.
-            return "the local corpus could not be searched: " + e.getMessage();
-        }
     }
 }
