@@ -192,7 +192,15 @@ asserts on what they see -- extensions, memory, the offline promise -- and
 `PackJourneyTest` does the same for packs. Add one whenever a capability is
 reached through more than one command.
 
-Two rules they exist under. **Run the compiled classes, never the packaged jar**:
+**A journey must not assert on which wall it hits first.** `CredentialManager`
+reads the environment and then the macOS keychain, so an unreachable network
+refuses with "GitHub Token is missing" on a CI runner and "no network" on a
+laptop with `gh` set up. Both are correct. The first version of the offline
+journey asserted the second, passed locally and failed on all four runners --
+the assertion had encoded one machine's state. Assert what every refusal shares:
+non-zero, a next step named, no stack trace.
+
+Two more rules they exist under. **Run the compiled classes, never the packaged jar**:
 the first journey test shelled out to `target/oss-cli-*.jar`, which only exists
 after `package`, so during `mvn verify` it found no jar, assumed itself away and
 reported as SKIPPED -- a test written because an untested step was broken, itself

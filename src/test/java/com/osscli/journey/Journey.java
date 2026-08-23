@@ -64,6 +64,23 @@ public final class Journey {
      * @param cwd the directory the user is standing in
      */
     public static Ran oss(Path home, Path cwd, String... argv) throws Exception {
+        return run(home, cwd, null, argv);
+    }
+
+    /**
+     * The same, with a GitHub token present.
+     *
+     * <p>Whether a token exists decides WHICH refusal an unreachable network produces, and both are
+     * correct: with no token the tool stops at "GitHub Token is missing", and with one it gets as
+     * far as "no network". A test that asserted only the second passed here and failed on every CI
+     * runner, because this machine had a token in its environment and the runners did not -- the
+     * assertion had encoded one machine's state rather than the contract.
+     */
+    public static Ran ossWithToken(Path home, Path cwd, String... argv) throws Exception {
+        return run(home, cwd, "ghp_notarealtokenusedonlyintests", argv);
+    }
+
+    private static Ran run(Path home, Path cwd, String token, String... argv) throws Exception {
         String where = home.toAbsolutePath().toString();
         if (where.startsWith(System.getProperty("user.home") + "/.oss-cli")) {
             throw new IllegalStateException("refusing to run a journey against the real store: " + where);
@@ -83,6 +100,10 @@ public final class Journey {
         // working because the developer happened to be online is worse than one that fails.
         pb.environment().put("GITHUB_API_URL", "http://127.0.0.1:1");
         pb.environment().remove("GITHUB_TOKEN");
+        pb.environment().remove("GH_TOKEN");
+        if (token != null) {
+            pb.environment().put("GITHUB_TOKEN", token);
+        }
 
         Process p = pb.start();
         String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);

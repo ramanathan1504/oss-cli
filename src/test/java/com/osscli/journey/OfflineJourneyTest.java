@@ -42,10 +42,33 @@ import org.junit.jupiter.api.io.TempDir;
 class OfflineJourneyTest {
 
     @Test
-    @DisplayName("what needs the network says so, names what still works, and exits non-zero")
-    void theNetworkedHalfRefusesReadably(@TempDir Path home, @TempDir Path work) throws Exception {
+    @DisplayName("a command it cannot complete refuses with a remedy, whichever wall it hits first")
+    void aRefusalAlwaysCarriesItsFix(@TempDir Path home, @TempDir Path work) throws Exception {
+        // Which wall comes first is a property of the MACHINE, not of the product. With no
+        // credential anywhere it stops at "GitHub Token is missing"; with one it gets as far as
+        // "no network". CredentialManager falls back to the macOS keychain after the environment,
+        // so a developer laptop reaches the second and a CI runner reaches the first -- and the
+        // version of this test that asserted only the second passed here and failed on all four
+        // runners. The contract is what both refusals share.
         for (String[] argv : new String[][] {{"issue", "1", "-r", "owner/name"}, {"pr", "1", "-r", "owner/name"}}) {
             Journey.Ran ran = Journey.oss(home, work, argv);
+
+            assertNotEquals(0, ran.code(), "a command that could not do its job exited 0: " + ran.all());
+            assertTrue(
+                    ran.all().contains("oss setup") || ran.all().contains("oss search"),
+                    "every refusal must carry a next step: " + ran.all());
+            assertNoStackTrace(ran);
+        }
+    }
+
+    @Test
+    @DisplayName("with a token and no network, it names the network and what still works")
+    void withATokenButNoNetwork(@TempDir Path home, @TempDir Path work) throws Exception {
+        // Past the credential, into the thing this journey is actually about. Which of these two
+        // refusals you get depends on whether a token exists, and asserting only this one is what
+        // made the first version of this test pass here and fail on every CI runner.
+        for (String[] argv : new String[][] {{"issue", "1", "-r", "owner/name"}, {"pr", "1", "-r", "owner/name"}}) {
+            Journey.Ran ran = Journey.ossWithToken(home, work, argv);
 
             assertNotEquals(0, ran.code(), "a command that could not reach GitHub exited 0: " + ran.all());
             assertTrue(
@@ -54,9 +77,13 @@ class OfflineJourneyTest {
             // The remedy is the half that makes an error useful. An absence without one is a
             // complaint.
             assertTrue(ran.all().contains("oss search"), "it must name what still works: " + ran.all());
-            assertFalse(ran.all().contains("java.net."), "a stack trace reached the user: " + ran.all());
-            assertFalse(ran.all().contains("Exception"), "a stack trace reached the user: " + ran.all());
+            assertNoStackTrace(ran);
         }
+    }
+
+    private static void assertNoStackTrace(Journey.Ran ran) {
+        assertFalse(ran.all().contains("java.net."), "a stack trace reached the user: " + ran.all());
+        assertFalse(ran.all().contains("\tat com.osscli"), "a stack trace reached the user: " + ran.all());
     }
 
     @Test
