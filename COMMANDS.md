@@ -1022,9 +1022,24 @@ is **data the tool reads**, not a program it runs:
   "apps": ["consumer", "db", "network"],
   "appsDir": "apps",
   "configsDir": "configs",
-  "modulePath": "apps/{app}"
+  "modulePath": "apps/{app}",
+  "mainClass": "com.example.{app}.Main"
 }
 ```
+
+`mainClass` is how an application is **started**, and it is the one field a pack
+cannot usefully leave out: without it `oss run list` prints your applications and
+`oss run run` cannot launch any of them. `{app}` is replaced with the application's
+name, and `mainClassFor` names the ones that differ:
+
+```json
+"mainClass": "com.example.{app}.Main",
+"mainClassFor": { "nosql": "com.example.db.Main" }
+```
+
+Leave it out entirely and `oss run run` says which field to add. It used to hand
+the JVM an empty class name, which produced `Could not find or load main class`
+followed by nothing — an error about Java for a sentence missing from your pack.
 
 Save it as `pack.json`, or as a ```json block inside `pack.md` if you want the same file to explain
 itself to a person as well. A worked example ships at `runner/packs/example-json/pack.json` —

@@ -49,7 +49,9 @@ import java.util.regex.Pattern;
  *   "appsDir": "apps",
  *   "configsDir": "configs",
  *   "modulePath": "apps/{app}",
- *   "modulePathFor": { "nosql": "apps/db" }
+ *   "modulePathFor": { "nosql": "apps/db" },
+ *   "mainClass": "demo.{app}.Main",
+ *   "mainClassFor": { "nosql": "demo.db.Main" }
  * }
  * }</pre>
  *
@@ -235,6 +237,43 @@ public final class PackFile {
         out.append("    *) printf '%s' ")
                 .append(quote(template).replace(APP_TOKEN, "'\"$1\"'"))
                 .append(" ;;\n  esac\n}\n");
+
+        // How to START one. Without this a declarative pack could describe every application it
+        // has and not one way to run it: `oss run init` wrote a pack, `oss run list` printed the
+        // apps, and `oss run run <app>` handed `java` an empty class name and died with
+        // "Could not find or load main class" and nothing after it. That is the whole point of a
+        // runner, and it was unreachable for anyone who had not written pack.sh by hand.
+        //
+        // Same shape as modulePath, because that decision is already made and a second idiom for
+        // "a template, plus the exceptions" would be one more thing to learn: `mainClass` with
+        // {app} in it, `mainClassFor` naming the apps that differ.
+        //
+        // Absent entirely, this emits nothing and the engine's own default applies -- which
+        // refuses by name rather than launching a JVM with no class.
+        JsonNode perApp = json.path("mainClassFor");
+        String mainTemplate = json.path("mainClass").asText("");
+        if (!mainTemplate.isEmpty() || perApp.fieldNames().hasNext()) {
+            out.append("pack_main_class_for() {\n  case \"$1\" in\n");
+            java.util.Iterator<String> mains = perApp.fieldNames();
+            while (mains.hasNext()) {
+                String app = mains.next();
+                out.append("    ")
+                        .append(quote(app))
+                        .append(") printf '%s' ")
+                        .append(quote(perApp.path(app).asText()))
+                        .append(" ;;\n");
+            }
+            if (mainTemplate.isEmpty()) {
+                // Only exceptions were given. Anything else has no main class, and saying nothing
+                // is what lets the engine explain that rather than the JVM.
+                out.append("    *) : ;;\n");
+            } else {
+                out.append("    *) printf '%s' ")
+                        .append(quote(mainTemplate).replace(APP_TOKEN, "'\"$1\"'"))
+                        .append(" ;;\n");
+            }
+            out.append("  esac\n}\n");
+        }
         return out.toString();
     }
 

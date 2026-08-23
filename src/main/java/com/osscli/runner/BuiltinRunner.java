@@ -237,6 +237,11 @@ public final class BuiltinRunner {
      * would be run before it was read.
      */
     private static String starter(String name, String tool, String evidence, String repository, List<String> apps) {
+        // A placeholder that is obviously a placeholder. Detecting the real main class means
+        // parsing sources or a shade plugin's configuration, and a WRONG main class written
+        // confidently is worse than an unmistakable blank -- it fails at launch looking like the
+        // project's fault. `{app}` is the token the renderer already understands.
+        String mainClassGuess = "com.example.{app}.Main";
         StringBuilder md = new StringBuilder();
         md.append("# ").append(name).append(" — pack\n\n");
         md.append("What `oss run` executes for this project. Written by `oss run init` from what was\n");
@@ -246,7 +251,11 @@ public final class BuiltinRunner {
         md.append("- **apps** — the real applications that exercise the project. One directory each\n");
         md.append("  under `appsDir`.\n");
         md.append("- **useWhen** — when this pack applies, so the tool can find it instead of being\n");
-        md.append("  told. A pack that claims nothing is never picked automatically.\n\n");
+        md.append("  told. A pack that claims nothing is never picked automatically.\n");
+        md.append("- **mainClass** — how to start one. `{app}` is replaced with the application's\n");
+        md.append("  name; `mainClassFor` names the ones that differ. Without it a pack can list\n");
+        md.append("  its applications and cannot run any of them, which `oss run run` says rather\n");
+        md.append("  than letting the JVM complain about a class name it was never given.\n\n");
         md.append("```json\n{\n");
         md.append("  \"name\": \"").append(name).append("\",\n");
         md.append("  \"description\": \"")
@@ -273,7 +282,11 @@ public final class BuiltinRunner {
         md.append("],\n");
         md.append("  \"appsDir\": \"apps\",\n");
         md.append("  \"configsDir\": \"configs\",\n");
-        md.append("  \"modulePath\": \"apps/{app}\"\n");
+        md.append("  \"modulePath\": \"apps/{app}\",\n");
+        // Detected where it can be, left as an obvious placeholder where it cannot. A wrong main
+        // class fails at launch with a readable error; a MISSING one used to fail with an empty
+        // one, and that is the difference this line exists to make.
+        md.append("  \"mainClass\": \"").append(mainClassGuess).append("\"\n");
         md.append("}\n```\n");
         return md.toString();
     }
