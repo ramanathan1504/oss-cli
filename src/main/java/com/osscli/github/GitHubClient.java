@@ -267,7 +267,12 @@ public class GitHubClient {
 
     public List<String> getPullRequestFiles(String owner, String repo, long prNumber)
             throws IOException, InterruptedException {
-        String urlString = String.format("https://api.github.com/repos/%s/%s/pulls/%d/files", owner, repo, prNumber);
+        // apiBase(), like every other call in this class. This one had api.github.com written into
+        // it, so a GitHub Enterprise install -- the case GITHUB_API_URL exists for -- sent thirteen
+        // requests to its own host and this one to the public API, where its token is not valid and
+        // its repository does not exist. The failure lands on "the files in this pull request",
+        // which reads as a permissions problem with the PR rather than a wrong host.
+        String urlString = String.format("%s/repos/%s/%s/pulls/%d/files", apiBase(), owner, repo, prNumber);
 
         java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
                 .uri(java.net.URI.create(urlString))
