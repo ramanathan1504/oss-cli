@@ -650,10 +650,23 @@ cmd_run() {
   cd "$ROOT"
   # ${arr[@]+"${arr[@]}"} rather than "${arr[@]}": under `set -u`, bash 3.2
   # (which is what macOS ships) treats an empty array as an unbound variable.
+  # A pack that never says how to start an application used to reach this line with
+  # an empty argument, and the JVM answered `Could not find or load main class`
+  # followed by a blank -- an error about Java, for a sentence missing from the
+  # pack. `oss run init` writes a pack that lists its apps and cannot start one, so
+  # this was the first wall every new user hit and the message pointed away from it.
+  local main; main="$(pack_main_class_for "$app")"
+  if [[ -z "$main" ]]; then
+    die "pack $PACK_NAME does not say how to start '$app'.
+       Add it to your pack file:   \"mainClass\": \"com.example.{app}.Main\"
+       or, for this app only:      \"mainClassFor\": { \"$app\": \"com.example.Main\" }
+       A pack.sh does it with pack_main_class_for()."
+  fi
+
   exec "$jhome/bin/java" \
     ${jvm_args[@]+"${jvm_args[@]}"} \
     -cp "$cp" \
-    "$(pack_main_class_for "$app")" \
+    "$main" \
     ${args[@]+"${args[@]}"}
 }
 

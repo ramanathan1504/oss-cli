@@ -45,7 +45,7 @@ thirty lines. Copy it.
 | `PACK_APPS_DIR`, `PACK_CONFIGS_DIR` | where to look, relative to the pack. Default `apps` and `configs` |
 | `pack_build_flags`, `pack_gradle_version_flag` | how a version reaches the build. Default: no extra flags |
 | `pack_config_args` | **how an application is told where its configuration is** |
-| `pack_main_class_for` | how to start one |
+| `pack_main_class_for` | **how to start one.** In a declarative pack this is `mainClass` (with `{app}`) plus `mainClassFor` for the exceptions. A pack without it lists its applications and can launch none of them, so `oss run run` names the field rather than letting the JVM report an empty class |
 | `pack_jvm_args`, `pack_always_jvm_args` | flags an application or the project needs |
 | `pack_skip_reason`, `pack_min_java_for`, `pack_min_version_for` | which cells are impossible, and why. Default: none are |
 | `pack_requires_config_for`, `pack_requires_app_for` | pairs that cannot go together |
