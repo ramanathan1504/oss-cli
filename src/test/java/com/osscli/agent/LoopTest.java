@@ -164,18 +164,44 @@ class LoopTest {
     }
 
     @Test
-    @DisplayName("a model reaching for a tool and missing the format is corrected, then called")
-    void aModelThatCannotFollowTheFormatIsNamed(@TempDir Path dir) {
-        // Real output from qwen2.5:0.5b on this machine:
-        //   read_file:path:/path/to/your/project/root/root/src/main/cpp/tool/oss.py
-        // An attempt at a tool call, in no format at all. It used to be printed as the answer,
-        // which is the one output worse than a refusal.
-        // Every shape this model produced on this machine, in order, including echoing the usage
-        // line back on the third turn.
+    @DisplayName("an attempt that names a real tool is honoured rather than corrected")
+    void anUnderstandableAttemptIsHonoured(@TempDir Path dir) {
+        // Every shape qwen2.5:0.5b produced on this machine, in order, including echoing the usage
+        // line back on the third turn. All three name `read_file` and say what they want.
+        //
+        // These used to be rejected and corrected, three times, and then the run ended with
+        // nothing. The model had done the hard part -- deciding what to look at -- and failed a
+        // keyword. So they are read now, and each one becomes a real call that fails honestly
+        // against a file that is not there.
         Function model = ask(
                 "read_file:path:/some/invented/path.py",
                 "read_file\"path\": \"path/to/project\"",
                 "read_file - path: <file>   [from: <line>]   read part of a file in this project");
+
+        Loop.Transcript t = loop(dir, false).run("what build tool is this?", model);
+
+        assertTrue(
+                t.steps().stream().anyMatch(step -> step.startsWith("read_file")),
+                t.steps().toString());
+        assertFalse(t.couldNotFollow(), "it understood the intent; that is not a failure to follow");
+        assertTrue(t.unchecked(), "nothing was successfully read, so the answer must say so");
+    }
+
+    @Test
+    @DisplayName("an attempt is never printed as the answer, even at the very end")
+    void anAttemptIsNeverTheAnswer(@TempDir Path dir) {
+        // The guarantee that matters, isolated: a model still reaching for a tool when it is asked
+        // to conclude has not finished, and its reply is not an answer. Nonsense presented
+        // confidently is the one output worse than a refusal.
+        //
+        // ````oss` with no tool named parses as nothing, so the loop corrects; and the conclude
+        // pass gets the same shape back and must refuse rather than print it.
+        Function model = ask(
+                "```oss\nplease: read something\n```",
+                "```oss\nplease: read something\n```",
+                "```oss\nplease: read something\n```",
+                "```oss\nplease: read something\n```",
+                "```oss\nplease: read something\n```");
 
         Loop.Transcript t = loop(dir, false).run("what build tool is this?", model);
 

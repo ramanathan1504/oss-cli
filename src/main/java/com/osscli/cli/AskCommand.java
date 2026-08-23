@@ -114,17 +114,38 @@ public class AskCommand implements Callable<Integer> {
                 ? Rungs.forThisMachine(resolved).orElse(null)
                 : pick(Rungs.available(resolved));
         if (chosen == null) {
-            // Refused with both fixes named, rather than a loop that turns without producing
-            // anything. The built-in model ranks and retrieves; it does not write sentences, and
-            // deciding what to look at next is writing a sentence.
-            System.err.println("  Nothing on this machine can drive a loop yet.");
-            System.err.println();
-            System.err.println("  The built-in model searches and ranks; it does not write. This needs one of:");
-            System.err.println("    ollama serve            then  oss ask \"…\"");
-            System.err.println("    oss claude ask \"…\"      or gemini, codex, junie — whichever you have");
-            System.err.println();
-            System.err.println("  Everything else still works without either:  oss search, oss hub, oss triage");
-            return 1;
+            // The built-in model ranks and retrieves; it does not write sentences, and deciding
+            // what to look at next is writing a sentence. So there is no loop to run.
+            //
+            // There is still an answer, though, and this used to throw it away. Retrieval is the
+            // floor of this product and it does not need a model that generates -- the reader's own
+            // past work, ranked against the question, is exactly what they asked for, minus the
+            // prose. Refusing outright made `ask` the one command gated on a model, in a tool whose
+            // whole claim is that no layer is mandatory.
+            //
+            // Ranked, never summarised: writing the summary is the thing nothing here can do, and
+            // inventing one would be the confident nonsense this loop refuses everywhere else.
+            String held = whatIsKnown(asked.isBlank() ? "" : asked);
+            if (asked.isBlank() || held == null || held.isBlank()) {
+                System.err.println("  Nothing on this machine can drive a loop yet.");
+                System.err.println();
+                System.err.println("  The built-in model searches and ranks; it does not write. This needs one of:");
+                System.err.println("    ollama serve            then  oss ask \"…\"");
+                System.err.println("    oss claude ask \"…\"      or gemini, codex, junie — whichever you have");
+                System.err.println();
+                System.err.println("  Everything else still works without either:  oss search, oss hub, oss triage");
+                return 1;
+            }
+            System.out.println("  your own archive · " + workspace.root() + " · read-only");
+            System.out.println();
+            System.out.println(held.strip());
+            System.out.println();
+            System.out.println("  ⚠ This is what your archive holds, ranked — not an answer.");
+            System.out.println("    No model on this machine writes prose, so nothing above was read,");
+            System.out.println("    weighed or summarised. Attach one and the same question is answered:");
+            System.out.println("      ollama serve            then  oss ask \"" + asked + "\"");
+            System.out.println("      oss claude ask \"" + asked + "\"   or gemini, codex, junie");
+            return 0;
         }
 
         List<Tool> tools = new java.util.ArrayList<>(List.of(
@@ -216,11 +237,32 @@ public class AskCommand implements Callable<Integer> {
             System.out.println("    oss claude ask \"" + asked + "\"");
             return 1;
         }
-        if (transcript.ranOut()) {
+        if (transcript.ranOut() && transcript.answer().isBlank()) {
             int looks = transcript.steps().size();
             System.out.println("  Stopped after " + looks + (looks == 1 ? " look" : " looks") + " without an answer.");
             System.out.println("  Ask something narrower, or raise the ceiling with --steps.");
             return 1;
+        }
+        // ABOVE the answer, not below it. A caveat that arrives after the prose is read after the
+        // reader has already believed it, and this particular prose is the kind that earns
+        // belief -- a 0.5b model answering about a corpus it could not open produced fluent,
+        // confident text naming a file that has nothing to do with the question. The repository's
+        // own rule is that nonsense presented confidently is worse than a refusal; printing it
+        // under a heading that says what it is is the difference between the two.
+        if (transcript.concluded()) {
+            if (transcript.ranOut()) {
+                System.out.println("  ⚠ Not finished — it ran out of looks and answered from what it had.");
+                System.out.println("    Raise the ceiling with --steps, or ask something narrower.");
+            } else if (transcript.unchecked()) {
+                System.out.println("  ⚠ Nothing was opened, read or checked.");
+                System.out.println("    " + chosen.label() + " could not call a tool, so what follows is that");
+                System.out.println("    model writing from your archive alone. Treat it as a lead, not an answer:");
+                System.out.println("      oss claude ask \"" + asked + "\"      or gemini, codex, junie");
+            } else {
+                System.out.println("  ⚠ Stopped early — it found what is listed above, then could not");
+                System.out.println("    ask for anything more. The answer rests on that much and no more.");
+            }
+            System.out.println();
         }
         System.out.println(transcript.answer());
         remember(session, asked, transcript.answer());
@@ -322,11 +364,20 @@ public class AskCommand implements Callable<Integer> {
             System.out.println();
             return null;
         }
-        if (transcript.ranOut()) {
+        if (transcript.ranOut() && transcript.answer().isBlank()) {
             int looks = transcript.steps().size();
             System.out.println("  Stopped after " + looks + (looks == 1 ? " look" : " looks") + " without an answer.");
             System.out.println();
             return null;
+        }
+        if (transcript.concluded()) {
+            System.out.println(
+                    transcript.ranOut()
+                            ? "  ⚠ not finished — ran out of looks, answering from what it had"
+                            : transcript.unchecked()
+                                    ? "  ⚠ nothing opened or checked — this model writing from your archive alone"
+                                    : "  ⚠ stopped early — resting on what is listed above and no more");
+            System.out.println();
         }
         System.out.println(transcript.answer());
         System.out.println();

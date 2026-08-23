@@ -88,6 +88,15 @@ public final class Loop {
     static final int MAX_MALFORMED = 2;
 
     /**
+     * How many tool calls may fail in a row before the looking is over.
+     *
+     * <p>Three. One failure is a wrong path, two is a model correcting itself, and three in
+     * succession is a model that cannot work these tools -- at which point every further look costs
+     * a model call and tens of seconds to produce the same sentence again.
+     */
+    static final int MAX_CONSECUTIVE_FAILURES = 3;
+
+    /**
      * Told as it happens, not collected and shown at the end.
      *
      * <p>A loop turn is a model call and a tool: seconds each, a minute or more together, and the
@@ -149,11 +158,35 @@ public final class Loop {
     }
 
     /** What happened, in order, and the answer if there was one. */
-    public record Transcript(String answer, List<String> steps, boolean ranOut, boolean couldNotFollow) {
+    public record Transcript(
+            String answer,
+            List<String> steps,
+            boolean ranOut,
+            boolean couldNotFollow,
+            boolean concluded,
+            boolean looked) {
 
         /** The ordinary case: an answer, no confusion. */
         public Transcript(String answer, List<String> steps, boolean ranOut) {
-            this(answer, steps, ranOut, false);
+            this(answer, steps, ranOut, false, false, true);
+        }
+
+        /** An answer that never happened, for the reason named. */
+        public Transcript(String answer, List<String> steps, boolean ranOut, boolean couldNotFollow) {
+            this(answer, steps, ranOut, couldNotFollow, false, false);
+        }
+
+        /**
+         * Whether this answer rests on nothing that was actually fetched.
+         *
+         * <p>Two different things were being reported with one word. A run where every tool call
+         * failed and a run where two searches succeeded before the model lost the format both
+         * printed "nothing was opened, read or checked" -- and the second one was a lie a reader
+         * could disprove by looking three lines up at `recall → 8 match(es)`. A caveat that is
+         * visibly wrong is worse than none, because it teaches the reader to skip the next one.
+         */
+        public boolean unchecked() {
+            return concluded && !looked;
         }
     }
 
@@ -175,6 +208,9 @@ public final class Loop {
     public Transcript run(String question, Function<String, String> ask, String earlier) {
         List<String> steps = new ArrayList<>();
         int malformed = 0;
+        int failing = 0;
+        boolean looked = false;
+        String correction = "";
         Map<String, String> alreadySeen = new LinkedHashMap<>();
         StringBuilder conversation = new StringBuilder();
         if (earlier != null && !earlier.isBlank()) {
@@ -185,19 +221,24 @@ public final class Loop {
 
         for (int step = 0; step < maxSteps; step++) {
             onStep.accept("thinking (" + (step + 1) + " of " + maxSteps + ")");
-            String reply = ask.apply(prompt(question, conversation.toString()));
-            Optional<Action> action = Action.firstIn(reply);
+            // The correction is for the NEXT turn only, and is deliberately not folded into the
+            // conversation. It is protocol, and the conversation is evidence -- keeping them apart
+            // is what stops the format leaking into the one question asked without it. Found by a
+            // test: the last question still contained ```oss, because a reminder from four turns
+            // earlier was still sitting in the history.
+            String reply = ask.apply(prompt(question, conversation + correction));
+            correction = "";
+            Optional<Action> action = Action.firstIn(reply, tools.keySet());
             if (action.isEmpty()) {
                 if (looksLikeAnAttempt(reply)) {
                     // It tried to call a tool and could not spell it. Correct it, at the cost of a
                     // step, rather than printing the attempt as though it were an answer.
                     if (++malformed > MAX_MALFORMED) {
-                        return new Transcript("", steps, false, true);
+                        return concludeAnyway(question, conversation, ask, steps, false, looked);
                     }
                     steps.add("(reply was not a tool block — asked again)");
-                    conversation
-                            .append("\n> that was not a block. Reply with exactly this and nothing else:\n")
-                            .append("```oss\ntool: <name>\n<argument>: <value>\n```\n");
+                    correction = "\n> that was not a block. Reply with exactly this and nothing else:\n"
+                            + "```oss\ntool: <name>\n<argument>: <value>\n```\n";
                     continue;
                 }
                 if (malformed > 0 && mentionsATool(reply)) {
@@ -205,14 +246,14 @@ public final class Loop {
                     // rather than answering -- this one echoed the usage line back verbatim. A
                     // model in that state is not finished, and printing its reply as the answer is
                     // how nonsense gets presented confidently.
-                    return new Transcript("", steps, false, true);
+                    return concludeAnyway(question, conversation, ask, steps, false, looked);
                 }
                 // No action asked for: the model is answering rather than working.
                 return new Transcript(reply == null ? "" : reply.strip(), steps, false);
             }
 
             Action a = action.get();
-            onStep.accept(a.tool() + " " + a.argument("path") + a.argument("query") + a.argument("verb"));
+            onStep.accept((a.tool() + " " + a.argument("path") + a.argument("query") + a.argument("verb")).strip());
             String key = a.tool() + " " + a.arguments();
             String observation;
             if (alreadySeen.containsKey(key)) {
@@ -224,6 +265,19 @@ public final class Loop {
                 alreadySeen.put(key, observation);
             }
 
+            // Five looks in a row that all came back "error:" is not investigation, it is a model
+            // that cannot work the tools -- measured here, where qwen2.5:0.5b spent five of its
+            // twelve on the same missing argument. Each one costs a model call and tens of
+            // seconds, and the twelfth was never going to be different from the seventh.
+            if (observation.startsWith("error:") || observation.startsWith("refused:")) {
+                if (++failing >= MAX_CONSECUTIVE_FAILURES) {
+                    steps.add(a.tool() + " → " + firstLine(observation));
+                    return concludeAnyway(question, conversation, ask, steps, false, looked);
+                }
+            } else {
+                failing = 0;
+                looked = true;
+            }
             steps.add(a.tool() + " → " + firstLine(observation));
             conversation
                     .append("\n> you asked:\n")
@@ -232,8 +286,58 @@ public final class Loop {
                     .append(trim(observation))
                     .append('\n');
         }
-        // Out of steps is not an answer, and must not be dressed as one.
-        return new Transcript("", steps, true);
+        // Out of looks. There is no more looking to do, so stop asking for a tool and ask for
+        // the answer -- twelve observations are a great deal to throw away for want of a
+        // thirteenth.
+        return concludeAnyway(question, conversation, ask, steps, true, looked);
+    }
+
+    /**
+     * Stop asking for a tool. Ask for the answer.
+     *
+     * <p>The two ways this loop used to end with nothing were a model that could not emit the
+     * block, and a model that ran out of looks. Both threw away work that had already succeeded:
+     * the corpus search runs <em>before</em> the first turn, so by the time either happens the
+     * model has the reader's own past work in front of it and — in the ran-out case — everything it
+     * read as well. It had plenty to say and was being asked the wrong question.
+     *
+     * <p>Measured, on this machine: qwen2.5:0.5b cannot produce the fenced block. Asked the same
+     * thing with no protocol to follow and the corpus in front of it, it answers. That is the
+     * difference between "you need a bigger model" and "you need a bigger model <em>to look at
+     * files</em>", and only one of those is true.
+     *
+     * <p>So this is a genuinely different request, not the same one retried: no tool list, no
+     * fence, no format. If it still will not answer, or answers with another attempt at a tool
+     * call, the old refusal stands — a reply that is still reaching for a tool is not a finished
+     * thought, and nonsense presented confidently remains the one output worse than a refusal.
+     *
+     * @param ranOut whether it got here by exhausting its looks rather than by failing the format
+     */
+    private Transcript concludeAnyway(
+            String question,
+            StringBuilder conversation,
+            Function<String, String> ask,
+            List<String> steps,
+            boolean ranOut,
+            boolean looked) {
+        onStep.accept("answering from what it has");
+        String reply;
+        try {
+            reply = ask.apply(answerPrompt(question, conversation.toString(), ranOut));
+        } catch (RuntimeException e) {
+            // The rung failing here is the rung failing; it is not a new kind of answer.
+            return new Transcript("", steps, ranOut, !ranOut);
+        }
+        if (reply == null || reply.isBlank() || looksLikeAnAttempt(reply)) {
+            return new Transcript("", steps, ranOut, !ranOut);
+        }
+        steps.add(
+                ranOut
+                        ? "(out of looks — answered from what it had)"
+                        : looked
+                                ? "(stopped early — answered from what it found)"
+                                : "(could not call a tool — answered from your corpus)");
+        return new Transcript(reply.strip(), steps, ranOut, false, true, looked);
     }
 
     /**
@@ -350,6 +454,58 @@ public final class Loop {
         }
         if (!conversation.isBlank()) {
             b.append("\nWhat you have done so far:\n").append(conversation);
+        }
+        return b.toString();
+    }
+
+    /**
+     * The same context, with nothing to obey.
+     *
+     * <p>Everything {@link #prompt} assembles that is <em>evidence</em> is here: the corpus, the
+     * reader's voice, the skills, and whatever was read before this point. Everything that is
+     * <em>protocol</em> is not: no tool list, no fence, no "reply with exactly one block". A model
+     * that has already shown it cannot follow the format is not helped by being shown the format a
+     * fourth time, and leaving it in is what kept a 0.5b model apologising instead of answering.
+     */
+    String answerPrompt(String question, String conversation, boolean ranOut) {
+        StringBuilder b = new StringBuilder();
+        b.append("You are answering a question about this project, on the user's own machine.\n\n");
+        if (ranOut) {
+            b.append("You have looked as many times as you are allowed. Answer now from what you\n")
+                    .append("found, and say plainly which parts you could not establish.\n\n");
+        } else {
+            b.append("Answer in plain prose. Do not ask for a file, do not write a code fence, and\n")
+                    .append("do not describe a tool — there is nothing here that can run one for you.\n")
+                    .append("If what is below does not settle the question, say so rather than guessing.\n\n");
+        }
+        b.append("Question: ").append(question).append('\n');
+
+        String known;
+        try {
+            known = memory.apply(question);
+        } catch (RuntimeException e) {
+            known = "";
+        }
+        if (known != null && !known.isBlank()) {
+            b.append("\nWhat this machine already holds about this:\n");
+            b.append(known.strip()).append('\n');
+            b.append("\nIf one of these already solved it, say so and point at it by number before\n");
+            b.append("proposing anything new.\n");
+        }
+        if (!voice.isBlank()) {
+            b.append('\n').append(voice.strip()).append('\n');
+        }
+        String how;
+        try {
+            how = skills.apply(question);
+        } catch (RuntimeException e) {
+            how = "";
+        }
+        if (how != null && !how.isBlank()) {
+            b.append('\n').append(how.strip()).append('\n');
+        }
+        if (!conversation.isBlank()) {
+            b.append("\nWhat you found while looking:\n").append(conversation);
         }
         return b.toString();
     }
