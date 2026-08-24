@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.5.0
+
+_2026-08-24_
+
+- `--pr` recorded whatever tree you were standing in, which is never the change (#199)
+
+  `oss run --pr <n> --checkout <verb>` fetches the pull request's head into a
+  throwaway git worktree, runs there, and removes it afterwards — so the result
+  is about the change under review rather than about your own checkout. A pull
+  request from a fork is refused unless `--allow-fork` is given: running one
+  executes its author's build on your machine.
+
+
 ## 4.4.0
 
 _2026-08-24_
