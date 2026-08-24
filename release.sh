@@ -246,6 +246,35 @@ for _ in $(seq 1 60); do
     sleep 20
 done
 
+# Move the pointer that names the release to install when you do not want to pick
+# a number. Here, after the asset wait, and not beside the version tag above:
+# `stable` is a recommendation, and recommending a release whose archives have not
+# landed yet sends somebody to a 404.
+#
+# -f on both, because moving is the entire job. Without it the second release is
+# rejected by the remote and the tag quietly goes on naming the first -- and a
+# pointer that is only sometimes moved is worse than none at all, because it reads
+# as a deliberate choice while actually naming whatever was current the last time
+# somebody remembered. That is the stale formula and the stale landing page again,
+# in a third costume.
+#
+# Nothing builds from this. Every workflow here triggers on v*, so re-pointing it
+# publishes nothing and cannot cut a release by accident.
+#
+# `v$VERSION^{}` dereferences to the commit: an annotated tag pointing at another
+# annotated tag is a chain that `git describe` and the GitHub UI both read oddly.
+echo "→ Pointing stable at v$VERSION..."
+if git tag -f -a stable "v$VERSION^{}" -m "Stable: v$VERSION" >/dev/null 2>&1 &&
+    git push -f origin stable >/dev/null 2>&1; then
+    echo "   ✔ stable → v$VERSION"
+else
+    # Not fatal, for the same reason the nudges below are not: the release itself
+    # is out. Loud, because the whole failure mode of this tag is being silently
+    # one release behind.
+    echo "   ⚠ could not move the stable tag — it still names the previous release"
+    echo "     to fix:  git tag -f -a stable v$VERSION^{} -m \"Stable: v$VERSION\" && git push -f origin stable"
+fi
+
 # Push, do not wait to be polled -- and with no stored credential.
 #
 # Both consumers poll on a schedule, because a cross-repo push once needed a
@@ -299,7 +328,7 @@ done
 nudge ramanathan1504/ubuos-site "Deploy"
 
 echo "========================================"
-echo "✅ v$VERSION merged, tagged and published."
+echo "✅ v$VERSION merged, tagged and published — and stable now names it."
 echo
 echo "CI took it from here, in order:"
 echo "   Release        publishes the GitHub release and the jar"
