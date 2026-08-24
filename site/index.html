@@ -621,6 +621,9 @@ td .need,td.need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)
 /* ---------- cards ---------- */
 .cards{margin-top:2.25rem;display:grid;gap:1rem;grid-template-columns:1fr}
 @media (min-width:760px){.cards{grid-template-columns:repeat(3,1fr)}}
+/* Four cards in a three-column grid leave one alone on a second row, which reads as
+   an afterthought rather than as the fourth of four. Two by two instead. */
+@media (min-width:760px){.cards.four{grid-template-columns:repeat(2,1fr)}}
 .card{
   background:var(--bg-raised);border:1px solid var(--rule);border-radius:11px;
   padding:1.25rem 1.3rem;display:grid;gap:.55rem;align-content:start;
@@ -1196,7 +1199,7 @@ oss prompt 812</pre>
       <div class="card">
         <span class="k">Extensions</span>
         <h3>Two questions it will not answer alone</h3>
-        <p>OSS-CLI reads any repository through the API, in any language, without a clone — which is why it generalises, and why it cannot tell you <em>does this actually run</em> or <em>have I worked this out before</em>. Both have a built-in floor &mdash; <code>oss run</code> builds and tests any project, <code>oss memory</code> files and finds anything you write &mdash; and an extension takes over when you attach one. A repo declares an <code>oss-ext.json</code> and becomes a runner or a memory; <code>oss ext add &lt;repo&gt;</code> attaches it, and a verb it does not declare falls back to the core rather than being refused. Written in anything, called as a child process.</p>
+        <p>OSS-CLI reads any repository through the API, in any language, without a clone — which is why it generalises, and why it cannot tell you <em>does this actually run</em> or <em>have I worked this out before</em>. Both have a built-in floor &mdash; <code>oss run</code> builds and tests any project, <code>oss memory</code> files and finds anything you write &mdash; and an extension takes over when you attach one. A run recorded with <code>--pr</code> is remembered against that pull request and read back <em>before any model is consulted</em>, because a question the runner has already answered is not worth a network round trip. A repo declares an <code>oss-ext.json</code> and becomes a runner or a memory; <code>oss ext add &lt;repo&gt;</code> attaches it, and a verb it does not declare falls back to the core rather than being refused. Written in anything, called as a child process.</p>
       </div>
       <div class="card">
         <span class="k">Packs</span>
@@ -1223,7 +1226,7 @@ oss prompt 812</pre>
 <pre class="block"><span class="c"># the board, over whatever you already follow</span>
 oss serve</pre>
 
-    <div class="cards">
+    <div class="cards four">
       <div class="card">
         <span class="k">localhost:1504</span>
         <h3>What is waiting on you</h3>
@@ -1233,6 +1236,11 @@ oss serve</pre>
         <span class="k">On the row</span>
         <h3>Answers where the question is</h3>
         <p>“Have I worked this out before?” is asked about the change in front of you, so it is answered underneath it — no second page, no retyping the title. The search runs on the model inside <code>oss</code>, with no network.</p>
+      </div>
+      <div class="card">
+        <span class="k">Before any model</span>
+        <h3>What actually ran</h3>
+        <p>A model cannot tell you whether a change builds &mdash; asked, it writes a confident sentence about code it never executed. The runner can, because it executes it. <code>oss run --pr &lt;n&gt; test</code> records the result against that pull request, and the row shows it before offering you a model. It also says which commit it ran on: a pass from a tree that is not the change under review is never allowed to read like a pass.</p>
       </div>
       <div class="card">
         <span class="k">Reading, not writing</span>

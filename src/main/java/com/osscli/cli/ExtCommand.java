@@ -436,6 +436,56 @@ public class ExtCommand implements Callable<Integer> {
         @Option(names = "--pack", description = "The pack to run: a directory containing pack.sh")
         java.nio.file.Path pack;
 
+        // Declared here rather than on Dispatch: a memory verb is not about a pull request, and an
+        // option that means nothing on `oss memory` should not appear in its help.
+        @Option(names = "--pr", description = "Record this run against a pull request, so review and the board see it")
+        Integer pr;
+
+        @Option(
+                names = "--repo",
+                paramLabel = "owner/name",
+                description = "Which repository the --pr belongs to (default: the one you follow, if only one)")
+        String repo;
+
+        /**
+         * Run the verb, then remember what it found and which code it found it on.
+         *
+         * <p>The result outlives the terminal, which is the whole point: {@code review} consults it
+         * before any model, so a question the runner has already answered costs nothing to answer
+         * again. Recorded whatever the exit code — a failing build is the more useful of the two
+         * results, and a ledger that kept only successes would be an advertisement.
+         *
+         * <p>Recording never changes the exit code. The verb's result is the command's result; a
+         * ledger that could turn a green run red by failing to write itself would be a ledger
+         * nobody could trust the absence of.
+         */
+        @Override
+        public Integer call() {
+            Integer code = super.call();
+            if (pr == null || verb == null) {
+                return code;
+            }
+            try {
+                com.osscli.bench.BenchRecorder.record(repo, pr, verb, code == null ? 1 : code, chosenRunner());
+            } catch (RuntimeException e) {
+                System.err.println("  (the run stands; it was not recorded: " + e.getMessage() + ")");
+            }
+            return code;
+        }
+
+        /** The extension that answered, or the built-in engine. */
+        private String chosenRunner() {
+            if (pack != null) {
+                return "pack:" + pack.getFileName();
+            }
+            try {
+                java.util.List<Extension> attached = ExtensionRegistry.ofKind(kind());
+                return attached.isEmpty() ? "built-in" : attached.get(0).getName();
+            } catch (RuntimeException e) {
+                return "built-in";
+            }
+        }
+
         @Override
         Extension.Kind kind() {
             return Extension.Kind.RUNNER;

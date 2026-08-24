@@ -319,6 +319,13 @@ public class FollowupCommand implements Callable<Integer> {
         if (rf != null) {
             System.out.printf("  review      %s%n", rf);
         }
+        // The runner's answer belongs in the one-pull-request view too. This is what the board's
+        // "since I reviewed" button shows, and without it the row said the runner had answered
+        // while the detail behind the row did not mention it.
+        com.osscli.bench.BenchLedger.Row bench = com.osscli.bench.BenchLedger.headline(r.repo, r.pr);
+        if (bench != null) {
+            System.out.printf("  runner      %s%n", bench.summary());
+        }
         if (moved.contains("pushed")) {
             System.out.println();
             System.out.println("  Re-read before trusting the verdict above.");
