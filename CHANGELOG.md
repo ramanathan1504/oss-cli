@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.4.0
+
+_2026-08-24_
+
+- The runner answered the one question a model cannot, and nobody kept the answer (#197)
+
+  `oss run --pr <n> --repo owner/name <verb>` records what the runner found
+  against that pull request. `review`, `hub`, `followup` and the board all read
+  it **before any model is consulted**. Both commits are stored — the pull
+  request's head and the local `HEAD` the run happened on — so a pass from a
+  tree that is not the change under review can never read like a pass.
+
+
 ## 4.3.0
 
 _2026-08-24_
