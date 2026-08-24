@@ -41,7 +41,7 @@ public final class BenchRecorder {
      * <p>Says it out loud because the value of this is entirely in it being read back later, and a
      * silent write is one nobody knows to look for.
      */
-    public static void record(String repoOption, int pr, String verb, int exit, String runner) {
+    public static void record(String repoOption, int pr, String verb, int exit, String runner, String ranOn) {
         String repo = resolveRepo(repoOption);
         if (repo == null) {
             System.err.println("  (not recorded: which repository is #" + pr + " in? add --repo owner/name)");
@@ -56,7 +56,7 @@ public final class BenchRecorder {
         row.runner = runner == null ? "built-in" : runner;
         row.ranAt = java.time.Instant.now().toString();
         row.prHead = prHead(repo, pr);
-        row.ranOn = localHead();
+        row.ranOn = ranOn == null ? "" : ranOn;
 
         BenchLedger.record(row);
 
@@ -78,7 +78,7 @@ public final class BenchRecorder {
      * the wrong pull request, and a ledger with a wrong row in it is worse than one with a gap:
      * the gap is visible.
      */
-    static String resolveRepo(String given) {
+    public static String resolveRepo(String given) {
         if (given != null && !given.isBlank()) {
             return given.trim();
         }
@@ -106,7 +106,7 @@ public final class BenchRecorder {
     }
 
     /** The commit this machine is on, or blank when this is not a git checkout. */
-    static String localHead() {
+    public static String localHead() {
         try {
             Process p = new ProcessBuilder("git", "rev-parse", "HEAD")
                     .redirectErrorStream(true)

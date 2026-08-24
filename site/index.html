@@ -1240,7 +1240,7 @@ oss serve</pre>
       <div class="card">
         <span class="k">Before any model</span>
         <h3>What actually ran</h3>
-        <p>A model cannot tell you whether a change builds &mdash; asked, it writes a confident sentence about code it never executed. The runner can, because it executes it. <code>oss run --pr &lt;n&gt; test</code> records the result against that pull request, and the row shows it before offering you a model. It also says which commit it ran on: a pass from a tree that is not the change under review is never allowed to read like a pass.</p>
+        <p>A model cannot tell you whether a change builds &mdash; asked, it writes a confident sentence about code it never executed. The runner can, because it executes it. <code>oss run --pr &lt;n&gt; --checkout test</code> fetches that pull request into a throwaway worktree, runs there, and records what it found; the row shows it before offering you a model. It also stores which commit it ran on, so a pass from a tree that is not the change under review is never allowed to read like a pass. A pull request from a fork is refused unless you say <code>--allow-fork</code> &mdash; running one executes its author&rsquo;s build on your machine.</p>
       </div>
       <div class="card">
         <span class="k">Reading, not writing</span>

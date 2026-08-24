@@ -447,6 +447,14 @@ public class ExtCommand implements Callable<Integer> {
                 description = "Which repository the --pr belongs to (default: the one you follow, if only one)")
         String repo;
 
+        @Option(names = "--checkout", description = "Run against the pull request's own code, in a throwaway worktree")
+        boolean checkout;
+
+        @Option(
+                names = "--allow-fork",
+                description = "Permit --checkout on a pull request from a fork. Runs its author's build.")
+        boolean allowFork;
+
         /**
          * Run the verb, then remember what it found and which code it found it on.
          *
@@ -461,12 +469,100 @@ public class ExtCommand implements Callable<Integer> {
          */
         @Override
         public Integer call() {
+            if (checkout) {
+                return runAgainstThePullRequest();
+            }
             Integer code = super.call();
             if (pr == null || verb == null) {
                 return code;
             }
             try {
-                com.osscli.bench.BenchRecorder.record(repo, pr, verb, code == null ? 1 : code, chosenRunner());
+                com.osscli.bench.BenchRecorder.record(
+                        repo,
+                        pr,
+                        verb,
+                        code == null ? 1 : code,
+                        chosenRunner(),
+                        com.osscli.bench.BenchRecorder.localHead());
+            } catch (RuntimeException e) {
+                System.err.println("  (the run stands; it was not recorded: " + e.getMessage() + ")");
+            }
+            return code;
+        }
+
+        /**
+         * Fetch the pull request's head, run the verb there, and throw the worktree away.
+         *
+         * <p>Without this, {@code --pr} records whatever tree you are standing in — which from a
+         * {@code main} checkout is never the change under review, so every row read "not this
+         * change". Honest, and useless as an answer.
+         *
+         * <p>Only the built-in runner. An attached runner executes in its own root, so handing it a
+         * directory it is free to ignore would let this record SAME_CODE for a run that never
+         * touched the worktree — a wrong answer wearing the badge of the right one.
+         */
+        private Integer runAgainstThePullRequest() {
+            if (pr == null || verb == null) {
+                System.err.println("error  --checkout needs --pr <n> and a verb: oss run --pr 4229 --checkout test");
+                return 2;
+            }
+            if (!com.osscli.runner.BuiltinRunner.supports(verb)) {
+                System.err.println("error  --checkout runs the built-in runner, which knows: "
+                        + String.join(", ", com.osscli.runner.BuiltinRunner.VERBS));
+                System.err.println("       An attached runner works in its own directory, so it cannot be pointed"
+                        + " at a worktree and honestly reported as having run this change.");
+                return 2;
+            }
+            String resolved = com.osscli.bench.BenchRecorder.resolveRepo(repo);
+            if (resolved == null) {
+                System.err.println("error  which repository is #" + pr + " in? add --repo owner/name");
+                return 2;
+            }
+
+            java.nio.file.Path here = java.nio.file.Path.of(System.getProperty("user.dir", "."));
+            com.osscli.bench.Checkout.Prepared described;
+            try {
+                described = com.osscli.bench.Checkout.describe(resolved, pr);
+            } catch (com.osscli.bench.Checkout.Refused e) {
+                System.err.println("error  " + e.getMessage());
+                return 2;
+            }
+
+            // Asked before anything is on disk. Fetching a fork is harmless -- GitHub publishes
+            // every pull request head on the base repository -- but running one executes its
+            // author's build file on this machine, beside the token in your keychain.
+            if (described.fork() && !allowFork) {
+                System.err.println("error  " + resolved + "#" + pr + " comes from " + described.headRepo() + ".");
+                System.err.println("       Running it executes that author's build on this machine.");
+                System.err.println("       If you have read what it does:  --allow-fork");
+                return 2;
+            }
+
+            com.osscli.bench.Checkout.Prepared ready = null;
+            int code;
+            try {
+                ready = com.osscli.bench.Checkout.prepare(here, resolved, pr, described);
+                System.out.println("  " + resolved + "#" + pr + " at "
+                        + com.osscli.bench.BenchLedger.shortSha(ready.sha()) + " in a worktree"
+                        + (described.fork() ? "  (a fork, allowed)" : ""));
+                System.out.println();
+                java.util.List<String> args = new java.util.ArrayList<>();
+                args.add(ready.dir().toString());
+                args.addAll(passthrough);
+                code = com.osscli.runner.BuiltinRunner.run(verb, args);
+            } catch (com.osscli.bench.Checkout.Refused e) {
+                System.err.println("error  " + e.getMessage());
+                return 2;
+            } finally {
+                if (ready != null) {
+                    com.osscli.bench.Checkout.discard(here, ready.dir());
+                }
+            }
+
+            try {
+                // ranOn is the sha we checked out, because that is the code the verb actually ran
+                // against -- not this checkout's HEAD, which is somewhere else entirely.
+                com.osscli.bench.BenchRecorder.record(resolved, pr, verb, code, "built-in", ready.sha());
             } catch (RuntimeException e) {
                 System.err.println("  (the run stands; it was not recorded: " + e.getMessage() + ")");
             }
