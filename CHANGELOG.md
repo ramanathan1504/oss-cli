@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.3.0
+
+_2026-08-24_
+
+- The board showed a picture of an answer, and the manual was a different product (#195)
+
+  Removes `/api/attach`, `/api/detach` and `/api/rows`. The board can no longer
+  attach an extension — nothing it serves writes now. Use `oss ext add <path>`.
+
+
 ## 4.2.0
 
 _2026-08-23_
