@@ -995,8 +995,32 @@ oss run --pr 4229 --repo owner/name test
 title, and the board draws it on the row. A question the runner has already answered is not worth a
 network round trip.
 
+Add `--checkout` and it runs against the pull request's *own* code:
+
+```bash
+oss run --pr 4229 --repo owner/name --checkout test
+```
+
+The head is fetched from `refs/pull/<n>/head` into a throwaway git **worktree**, the verb runs
+there, and the worktree is removed afterwards — whatever happened in it. A worktree rather than a
+clone or a branch switch: a clone of a large repository costs minutes and a gigabyte, and a branch
+switch mutates the tree you are working in and leaves you somewhere else when a build fails halfway.
+
+Run it from a clone of the repository the pull request belongs to; the object store is what makes
+this cheap. Worktrees are kept under `~/.oss-cli/worktrees`, never inside the repository being
+reviewed — a second `pom.xml` inside the tree would be found by the very build about to run.
+
+`--checkout` uses the **built-in** runner. An attached runner executes in its own root and is free
+to ignore a directory handed to it, so pointing one at a worktree and then recording the result as
+"ran this change" would be a wrong answer wearing the badge of the right one.
+
+**A pull request from a fork is refused.** Fetching one is harmless — GitHub publishes every pull
+request head on the base repository — but running it executes its author's build file on your
+machine, beside the token in your keychain. `--allow-fork` permits it, one run at a time, once you
+have read what it does.
+
 Both commits are stored: the head GitHub reports for the pull request, and the local `HEAD` the run
-actually happened on. Nothing here checks the branch out, so the two can differ — and every reading
+actually happened on. Without `--checkout` nothing checks the branch out, so the two can differ — and every reading
 says which case it is:
 
 | What it says | What it means |

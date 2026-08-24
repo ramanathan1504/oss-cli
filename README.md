@@ -13,7 +13,7 @@ An advanced, offline-first **Prompt Intelligence Platform** for open-source main
 | Role | Owns | Reach for it when |
 |---|---|---|
 | **this one** | facts about any repo from the GitHub API, cached by head SHA — no clone, any language, any forge | you want PR facts, conventions or a verdict without building anything |
-| the **runner**, built in | `oss run detect / init / build / test / doctor` — reads what your project already declares and runs its own build; `--pr <n>` remembers the result against a pull request, and `review` reads it before any model | you want to know whether this thing builds, here, now |
+| the **runner**, built in | `oss run detect / init / build / test / doctor` — reads what your project already declares and runs its own build; `--pr <n> --checkout` runs it against the pull request's own code in a throwaway worktree and remembers the result, which `review` reads before any model | you want to know whether this thing builds, here, now |
 | a **runner** you attach | the matrix: real applications, real JVMs, version × config × app, `oss run review <n>` | the question needs a real application of one project |
 | the **memory**, built in | `oss memory` — file, index, search, harvest, digest, over a folder of markdown | you want to keep and find what you worked out |
 | a **memory** you attach | a richer archive: classified, linked, searchable in a year | you already have one |
