@@ -345,6 +345,13 @@ public class ReviewCommand implements Callable<Integer> {
             String fullDiff = ev.diff() == null ? "" : ev.diff();
             boolean oversized = fullDiff.length() > LOCAL_DIFF_BUDGET;
 
+            // The runner's rung, before any model's. "Does this actually run" is the one question
+            // here that no model can answer -- asked, it produces a confident sentence about code
+            // it never executed -- and the runner answers it by executing the thing. Reported
+            // first for that reason, and reported whether it passed or failed: a failing build is
+            // the more useful of the two results, because it is the one that changes what you do.
+            reportBench();
+
             // The local rung, and whether it can actually answer. Ollama is asked only when it was
             // asked for: `oss review` on a machine that happens to run a daemon used to get a local
             // verdict nobody requested, which is the thing the engine prefixes exist to end.
@@ -526,6 +533,38 @@ public class ReviewCommand implements Callable<Integer> {
      * answer to "whose model saw my code" is the line you typed. A prefix naming an engine with no
      * key says so here instead of failing at the end of a long review.
      */
+    /**
+     * What the runner already found for this pull request.
+     *
+     * <p>Read rather than run. Executing a contributor's build is a decision with a blast radius --
+     * it is their code, on your machine, beside your keychain -- so it stays a thing you start
+     * deliberately with {@code oss run --pr}. What is free, and what this does, is remembering the
+     * answer once you have it, so the second reading of a pull request costs nothing.
+     */
+    private void reportBench() {
+        com.osscli.bench.BenchLedger.Row row;
+        try {
+            row = com.osscli.bench.BenchLedger.headline(repository, (int) prNumber);
+        } catch (RuntimeException e) {
+            return; // an unreadable ledger is not a reason to abandon a review
+        }
+        LOGGER.info("");
+        if (row == null) {
+            LOGGER.info("  ↳ The runner has not been asked about this one.");
+            LOGGER.info("     oss run --pr {} --repo {} test", prNumber, repository);
+            return;
+        }
+        LOGGER.info("  ↳ The runner already answered: {}", row.summary());
+        if (row.trust() == com.osscli.bench.BenchLedger.Trust.SAME_CODE) {
+            // Worth naming: this is the only rung on the page that ran the code rather than read it.
+            LOGGER.info(
+                    "     on this exact change, {} — no model was asked for it.",
+                    com.osscli.bench.BenchLedger.shortSha(row.prHead));
+        } else {
+            LOGGER.info("     oss run --pr {} --repo {} test   for a result about this change", prNumber, repository);
+        }
+    }
+
     private String escalationProvider() {
         List<com.osscli.llm.Ai.Engine> path = com.osscli.llm.Ai.escalationPath();
         for (com.osscli.llm.Ai.Engine missing : com.osscli.llm.Ai.missingCredentials()) {

@@ -81,6 +81,23 @@ class BoardPageTest {
     }
 
     @Test
+    @DisplayName("the runner's answer reaches the row, and says which code it ran")
+    void benchIsOnTheRow() {
+        // "Does this actually run" is the one question on this page no model can answer, so the
+        // runner's result is drawn before any of them are offered.
+        assertTrue(PAGE.contains("r.benchRan"), "the row never asks whether the runner was run");
+        assertTrue(PAGE.contains("'runner: '+r.bench"), "the runner's sentence is not drawn");
+        // Two states, deliberately different colours: a pass from a tree that is not the change
+        // under review must not read like a pass.
+        assertTrue(PAGE.contains("r.benchOk?'ok':'warn'"), "a pass from the wrong tree looks like a pass");
+        assertTrue(PAGE.contains(".bench.ok{") && PAGE.contains(".bench.warn{"), "the two states are not styled apart");
+        // Never run: the page hands over the command rather than offering to run somebody's build
+        // from a browser.
+        assertTrue(PAGE.contains("oss run --pr "), "the page does not say how to ask the runner");
+        assertFalse(PAGE.contains("api/ask?q=run"), "the browser must not be able to start a build");
+    }
+
+    @Test
     @DisplayName("a question that needs a number gets a field, not a browser dialog")
     void noBrowserPrompt() {
         // prompt() is also the only reason the page needed no input markup, so its absence is

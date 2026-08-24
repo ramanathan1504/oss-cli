@@ -979,6 +979,45 @@ oss run test       # the project's own tests
 oss run doctor     # would any of this work, asked before it is tried
 ```
 
+#### Remembering what it found
+
+A run answers the one question no model can: *does this actually run*. Asked, a model produces a
+confident sentence about code it never executed. Until now that answer lasted as long as the
+terminal scrollback.
+
+Add `--pr` and the result is recorded against the pull request:
+
+```bash
+oss run --pr 4229 --repo owner/name test
+```
+
+`oss review 4229` then reports it **before any model is consulted**, `oss hub` prints it under the
+title, and the board draws it on the row. A question the runner has already answered is not worth a
+network round trip.
+
+Both commits are stored: the head GitHub reports for the pull request, and the local `HEAD` the run
+actually happened on. Nothing here checks the branch out, so the two can differ — and every reading
+says which case it is:
+
+| What it says | What it means |
+|---|---|
+| `test passed` | it ran on the pull request's head — this is about the change |
+| `test failed (exit 1)` | likewise, and it failed |
+| `test passed — but on 3f1a9c2, not this change` | it ran, on some other tree; the result is not about this pull request |
+| `test passed — which commit it ran on is not recorded` | no local git, or the pull request could not be read |
+
+A green result from a tree that is not the change under review reads exactly like a good one, which
+is why it is never allowed to. Failures outrank passes and a run on the right code outranks both, so
+`build` failing is what you see even when `test` passed after it.
+
+`--repo` may be omitted when you follow exactly one repository. It is never guessed among several: a
+row attached to the wrong pull request is worse than no row, because the gap is visible and the
+wrong answer is not.
+
+**The board never starts a run.** Executing a contributor's build is their code on your machine
+beside your keychain, so it stays something you begin deliberately at a terminal. The page shows
+what was recorded and hands you the command for what was not.
+
 Nothing is invented. The build system is read from the file that declares it — `pom.xml`,
 `build.gradle(.kts)`, `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, a `Makefile` — and
 the command printed before the run is the whole contract: copy it, type it yourself, get the same

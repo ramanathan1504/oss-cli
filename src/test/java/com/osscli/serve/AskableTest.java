@@ -205,6 +205,22 @@ class AskableTest {
     }
 
     @Test
+    @DisplayName("the runner is still not something a browser can start")
+    void runIsNotAskable() {
+        // The bench became a rung that review and the board both read. Reading a recorded result
+        // is free; starting a build is executing a contributor's code on this machine, and the
+        // page has no terminal to confirm that at. It must not have quietly become dispatchable.
+        assertNull(Askable.byKey("run"), "run reached the askable table");
+        assertNull(Askable.byKey("bench"), "bench reached the askable table");
+        assertTrue(
+                Askable.WRITES.contains("run") && Askable.WRITES.contains("bench"), "run must stay named as a write");
+        for (Askable.Question q : Askable.all()) {
+            assertFalse(
+                    Askable.WRITES.contains(q.argv().get(0)), "a question that writes reached the page: " + q.key());
+        }
+    }
+
+    @Test
     @DisplayName("a port already answering is named, not guessed at")
     void occupantIsNamedFromItsOwnPage() {
         // `oss serve` said "Another instance may already be serving", which on the machine that

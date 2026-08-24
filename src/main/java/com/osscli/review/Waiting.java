@@ -58,7 +58,19 @@ public final class Waiting {
             String lastAt,
             boolean merged,
             boolean pushed,
-            boolean onYou) {
+            boolean onYou,
+            com.osscli.bench.BenchLedger.Row bench) {
+
+        /**
+         * What the runner found, in the words every rendering uses. Empty when it was never asked.
+         *
+         * <p>Read from the ledger rather than run here: this method is called for every recorded
+         * review at once, and starting a build per row would turn a seven-second list into an
+         * afternoon.
+         */
+        public String benchSaid() {
+            return bench == null ? "" : bench.summary();
+        }
 
         /**
          * Why it is where it is, in the words both renderings use.
@@ -169,7 +181,18 @@ public final class Waiting {
 
         boolean onYou =
                 !merged && "open".equalsIgnoreCase(state) && (pushed || (!lastBy.isEmpty() && !lastBy.equals(me)));
-        return new Item(r, state, title, head, lastBy, lastAt, merged, pushed, onYou);
+        return new Item(
+                r,
+                state,
+                title,
+                head,
+                lastBy,
+                lastAt,
+                merged,
+                pushed,
+                onYou,
+                // Cheap: one read of a small file, already in the page cache by the second row.
+                com.osscli.bench.BenchLedger.headline(r.repo, r.pr));
     }
 
     private static JsonNode api(String path) {

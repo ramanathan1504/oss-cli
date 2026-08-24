@@ -757,6 +757,15 @@ public class ServeCommand implements Callable<Integer> {
             // into its own script -- a second copy of what counts as reviewed, in another language,
             // free to drift from this one.
             m.put("hasVerdict", hasVerdict(i.row().verdict));
+            // The runner's answer, if it was ever asked. Sent as the same sentence the terminal
+            // prints -- one wording, so the board and `oss hub` cannot describe one run two ways.
+            m.put("bench", i.benchSaid());
+            m.put(
+                    "benchOk",
+                    i.bench() != null
+                            && i.bench().passed()
+                            && i.bench().trust() == com.osscli.bench.BenchLedger.Trust.SAME_CODE);
+            m.put("benchRan", i.bench() != null);
             m.put("pushed", i.pushed());
             m.put("merged", i.merged());
             m.put("state", i.state());
@@ -828,6 +837,7 @@ public class ServeCommand implements Callable<Integer> {
         counts.put("notes", one("SELECT count(*) FROM personal_chat_memory;"));
         counts.put("chunks", one("SELECT count(*) FROM personal_chat_chunk;"));
         counts.put("reviews", (long) com.osscli.review.ReviewLedger.read().size());
+        counts.put("benchRuns", (long) com.osscli.bench.BenchLedger.read().size());
         counts.put("asked", one("SELECT count(*) FROM chat_turn;"));
         out.put("counts", counts);
         sendJson(x, 200, out);
@@ -1365,7 +1375,15 @@ public class ServeCommand implements Callable<Integer> {
             .rwhy{margin-top:.3rem;font-size:.82rem;color:var(--ink-faint)}
             .score{font-family:var(--mono);font-size:.84rem;font-weight:600;color:var(--patina);
                    font-variant-numeric:tabular-nums;min-width:2.6rem}
-            .racts{display:flex;gap:.45rem;margin-top:.6rem;flex-wrap:wrap}
+            .racts{display:flex;gap:.45rem;margin-top:.6rem;flex-wrap:wrap;align-items:center}
+            /* The runner's result. Patina when it ran the change under review and passed, brass
+               otherwise -- a pass from the wrong tree must not read like a pass. */
+            .bench{margin-top:.35rem;font-family:var(--mono);font-size:.75rem}
+            .bench.ok{color:var(--patina)}
+            .bench.warn{color:var(--accent)}
+            .how{font-family:var(--mono);font-size:.72rem;color:var(--ink-faint);
+                 background:var(--bg-sunken);border:1px solid var(--rule-soft);
+                 border-radius:6px;padding:.24rem .5rem}
 
             /* Asking and doing must not look alike. Nothing reachable from this page writes any
                more, but a read that starts a command still takes seconds and still deserves to
@@ -1530,11 +1548,23 @@ public class ServeCommand implements Callable<Integer> {
                          el('span',verdictClass(r.verdict),r.verdict||'none'),
                          el('span','why',r.why||''));
               it.append(top, el('div','rttl', r.title||'(no title)'));
+              // The runner's line, drawn differently from everything else on the row because it is
+              // the only thing here that came from executing the code rather than reading it.
+              if(r.benchRan){
+                it.append(el('div','bench '+(r.benchOk?'ok':'warn'),'runner: '+r.bench));
+              }
               const acts=el('div','racts');
               const seen=el('button','ask','seen this?');
               seen.title='Have I worked this out before? Searches your own notes and synced issues by meaning.';
               seen.onclick=()=>ask('search',r.repo+' '+r.pr,it,seen);
               acts.append(seen);
+              if(!r.benchRan){
+                // Not a button: running somebody's build is started deliberately at a terminal,
+                // so this hands over the command rather than offering to run it here.
+                const how=el('code','how','oss run --pr '+r.pr+' --repo '+r.repo+' test');
+                how.title='Run the project'+String.fromCharCode(39)+'s own tests against this pull request, then it is remembered here.';
+                acts.append(how);
+              }
               if(r.hasVerdict){
                 const since=el('button','ask','since I reviewed');
                 since.title='What the author did after your verdict.';
@@ -1634,6 +1664,11 @@ public class ServeCommand implements Callable<Integer> {
                   verbList(run,d.runnerVerbs);
                   run.append(el('p',null,'a pack needs nothing attached — oss run --pack <dir> list'));
                 }
+                // What the runner has actually been asked, which is the number that says whether
+                // this rung is being used at all.
+                run.append(el('p',null, c.benchRuns
+                  ? (c.benchRuns.toLocaleString()+' run(s) recorded against pull requests')
+                  : 'no runs recorded yet — oss run --pr <n> --repo owner/name test'));
                 host.append(run);
 
                 const mem=el('div','card');

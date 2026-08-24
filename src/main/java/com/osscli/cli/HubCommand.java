@@ -98,6 +98,10 @@ public class HubCommand implements Callable<Integer> {
         for (Waiting.Item i : items) {
             System.out.printf("    %-28s #%-6d %-12s %s%n", i.row().repo, i.row().pr, i.row().verdict, i.why(me));
             System.out.printf("      %s%n", trim(i.title(), 74));
+            // The one line here that came from running the code rather than reading it.
+            if (!i.benchSaid().isEmpty()) {
+                System.out.printf("      runner: %s%n", trim(i.benchSaid(), 74));
+            }
             if (urgent && i.pushed()) {
                 System.out.printf("      oss followup --since %d%n", i.row().pr);
             }
