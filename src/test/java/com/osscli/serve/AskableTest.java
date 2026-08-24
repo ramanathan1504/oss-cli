@@ -224,9 +224,19 @@ class AskableTest {
     void thePageStillHasItsBoard() throws IOException {
         String source = Files.readString(Path.of("src/main/java/com/osscli/serve/ServeCommand.java"));
 
-        // The board, its rows, and the ask output all render into named containers. A page that
-        // loses one of them fails silently -- the fetch succeeds and nothing appears.
-        for (String id : List.of("id=\"board\"", "id=\"rows\"", "id=\"boardout\"", "id=\"asks\"", "id=\"askout\"")) {
+        // Every section renders into a named container. A page that loses one of them fails
+        // silently -- the fetch succeeds and nothing appears.
+        for (String id : List.of(
+                "id=\"wn\"",
+                "id=\"wsaid\"",
+                "id=\"wlist\"",
+                "id=\"wthem\"",
+                "id=\"oneof\"",
+                "id=\"picks\"",
+                "id=\"sweep\"",
+                "id=\"askhost\"",
+                "id=\"builtin\"",
+                "id=\"skills\"")) {
             assertTrue(source.contains(id), "the page no longer draws " + id);
         }
         // Asking and doing must not look alike: the ask button is the dashed one.

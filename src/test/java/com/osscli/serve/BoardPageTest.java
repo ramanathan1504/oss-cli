@@ -37,15 +37,47 @@ class BoardPageTest {
     private static final String PAGE = ServeCommand.page();
 
     @Test
-    @DisplayName("the board comes before the extensions, because that is what the page is for")
+    @DisplayName("what you are waiting on leads, and everything else is under it")
     void boardLeads() {
-        int board = PAGE.indexOf("<div class=\"grp\">board</div>");
-        int oneOf = PAGE.indexOf("ask about one thing");
-        int extensions = PAGE.indexOf("id=\"extsum\"");
+        int waiting = PAGE.indexOf("id=\"waiting\"");
+        int next = PAGE.indexOf("id=\"next\"");
+        int oneOf = PAGE.indexOf("id=\"ask\"");
+        int sweeps = PAGE.indexOf("id=\"sweeps\"");
+        int builtIn = PAGE.indexOf("id=\"builtin\"");
 
-        assertTrue(board >= 0, "the board section is missing");
-        assertTrue(oneOf > board, "questions about one thing belong under the board");
-        assertTrue(extensions > oneOf, "extensions must not lead a page whose subject is the board");
+        assertTrue(waiting >= 0, "the waiting-on-you section is missing");
+        assertTrue(next > waiting && oneOf > next && sweeps > oneOf && builtIn > sweeps, "the page lost its order");
+        // The rail names them in the same order it links them, so the sidebar and the page
+        // cannot disagree about what is on the board.
+        assertTrue(
+                PAGE.indexOf("href=\"#waiting\"") < PAGE.indexOf("href=\"#next\""),
+                "the rail is out of step with the page");
+    }
+
+    @Test
+    @DisplayName("the extensions box is gone, and with it the last write a browser could start")
+    void nothingToAttach() {
+        // Removed rather than collapsed. A details element still opens on a text field asking for
+        // the path of a repository that, for almost everybody looking at this page, does not
+        // exist -- and the runner and the memory have both been built in since.
+        assertFalse(PAGE.contains("oss-ext.json containing"), "the paste-a-path field is still here");
+        assertFalse(PAGE.contains("id=\"extsum\""), "the extensions section is still here");
+        assertFalse(PAGE.contains("api/attach") || PAGE.contains("api/detach"), "the page can still write");
+        // The command still exists; the page says so rather than pretending the capability went.
+        assertTrue(PAGE.contains("oss ext add"), "a reader who wants one must be told where it moved");
+    }
+
+    @Test
+    @DisplayName("the answers are rows, not a terminal dump pasted into a browser")
+    void answersAreData() {
+        // The two sections the board opens on read structured endpoints. Asserting on the fetch
+        // rather than on markup: the rows are built by script, so markup would prove only that a
+        // container exists, and the defect being guarded against is exactly a container filled
+        // with somebody else's stdout.
+        assertTrue(PAGE.contains("fetch('api/waiting')"), "who is waiting is not read as data");
+        assertTrue(PAGE.contains("fetch('api/suggestions')"), "what to work on next is not read as data");
+        assertFalse(PAGE.contains("ask('hub'"), "hub is still being run for its printed output");
+        assertFalse(PAGE.contains("ask('pick'"), "pick is still being run for its printed output");
     }
 
     @Test
@@ -270,6 +302,50 @@ class BoardPageTest {
 
         assertTrue(shown.startsWith("WAITING ON YOU"), "the answer should lead: " + shown);
         assertFalse(shown.contains("Initializing"), "startup chatter reached the page: " + shown);
+    }
+
+    @Test
+    @DisplayName("a status line is not an answer, and there were eighteen of them above one")
+    void progressIsNotTheAnswer() {
+        // Measured on a real store. `oss hub` reached the page as eighteen lines of Live's status
+        // ticker and then the seven that were the answer; `pick` as twenty-three of forty-nine.
+        // Live overwrites itself in a terminal and overwrites nothing in a pipe, so the panel whose
+        // entire job is to show the reply opened on a progress log with the reply below the fold.
+        String out = String.join(
+                "\n",
+                "… reading 17 recorded review(s)",
+                "  · 1 of 17 — owner/name#4246",
+                "  · 2 of 17 — owner/name#4245",
+                "✓ reading 17 recorded review(s) — 17 read (6.9s)",
+                "",
+                "  WAITING ON YOU",
+                "    owner/name        #4229   changes",
+                "",
+                "  15 not waiting on you — oss hub --all");
+
+        String shown = ServeCommand.withoutStartupChatter(out);
+
+        assertTrue(shown.startsWith("WAITING ON YOU"), "the answer must lead: " + shown);
+        assertFalse(shown.contains("of 17 —"), "a step counter reached the page: " + shown);
+        assertFalse(shown.contains("reading 17 recorded"), "a status line reached the page: " + shown);
+        // And the answer is whole. A stripper that ate the reply would be worse than the noise.
+        assertTrue(shown.contains("#4229   changes"), shown);
+        assertTrue(shown.contains("15 not waiting on you"), shown);
+    }
+
+    @Test
+    @DisplayName("a tick that is part of an answer is left alone")
+    void doesNotEatRealTicks() {
+        // `doctor` reports with ticks of its own and no elapsed time. Dropping those would turn a
+        // panel this change exists to fix into an empty one, which is the same bug pointing the
+        // other way.
+        String doctor = String.join(
+                "\n", "  oss doctor", "  [  ok  ] database — 983 MB", "  ✓ github token — found in the keychain");
+
+        String shown = ServeCommand.withoutStartupChatter(doctor);
+
+        assertTrue(shown.contains("✓ github token"), shown);
+        assertTrue(shown.contains("[  ok  ] database"), shown);
     }
 
     @Test

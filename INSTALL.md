@@ -138,7 +138,7 @@ oss memory doctor       # archive reachable? last run? is the schedule loaded?
 ### Writing your own bench
 
 Anyone can. Put this at the root of your repo, make the executable executable,
-and paste the path:
+and attach it with `oss ext add <path>`:
 
 ```json
 {

@@ -113,6 +113,57 @@ class MarkdownTest {
         }
     }
 
+    @Test
+    @DisplayName("a hard-wrapped paragraph is one paragraph, not one per line")
+    void wrappedLinesAreOneBlock() {
+        // Every file in this repository is wrapped at about eighty characters. Emitting a <p> per
+        // line turned COMMANDS.md into 363 of them, each with a margin above and below, so the
+        // manual read as a ragged column of one-line blocks. No stylesheet can undo that; the
+        // shredding happens in the renderer.
+        String html = Markdown.toHtml("Since 3.0, oss --help lists the dozen that carry\n"
+                + "the daily work plus the four engine prefixes,\n"
+                + "rather than all forty at once.\n\nA second paragraph.");
+
+        assertEquals(2, count(html, "<p>"), "a wrapped paragraph was split:\n" + html);
+        assertTrue(html.contains("carry the daily work"), "the join lost the space between lines:\n" + html);
+    }
+
+    @Test
+    @DisplayName("a wrapped bullet stays inside its bullet")
+    void wrappedListItemsStayInTheList() {
+        // The tail of a wrapped bullet used to close the item and open a paragraph after it, so
+        // half the sentence sat outside the list it belonged to.
+        String html = Markdown.toHtml("- the first item, which runs on\n  past the end of its line\n- second");
+
+        assertEquals(2, count(html, "<li>"), html);
+        assertEquals(0, count(html, "<p>"), "a continuation escaped the list:\n" + html);
+        assertTrue(html.contains("runs on past the end"), html);
+    }
+
+    @Test
+    @DisplayName("a table can scroll without taking the page with it")
+    void tablesGetTheirOwnSurface() {
+        String html = Markdown.toHtml("| Command | Does |\n|---|---|\n| `sync` | reads |");
+
+        assertTrue(html.contains("<div class=\"tw\"><table>"), html);
+        assertEquals(count(html, "<div class=\"tw\">"), count(html, "</table></div>"), html);
+    }
+
+    @Test
+    @DisplayName("the contents rail is built from the same slugs the headings carry")
+    void headingsMatchTheirAnchors() {
+        String src = "# Title\n\n## Working offline\n\ntext\n\n### A `code` heading\n\nmore";
+        String html = Markdown.toHtml(src);
+
+        java.util.List<String[]> heads = Markdown.headings(src);
+        assertEquals(2, heads.size(), "h1 belongs to the page, h2 and h3 to the rail");
+        for (String[] h : heads) {
+            // The link and the target come from one function, so they cannot drift.
+            assertTrue(html.contains("id=\"" + h[1] + "\""), "no heading carries " + h[1] + ":\n" + html);
+        }
+        assertEquals("A code heading", heads.get(1)[2], "the rail is a list of links, not markup");
+    }
+
     private static int count(String haystack, String needle) {
         int n = 0;
         int i = haystack.indexOf(needle);
