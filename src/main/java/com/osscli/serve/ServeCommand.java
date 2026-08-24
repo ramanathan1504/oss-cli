@@ -24,7 +24,6 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.Console;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -150,18 +149,19 @@ public class ServeCommand implements Callable<Integer> {
 
         server.createContext("/", this::handlePage);
         server.createContext("/docs", this::handleDocs);
-        server.createContext("/api/extensions", this::handleList);
         server.createContext("/api/questions", this::handleQuestions);
-        server.createContext("/api/rows", this::handleRows);
+        server.createContext("/api/waiting", this::handleWaiting);
+        server.createContext("/api/suggestions", this::handleSuggestions);
+        server.createContext("/api/state", this::handleState);
         server.createContext("/api/ask", this::handleAsk);
-        server.createContext("/api/attach", this::handleAttach);
-        server.createContext("/api/detach", this::handleDetach);
         server.setExecutor(askPool());
         server.start();
 
         String url = "http://localhost:" + port + "/";
         System.out.println("oss serving on " + url + "   (ctrl-c to stop)");
-        System.out.println("  attach an extension: paste the path of a repo containing oss-ext.json");
+        // Not "attach an extension" any more: the box that did that is gone from the page, and a
+        // startup line advertising a field nobody can find is worse than no line at all.
+        System.out.println("  reads only — anything that writes stays on the command line");
         if (!noOpen) {
             openBrowser(url);
         }
@@ -255,7 +255,11 @@ public class ServeCommand implements Callable<Integer> {
                 return;
             }
             String markdown = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            send(x, 200, "text/html; charset=utf-8", docPage(wanted, onThisMachine() + Markdown.toHtml(markdown)));
+            send(
+                    x,
+                    200,
+                    "text/html; charset=utf-8",
+                    docPage(wanted, onThisMachine() + Markdown.toHtml(markdown), toc(markdown)));
         }
     }
 
@@ -335,65 +339,542 @@ public class ServeCommand implements Callable<Integer> {
         return b.toString();
     }
 
-    /** One document, wearing the same palette as the board it is served beside. */
-    private static String docPage(String title, String body) {
-        return "<!doctype html><html><head><meta charset=\"utf-8\">"
-                + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-                + "<title>" + title + " · oss</title><style>"
-                + ":root{--bg:#faf9f5;--fg:#141413;--soft:#5b5a55;--rule:#e3e1d9;--acc:#8a6d1f;--card:#fff}"
-                + "@media(prefers-color-scheme:dark){:root{--bg:#12120f;--fg:#eceae1;--soft:#a5a294;"
-                + "--rule:#2b2a24;--acc:#d9ba6a;--card:#1a1a16}}"
-                + "*{box-sizing:border-box}body{background:var(--bg);color:var(--fg);margin:0;"
-                + "font:16px/1.65 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:2rem 1.25rem 5rem}"
-                + ".w{max-width:46rem;margin:0 auto}nav{display:flex;flex-wrap:wrap;gap:.9rem;"
-                + "border-bottom:1px solid var(--rule);padding-bottom:.9rem;margin-bottom:2rem;font-size:.9rem}"
-                + "nav a{color:var(--acc);text-decoration:none}nav a:hover{text-decoration:underline}"
-                + "h1,h2,h3{line-height:1.25;margin:2rem 0 .6rem}h1{font-size:1.9rem}h2{font-size:1.35rem}"
-                + "h3{font-size:1.05rem}p,li{color:var(--fg)}code{background:var(--card);border:1px solid var(--rule);"
-                + "padding:.08em .35em;border-radius:3px;font-size:.88em;"
-                + "font-family:ui-monospace,SFMono-Regular,Menlo,monospace}"
-                + "pre{background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--acc);"
-                + "border-radius:3px;padding:.9rem 1rem;overflow-x:auto}pre code{background:none;border:0;padding:0}"
-                + "table{border-collapse:collapse;width:100%;display:block;overflow-x:auto}"
-                + "th,td{border-bottom:1px solid var(--rule);padding:.5rem .7rem;text-align:left;vertical-align:top}"
-                + "th{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--soft)}"
-                + "hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}a{color:var(--acc)}"
-                + ".mine{background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--acc);"
-                + "border-radius:3px;padding:.7rem .9rem;margin:0 0 1.5rem;font-size:.9rem}"
-                + "</style></head><body><div class=\"w\"><nav><a href=\"/\">← board</a>" + docLinks()
-                + "</nav>" + body + "</div></body></html>";
-    }
+    /**
+     * The site's stylesheet, carried whole rather than approximated.
+     *
+     * <p>One constant, used by the board and by every document page, because the last two copies
+     * drifted the moment they existed: the board was rebuilt on eight variables — a background, a
+     * foreground, a muted grey and a line — while the manual it links to kept a cream palette from
+     * an older design. Clicking "docs" left the product. Nothing was wrong with either page on its
+     * own, and together they were two products.
+     *
+     * <p>The eight variables were also why the board read as text on a page. The site's own note
+     * says it: <em>a border says "edge", a shadow says "above"</em> — with one flat surface and a
+     * 1px rule there is no elevation, no sunken ground to alternate against, and one grey doing the
+     * work of three. Those tokens are all here, at the site's values, so a card on the board is
+     * literally the same card.
+     */
+    private static final String STYLE = """
+            :root{
+              --petrol-900:#040E13;--petrol-800:#08161D;--petrol-700:#102530;--petrol-600:#1B3B48;
+              --brass:#D8B23A;--patina:#5FBFB0;--rust:#E08066;
+              --bg:#07141A;--bg-raised:#0D202A;--bg-sunken:#040E13;
+              --ink:#E6EFF0;--ink-soft:#A9BEC5;--ink-faint:#7B949C;
+              --rule:#1A3540;--rule-soft:#122831;
+              --accent:#D8B23A;--accent-bright:#E8C558;--accent-ink:#07141A;
+              --link:#68C0B4;--glow:rgba(216,178,58,.10);
+              --term-ink:#D6E4E6;--term-dim:#7A939C;
+              --mono:ui-monospace,"SF Mono",SFMono-Regular,"JetBrains Mono","Cascadia Mono",Menlo,Consolas,monospace;
+              --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+              --measure:66ch;--gutter:clamp(1.25rem,4vw,2.5rem);--shell:min(1080px,100% - var(--gutter) * 2);
+              --radius:12px;
+              --lift-1:0 1px 2px rgba(2,8,11,.30),0 3px 10px -3px rgba(2,8,11,.35);
+              --lift-2:0 2px 5px rgba(2,8,11,.34),0 16px 34px -14px rgba(2,8,11,.55);
+            }
+            @media (prefers-color-scheme:light){
+              :root:not([data-theme="dark"]){
+                --bg:#E4EBED;--bg-raised:#FFFFFF;--bg-sunken:#D3DEE1;
+                --ink:#08161D;--ink-soft:#334A55;--ink-faint:#4C626C;
+                --rule:#BFD0D4;--rule-soft:#D3DEE1;
+                --accent:#7A5D0C;--accent-bright:#6B510A;--accent-ink:#FFFFFF;
+                --link:#175A52;--glow:rgba(122,93,12,.09);
+                --lift-1:0 1px 2px rgba(8,22,29,.08),0 3px 10px -3px rgba(8,22,29,.16);
+                --lift-2:0 2px 5px rgba(8,22,29,.10),0 16px 34px -14px rgba(8,22,29,.28);
+              }
+            }
+            :root[data-theme="light"]{
+              --bg:#E4EBED;--bg-raised:#FFFFFF;--bg-sunken:#D3DEE1;
+              --ink:#08161D;--ink-soft:#334A55;--ink-faint:#4C626C;
+              --rule:#BFD0D4;--rule-soft:#D3DEE1;
+              --accent:#6B510A;--accent-bright:#6B510A;--accent-ink:#FFFFFF;
+              --link:#175A52;--glow:rgba(122,93,12,.09);
+              --lift-1:0 1px 2px rgba(8,22,29,.08),0 3px 10px -3px rgba(8,22,29,.16);
+              --lift-2:0 2px 5px rgba(8,22,29,.10),0 16px 34px -14px rgba(8,22,29,.28);
+            }
+            :root[data-theme="dark"]{
+              --bg:#07141A;--bg-raised:#0D202A;--bg-sunken:#040E13;
+              --ink:#E6EFF0;--ink-soft:#A9BEC5;--ink-faint:#7B949C;
+              --rule:#1A3540;--rule-soft:#122831;
+              --accent:#D8B23A;--accent-bright:#E8C558;--accent-ink:#07141A;
+              --link:#68C0B4;--glow:rgba(216,178,58,.10);
+            }
+            *,*::before,*::after{box-sizing:border-box}
+            html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+            body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+                 font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
+            h1,h2,h3{margin:0;text-wrap:balance;font-weight:600;letter-spacing:-.02em}
+            p{margin:0}
+            a{color:var(--link);text-decoration-thickness:1px;text-underline-offset:3px}
+            a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
+              outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+            code,kbd,pre{font-family:var(--mono)}
+            .shell{width:var(--shell);margin-inline:auto}
 
-    private void handleList(HttpExchange x) throws IOException {
-        sendJson(x, 200, Map.of("extensions", snapshot()));
+            /* eyebrow labels -- uppercase mono with a brass tick, the site's way of naming
+               a section without spending a heading on it */
+            .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;
+                     text-transform:uppercase;color:var(--ink-faint);margin-bottom:1rem;
+                     display:flex;align-items:center;gap:.6rem}
+            .eyebrow::before{content:"";width:1.6rem;height:1px;background:var(--accent);
+                             opacity:.7;flex:none}
+
+            /* ---------- app shell ----------
+               A left rail and a main column, not a centred measure. This is a board for a tool
+               that is open while you work, and it was laid out like a marketing page: an 860px
+               column down the middle with the whole of a wide screen empty either side, and the
+               only way to reach a section was to scroll for it. A sidebar gives the sections
+               somewhere to be named and gives the rows the width they need to be rows. */
+            .app{display:grid;grid-template-columns:248px minmax(0,1fr);min-height:100vh}
+            .side{position:sticky;top:0;height:100vh;overflow-y:auto;padding:1.15rem 1rem 1.5rem;
+                  background:var(--bg-sunken);border-right:1px solid var(--rule);
+                  display:flex;flex-direction:column;gap:1.5rem}
+            main{min-width:0;padding:1.6rem clamp(1.25rem,3vw,2.5rem) 4rem;max-width:1400px}
+
+            .wordmark{display:flex;align-items:center;gap:.6rem;font-family:var(--mono);
+                      font-weight:600;letter-spacing:-.03em;font-size:1.05rem;color:var(--ink);
+                      text-decoration:none}
+            .wordmark .glyph{width:26px;height:26px;border-radius:7px;background:var(--petrol-800);
+                             display:grid;place-items:center;flex:none;
+                             border:1px solid var(--petrol-600)}
+            .wordmark .glyph svg{display:block}
+
+            .navgrp{display:flex;flex-direction:column;gap:.1rem}
+            .navlbl{font-family:var(--mono);font-size:.66rem;letter-spacing:.16em;
+                    text-transform:uppercase;color:var(--ink-faint);margin:0 0 .5rem .5rem}
+            .side a.nav{display:flex;align-items:center;gap:.55rem;padding:.4rem .55rem;
+                        border-radius:7px;color:var(--ink-soft);text-decoration:none;
+                        font-size:.89rem;border-left:2px solid transparent}
+            .side a.nav:hover{background:var(--bg-raised);color:var(--ink)}
+            .side a.nav.on{color:var(--ink);background:var(--bg-raised);
+                           border-left-color:var(--accent)}
+            .side a.nav .badge{margin-left:auto;font-family:var(--mono);font-size:.72rem;
+                               color:var(--accent);font-variant-numeric:tabular-nums}
+            .side .bottom{margin-top:auto;display:flex;flex-direction:column;gap:.7rem}
+            .theme-btn{background:transparent;border:1px solid var(--rule);color:var(--ink-soft);
+                       border-radius:7px;padding:.4rem .6rem;cursor:pointer;font:inherit;
+                       font-size:.82rem;line-height:1;text-align:left}
+            .theme-btn:hover{border-color:var(--ink-faint);color:var(--ink)}
+            .sidenote{font-size:.72rem;color:var(--ink-faint);line-height:1.5}
+
+            /* Stacked on a narrow screen: the rail becomes a strip that scrolls sideways rather
+               than a drawer, because a drawer needs a button and a button needs a state. */
+            @media (max-width:860px){
+              .app{grid-template-columns:1fr}
+              .side{position:static;height:auto;border-right:0;
+                    border-bottom:1px solid var(--rule);gap:.9rem}
+              .side .navgrp{flex-direction:row;flex-wrap:wrap;gap:.3rem}
+              .navlbl{display:none}
+              .side .bottom{margin-top:0;flex-direction:row;align-items:center;gap:1rem}
+            }
+
+            /* bands. The page alternates temperature as you scroll instead of holding one flat
+               grey the whole way down, which is what made it read as a template. */
+            .band{padding:clamp(2.25rem,5vw,3.25rem) 0}
+            .band-sunken{background:var(--bg-sunken);border-block:1px solid var(--rule)}
+            .band h2{font-size:clamp(1.35rem,2.6vw,1.7rem);letter-spacing:-.03em}
+            .band .sub{margin-top:.85rem;max-width:var(--measure);color:var(--ink-soft)}
+
+            /* cards */
+            .card{background:var(--bg-raised);border:1px solid var(--rule);border-radius:11px;
+                  padding:1.25rem 1.3rem;display:grid;gap:.55rem;align-content:start;
+                  box-shadow:var(--lift-1);
+                  transition:box-shadow .18s ease,transform .18s ease,border-color .18s ease}
+            .card:hover{box-shadow:var(--lift-2);transform:translateY(-2px);
+                        border-color:var(--ink-faint)}
+            .card h3{font-size:1.02rem;letter-spacing:-.015em}
+            .card p{color:var(--ink-soft);font-size:.93rem}
+            .card .k{font-family:var(--mono);font-size:.74rem;letter-spacing:.1em;
+                     text-transform:uppercase;color:var(--accent)}
+
+            .foot{padding:2.25rem 0 3rem;color:var(--ink-faint);font-size:.88rem}
+            .foot a{color:var(--ink-soft)}
+            @media (prefers-reduced-motion:reduce){
+              html{scroll-behavior:auto}
+              *,*::before,*::after{transition-duration:.01ms !important}
+            }
+            """;
+
+    /** The wordmark glyph, the same three strokes and dot the site and the favicon carry. */
+    private static final String GLYPH = """
+            <span class="glyph"><svg width="15" height="15" viewBox="0 0 32 32" aria-hidden="true">
+            <path d="M8 12h5M8 17h9M8 22h6" stroke="#C9A227" stroke-width="2.6"
+            stroke-linecap="round"/><circle cx="23" cy="12" r="2.4" fill="#4E9A8F"/></svg></span>
+            """;
+
+    /** The tab icon, byte for byte the site's. */
+    private static final String FAVICON = "<link rel=\"icon\" href=\"data:image/svg+xml,"
+            + "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>"
+            + "<rect width='32' height='32' rx='7' fill='%230B1B24'/>"
+            + "<path d='M8 12h5M8 17h9M8 22h6' stroke='%23C9A227' stroke-width='2.4'"
+            + " stroke-linecap='round'/>"
+            + "<circle cx='23' cy='12' r='2.4' fill='%234E9A8F'/></svg>\">";
+
+    /**
+     * The left rail, identical on the board and on every document.
+     *
+     * <p>Shared markup rather than two hand-written copies: the manual used to have a row of bare
+     * text links where the board had nothing at all, so moving between them changed the furniture
+     * as well as the colours. It also gives the board's sections somewhere to be named — they were
+     * headings in one long scroll, which is a page, not a board.
+     *
+     * @param here the document being read, or {@code "board"}
+     */
+    private static String sidebar(String here) {
+        boolean onBoard = "board".equals(here);
+        StringBuilder b = new StringBuilder();
+        b.append("<aside class=\"side\">")
+                .append("<a class=\"wordmark\" href=\"/\">")
+                .append(GLYPH)
+                .append("oss</a>");
+
+        // The board's own sections, as anchors. Only on the board: a link to #waiting from a
+        // document scrolls that document to nothing.
+        if (onBoard) {
+            b.append("<div class=\"navgrp\"><p class=\"navlbl\">board</p>")
+                    .append("<a class=\"nav on\" href=\"#waiting\">Waiting on you"
+                            + "<span class=\"badge\" id=\"navcount\"></span></a>")
+                    .append("<a class=\"nav\" href=\"#next\">Work on next</a>")
+                    .append("<a class=\"nav\" href=\"#ask\">Ask about one thing</a>")
+                    .append("<a class=\"nav\" href=\"#sweeps\">Sweeps</a>")
+                    .append("<a class=\"nav\" href=\"#builtin\">Built in</a>")
+                    .append("</div>");
+        } else {
+            b.append("<div class=\"navgrp\"><p class=\"navlbl\">board</p>")
+                    .append("<a class=\"nav\" href=\"/\">Back to the board</a></div>");
+        }
+
+        b.append("<div class=\"navgrp\"><p class=\"navlbl\">manual</p>");
+        for (String d : DOCS) {
+            b.append("<a class=\"nav")
+                    .append(d.equals(here) ? " on" : "")
+                    .append("\" href=\"/docs/")
+                    .append(d)
+                    .append("\">")
+                    .append(d.replace(".md", "").toLowerCase(java.util.Locale.ROOT))
+                    .append("</a>");
+        }
+        b.append("</div>");
+
+        b.append("<div class=\"bottom\">")
+                .append("<button class=\"theme-btn\" id=\"theme-btn\" ")
+                .append("title=\"Same choice as the site makes\">theme</button>")
+                .append("<p class=\"sidenote\">Everything here reads. Anything that writes stays ")
+                .append("at a terminal.</p></div></aside>");
+        return b.toString();
     }
 
     /**
-     * The reviewed pull requests, as rows a page can hang a question on.
+     * The toggle, and the pre-paint read that stops a chosen theme flashing.
      *
-     * <p>Read from the same ledger {@code oss followup} and {@code oss hub} read, not from a second
-     * copy of the logic — one implementation, so the page and the command cannot drift apart.
-     *
-     * <p>Rows rather than text because the question goes <b>where it is asked</b>: "seen this?"
-     * belongs on every row, and "since I reviewed" only where a verdict exists, since anywhere else
-     * it would answer about nothing.
+     * <p>Lifted from the site including the inline script in the head: without it a person who
+     * chose light gets one dark frame on every navigation, which on a manual you click through is
+     * a strobe rather than a detail.
      */
-    private void handleRows(HttpExchange x) throws IOException {
-        List<Map<String, Object>> rows = new ArrayList<>();
-        for (com.osscli.review.ReviewLedger.Row r : com.osscli.review.ReviewLedger.read()) {
-            rows.add(Map.of(
-                    "repo", r.repo,
-                    "pr", r.pr,
-                    "verdict", r.verdict,
-                    "reviewed", r.reviewed,
-                    "author", r.author,
-                    "posted", r.posted,
-                    "note", r.note,
-                    // A verdict is what makes "since I reviewed" answerable at all.
-                    "hasVerdict", hasVerdict(r.verdict)));
-        }
-        sendJson(x, 200, Map.of("rows", rows));
+    private static final String THEME_BOOT = """
+            <script>(function(){try{var s=localStorage.getItem('ubuos-theme');
+            if(s==='dark'||s==='light'){document.documentElement.setAttribute('data-theme',s)}}
+            catch(e){}})();</script>
+            """;
+
+    private static final String THEME_JS = """
+            <script>(function(){
+              var root=document.documentElement,btn=document.getElementById('theme-btn');
+              if(!btn)return;
+              btn.onclick=function(){
+                var now=root.getAttribute('data-theme');
+                if(!now){now=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}
+                var next=now==='dark'?'light':'dark';
+                root.setAttribute('data-theme',next);
+                try{localStorage.setItem('ubuos-theme',next)}catch(e){}
+              };
+            })();</script>
+            """;
+
+    /**
+     * One document, on the board's stylesheet rather than beside it.
+     *
+     * <p>This page used to carry a cream palette -- {@code #faf9f5} on {@code #141413} -- while the
+     * board it links to is petrol and brass. Both were fine alone and clicking "docs" left the
+     * product, which is the one thing a manual served from the same port must not do. There is no
+     * palette here any more; there is {@link #STYLE}, and what is below is only the rules a
+     * document needs that a board does not.
+     */
+    private static String docPage(String title, String body) {
+        return docPage(title, body, "");
     }
+
+    /**
+     * A document, its shell, and the rail of its own headings.
+     *
+     * <p>The right half of every manual page was empty: the prose sat in a 66ch measure and the
+     * rest of a wide screen held nothing. A measure is right for the prose and wrong for the page,
+     * so the column keeps it and the space beside it now carries what a reader of a forty-section
+     * reference actually wants — where they are and what else is in here. COMMANDS.md has thirteen
+     * sections and no way to see them without scrolling the whole file.
+     */
+    private static String docPage(String title, String body, String toc) {
+        return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+                + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+                + "<meta name=\"color-scheme\" content=\"dark light\">"
+                + FAVICON
+                + "<title>" + title + " · oss</title>"
+                + THEME_BOOT
+                + "<style>" + STYLE + DOC_CSS + "</style></head><body><div class=\"app\">"
+                + sidebar(title)
+                + "<main class=\"doc\"><article>" + body
+                + "<footer class=\"foot\">Served by this build from inside its own jar — the same "
+                + "text ships with the binary, so it can never describe a version you do not have."
+                + "</footer></article>" + toc + "</main></div>"
+                + THEME_JS + "</body></html>";
+    }
+
+    /**
+     * The document's own sections, as links into it.
+     *
+     * <p>Empty when a document has fewer than three, because a contents list of two is furniture.
+     */
+    private static String toc(String markdown) {
+        java.util.List<String[]> heads = Markdown.headings(markdown);
+        if (heads.size() < 3) {
+            return "";
+        }
+        // COMMANDS.md has thirteen sections and forty-nine subsections, and all sixty-two in a
+        // 15rem rail is a wall of links -- a second copy of the document rather than a way through
+        // it. Past the threshold the rail keeps the sections only, which is what somebody scanning
+        // for "where is triage documented" is actually looking for.
+        long subs = heads.stream().filter(h -> "3".equals(h[0])).count();
+        boolean sectionsOnly = subs > 25;
+        StringBuilder b = new StringBuilder("<nav class=\"toc\"><p>on this page</p>");
+        for (String[] h : heads) {
+            if (sectionsOnly && "3".equals(h[0])) {
+                continue;
+            }
+            b.append("<a class=\"h")
+                    .append(h[0])
+                    .append("\" href=\"#")
+                    .append(h[1])
+                    .append("\">")
+                    .append(h[2])
+                    .append("</a>");
+        }
+        return b.append("</nav>").toString();
+    }
+
+    /** What a document needs and a board does not: prose measure, headings, tables, code blocks. */
+    private static final String DOC_CSS = """
+            /* Content column plus a contents rail. The prose keeps a measure; tables, code and
+               the rail use the width the shell gives them. */
+            main.doc{display:grid;grid-template-columns:minmax(0,1fr) 15rem;
+                     gap:clamp(1.5rem,4vw,3rem);align-items:start;max-width:none}
+            main.doc>article{min-width:0;max-width:78ch}
+            main.doc>article>p,main.doc>article>ul,main.doc>article>ol,
+            main.doc>article>blockquote{max-width:var(--measure)}
+            .toc{position:sticky;top:1.6rem;font-size:.83rem;border-left:1px solid var(--rule);
+                 padding-left:1rem;max-height:calc(100vh - 3.2rem);overflow-y:auto}
+            .toc p{font-family:var(--mono);font-size:.66rem;letter-spacing:.16em;
+                   text-transform:uppercase;color:var(--ink-faint);margin-bottom:.6rem}
+            .toc a{display:block;padding:.24rem 0;color:var(--ink-soft);text-decoration:none;
+                   line-height:1.4}
+            .toc a:hover{color:var(--accent)}
+            .toc a.h3{padding-left:.85rem;font-size:.79rem;color:var(--ink-faint)}
+            .toc a.h3:hover{color:var(--accent)}
+            @media (max-width:1100px){
+              main.doc{grid-template-columns:minmax(0,1fr)}
+              .toc{display:none}
+            }
+            h1,h2,h3{line-height:1.25;margin:2.2rem 0 .7rem;letter-spacing:-.025em}
+            h1{font-size:clamp(1.7rem,3.4vw,2.1rem);margin-top:.4rem}
+            h2{font-size:1.32rem} h3{font-size:1.06rem}
+            p,li{color:var(--ink-soft)}
+            p{margin:.85rem 0}
+            ul,ol{padding-left:1.3rem}
+            li{margin:.35rem 0}
+            strong{color:var(--ink)}
+            code{background:var(--bg-sunken);border:1px solid var(--rule-soft);
+                 padding:.08em .38em;border-radius:5px;font-size:.87em;color:var(--accent)}
+            pre{background:var(--petrol-900);border:1px solid var(--petrol-600);
+                border-radius:var(--radius);padding:1rem 1.15rem;overflow-x:auto;
+                box-shadow:var(--lift-1);color:#D6E4E6;font-size:.85rem;line-height:1.6}
+            pre code{background:none;border:0;padding:0;color:inherit;font-size:inherit}
+            table{border-collapse:collapse;width:100%;font-size:.92rem}
+            .tw{margin:1.5rem 0;overflow-x:auto;border:1px solid var(--rule);border-radius:10px;
+                background:var(--bg-raised);box-shadow:var(--lift-1)}
+            th,td{text-align:left;padding:.72rem .95rem;border-bottom:1px solid var(--rule);
+                  vertical-align:top}
+            thead th{font-family:var(--mono);font-size:.72rem;letter-spacing:.12em;
+                     text-transform:uppercase;color:var(--ink-faint);font-weight:500;
+                     background:var(--bg-sunken)}
+            tbody tr:last-child td{border-bottom:0}
+            hr{border:0;border-top:1px solid var(--rule);margin:2.2rem 0}
+            blockquote{margin:1.2rem 0;padding:.1rem 0 .1rem 1.1rem;
+                       border-left:2px solid var(--accent);color:var(--ink-soft)}
+            /* What the documents mean on this particular machine. */
+            .mine{background:var(--bg-raised);border:1px solid var(--rule);
+                  border-left:2px solid var(--accent);border-radius:10px;
+                  padding:.85rem 1.05rem;margin:0 0 1.75rem;font-size:.9rem;
+                  color:var(--ink-soft);box-shadow:var(--lift-1)}
+            .mine strong{color:var(--ink)}
+            """;
+
+    /**
+     * Who is waiting on you, as data rather than as a picture of data.
+     *
+     * <p>The same {@link com.osscli.review.Waiting#read} call {@code oss hub} makes. The page used
+     * to get this by running {@code hub} as a child process and printing its stdout into a grey box
+     * — a terminal transcript in a browser, with the columns held apart by spaces and the pull
+     * request numbers not clickable, because in text they are not links, they are digits.
+     *
+     * <p>Slow on purpose and slow honestly: three GitHub calls per recorded review, seven seconds
+     * on a seventeen-row ledger. The page asks for it after it has painted, so the wait is a
+     * section filling in rather than a blank window.
+     */
+    private void handleWaiting(HttpExchange x) throws IOException {
+        String me = com.osscli.review.Waiting.me();
+        com.osscli.review.Waiting.Result r =
+                com.osscli.review.Waiting.read(null, me, com.osscli.review.Waiting.Progress.SILENT);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("me", me);
+        out.put("onYou", waitingRows(r.onYou(), me));
+        out.put("onThem", waitingRows(r.onThem(), me));
+        out.put("checked", r.checked());
+        out.put("unreachable", r.unreachable());
+        // Asked rather than assumed: "private, deleted, or no token" is three explanations, two of
+        // them wrong every time, and it sends the reader hunting for a problem they do not have.
+        out.put("why", r.unreachable() > 0 ? com.osscli.github.Reachability.whyUnreadable() : "");
+        sendJson(x, 200, out);
+    }
+
+    private static List<Map<String, Object>> waitingRows(List<com.osscli.review.Waiting.Item> items, String me) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (com.osscli.review.Waiting.Item i : items) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("repo", i.row().repo);
+            m.put("pr", i.row().pr);
+            m.put("verdict", i.row().verdict);
+            m.put("title", i.title());
+            m.put("why", i.why(me));
+            // The rule travels with the row. The page had "verdict && verdict !== 'none'" written
+            // into its own script -- a second copy of what counts as reviewed, in another language,
+            // free to drift from this one.
+            m.put("hasVerdict", hasVerdict(i.row().verdict));
+            m.put("pushed", i.pushed());
+            m.put("merged", i.merged());
+            m.put("state", i.state());
+            // github.com because the ledger holds GitHub pull requests -- Waiting reads them
+            // through the GitHub API and could not have recorded them from anywhere else. When a
+            // second forge is supported the row will carry its own origin and this goes with it.
+            m.put("url", "https://github.com/" + i.row().repo + "/pull/" + i.row().pr);
+            out.add(m);
+        }
+        return out;
+    }
+
+    /**
+     * What to work on next, as rows with a score and the reason attached.
+     *
+     * <p>The same {@link com.osscli.retrieval.Suggestions#read} call {@code oss pick} makes. A score
+     * is a number and "because you wrote …" is a list; printing them and reading the print back is
+     * how the page ended up showing forty-nine lines of which twenty-three were a counter.
+     */
+    private void handleSuggestions(HttpExchange x) throws IOException {
+        try {
+            com.osscli.retrieval.Suggestions.Result r = com.osscli.retrieval.Suggestions.read(
+                    null, 10, false, com.osscli.retrieval.Suggestions.Progress.SILENT);
+            List<Map<String, Object>> items = new ArrayList<>();
+            for (com.osscli.retrieval.Suggestions.Item i : r.items()) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("repo", i.repo());
+                m.put("number", i.number());
+                m.put("title", i.title());
+                m.put("score", Math.round(i.score() * 100.0) / 100.0);
+                m.put("because", i.because());
+                m.put("pull", i.pull());
+                m.put("url", "https://github.com/" + i.repo() + (i.pull() ? "/pull/" : "/issues/") + i.number());
+                items.add(m);
+            }
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("why", r.why().name());
+            out.put("items", items);
+            out.put("profileSize", r.profileSize());
+            out.put("how", r.how());
+            out.put("candidates", r.candidates());
+            sendJson(x, 200, out);
+        } catch (Exception e) {
+            sendJson(x, 200, Map.of("why", "ERROR", "items", List.of(), "error", String.valueOf(e.getMessage())));
+        }
+    }
+
+    /**
+     * What is built in and what is attached, for the half of {@code run} and {@code memory} a
+     * browser may honestly show.
+     *
+     * <p>The page deliberately does not run these — an outward write must be confirmed at a
+     * terminal, and a browser has none. That was taken to mean the whole capability had to stay off
+     * the board, which left a person with a memory holding fifty thousand indexed chunks looking at
+     * a page that never mentioned it. Listing what a runner can do, and how much the memory holds,
+     * writes nothing; the verbs that do are named as needing a terminal rather than hidden.
+     */
+    private void handleState(HttpExchange x) throws IOException {
+        List<Map<String, Object>> exts = snapshot();
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("runners", ofKind(exts, "runner"));
+        out.put("memories", ofKind(exts, "memory"));
+        out.put("runnerVerbs", com.osscli.runner.BuiltinRunner.VERBS);
+        out.put("memoryVerbs", com.osscli.memory.BuiltinMemory.VERBS);
+        out.put("needsTerminal", Askable.WRITES);
+        out.put("skills", skillRows());
+        Map<String, Object> counts = new LinkedHashMap<>();
+        counts.put("issues", one("SELECT count(*) FROM issues;"));
+        counts.put("notes", one("SELECT count(*) FROM personal_chat_memory;"));
+        counts.put("chunks", one("SELECT count(*) FROM personal_chat_chunk;"));
+        counts.put("reviews", (long) com.osscli.review.ReviewLedger.read().size());
+        counts.put("asked", one("SELECT count(*) FROM chat_turn;"));
+        out.put("counts", counts);
+        sendJson(x, 200, out);
+    }
+
+    private static List<Map<String, Object>> ofKind(List<Map<String, Object>> exts, String kind) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> e : exts) {
+            if (kind.equals(e.get("kind"))) {
+                out.add(e);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The instructions {@code oss ask} works under.
+     *
+     * <p>Listed for the reason the extension list was: an instruction the reader cannot see is one
+     * they cannot correct when an answer comes out wrong.
+     */
+    private static List<Map<String, Object>> skillRows() {
+        List<Map<String, Object>> out = new ArrayList<>();
+        try {
+            for (com.osscli.agent.Skill sk : com.osscli.agent.Skills.all()) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("name", sk.name());
+                m.put("summary", sk.summary() == null ? "" : sk.summary());
+                m.put("when", sk.when());
+                m.put("builtIn", sk.builtIn());
+                out.add(m);
+            }
+        } catch (Exception e) {
+            // A skills directory that cannot be read is not a reason for the board to fail.
+            return List.of();
+        }
+        return out;
+    }
+
+    /*
+     * handleRows was here, serving the ledger as flat rows for the page to hang buttons on.
+     *
+     * /api/waiting supersedes it: the same rows, plus whose move it is and why, from the call the
+     * `hub` command makes. Two endpoints reading one ledger is two answers to "what have I
+     * reviewed" -- and the flat one could not say which of them was waiting, which is the question
+     * the page opens on.
+     */
 
     /**
      * Whether a row was actually reviewed.
@@ -467,7 +948,34 @@ public class ServeCommand implements Callable<Integer> {
             }
             lines.remove(0);
         }
+        lines.removeIf(ServeCommand::isProgress);
         return String.join("\n", lines).strip();
+    }
+
+    /**
+     * A line that says a command is still working, which is never the answer.
+     *
+     * <p>{@link com.osscli.ui.Live} is the status line for anything slower than a second, and it is
+     * right in a terminal, where it overwrites itself. Piped into this page it does not overwrite
+     * anything: {@code hub} arrived as eighteen lines of "· 4 of 17" followed by the seven lines
+     * that were the answer, and {@code pick} as twenty-three of forty-nine. The reply was below the
+     * fold of a panel whose whole job is to show it, so the page looked like it had run something
+     * and returned a progress log.
+     *
+     * <p>Anchored on the three shapes {@code Live} actually writes rather than on "looks like
+     * noise". A tick is only dropped when it also carries the elapsed time that only a settled
+     * status line has — {@code doctor} reports with ticks of its own, and eating those would turn a
+     * fixed panel into an empty one.
+     */
+    private static boolean isProgress(String line) {
+        String t = line.strip();
+        if (t.startsWith("… ")) {
+            return true;
+        }
+        if (t.startsWith("· ")) {
+            return true;
+        }
+        return (t.startsWith("✓ ") || t.startsWith("✗ ")) && t.matches(".*\\(\\d+(\\.\\d+)?[a-z]{1,2}\\)$");
     }
 
     private void handleAsk(HttpExchange x) throws IOException {
@@ -562,55 +1070,18 @@ public class ServeCommand implements Callable<Integer> {
         return out;
     }
 
-    private void handleAttach(HttpExchange x) throws IOException {
-        try {
-            Map<String, Object> req = readJson(x);
-            String raw = String.valueOf(req.getOrDefault("path", "")).trim();
-            if (raw.isEmpty()) {
-                sendJson(x, 400, Map.of("error", "no path given"));
-                return;
-            }
-            // The path came from a text box, not a shell, so ~ was never expanded.
-            String path = raw.startsWith("~") ? System.getProperty("user.home") + raw.substring(1) : raw;
-            Extension ext = ExtensionRegistry.readManifest(Path.of(path));
-            boolean replaced = ExtensionRegistry.add(ext);
-            sendJson(
-                    x,
-                    200,
-                    Map.of(
-                            "ok", true,
-                            "name", ext.getName(),
-                            "kind", ext.kind().lower(),
-                            "replaced", replaced,
-                            "extensions", snapshot()));
-        } catch (RuntimeException e) {
-            // The manifest reader's messages name the field or the file, which is what someone
-            // pasting a wrong path needs; passing them through beats a generic failure.
-            sendJson(x, 400, Map.of("error", String.valueOf(e.getMessage())));
-        }
-    }
-
-    private void handleDetach(HttpExchange x) throws IOException {
-        try {
-            Map<String, Object> req = readJson(x);
-            String name = String.valueOf(req.getOrDefault("name", "")).trim();
-            boolean removed = !name.isEmpty() && ExtensionRegistry.remove(name);
-            // Detaching only forgets a path. Nothing under that path is touched, which is worth
-            // saying on the page too -- "remove" reads like deletion.
-            sendJson(
-                    x,
-                    removed ? 200 : 404,
-                    Map.of(
-                            "ok",
-                            removed,
-                            "error",
-                            removed ? "" : "no extension named \"" + name + "\"",
-                            "extensions",
-                            snapshot()));
-        } catch (RuntimeException e) {
-            sendJson(x, 400, Map.of("error", String.valueOf(e.getMessage())));
-        }
-    }
+    /*
+     * handleAttach and handleDetach were here.
+     *
+     * Both are gone with the box that called them. Nothing on the board needed an extension --
+     * the runner and the memory are built in -- so the page opened on a text field asking for a
+     * path to a repository that, for almost everybody looking at it, does not exist. `oss ext add
+     * <path>` and `oss ext list` still do this on the command line, which is where a path is
+     * something you can tab-complete rather than transcribe.
+     *
+     * It also takes the last two writes off this surface. Everything the browser can now reach
+     * reads.
+     */
 
     // ------------------------------------------------------------------ helpers ---
 
@@ -630,14 +1101,6 @@ public class ServeCommand implements Callable<Integer> {
             out.add(m);
         }
         return out;
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> readJson(HttpExchange x) throws IOException {
-        try (InputStream in = x.getRequestBody()) {
-            byte[] body = in.readAllBytes();
-            return body.length == 0 ? Map.of() : MAPPER.readValue(body, Map.class);
-        }
     }
 
     private void sendJson(HttpExchange x, int code, Object payload) throws IOException {
@@ -861,295 +1324,450 @@ public class ServeCommand implements Callable<Integer> {
         return PAGE;
     }
 
-    private static final String PAGE = """
-            <!doctype html><html><head><meta charset="utf-8">
-            <meta name="viewport" content="width=device-width,initial-scale=1">
-            <title>oss</title><style>
-            /* The site's palette, its fonts, and its way of choosing between them -- not a
-               third of any of the three. The colours were already the site's; the rest was
-               not, and matching two of three is what makes two pages look like relatives
-               rather than the same product.
+    /** What the board needs on top of the shared shell. */
+    private static final String BOARD_CSS = """
+            .sect{margin:0 0 2.6rem}
+            .sect h2{font-size:1.12rem;letter-spacing:-.02em;margin:0}
+            .sect .lede{color:var(--ink-soft);font-size:.9rem;margin-top:.3rem}
+            .sect-hd{display:flex;align-items:baseline;gap:.9rem;flex-wrap:wrap;
+                     margin-bottom:.9rem}
+            .sect-hd .sp{flex:1}
 
-               The site is dark by default with light under the media query, and an explicit
-               data-theme beats both. This page did the opposite -- light by default -- so a
-               machine set to light showed a light board beside a dark manual, and a person
-               who had chosen a theme on the site got no say here at all. Same three states,
-               same order, same values, same localStorage key. */
-            :root{--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-                  --mono:ui-monospace,"SF Mono",SFMono-Regular,"JetBrains Mono","Cascadia Mono",Menlo,Consolas,monospace;
-                  --bg:#07141A;--fg:#E6EFF0;--mut:#7B949C;--line:#1A3540;--card:#0D202A;
-                  --acc:#D8B23A;--ok:#5FBFB0;--bad:#E08066;--code:#040E13}
-            @media(prefers-color-scheme:light){:root:not([data-theme="dark"]){
-                  --bg:#E4EBED;--fg:#08161D;--mut:#4C626C;--line:#BFD0D4;--card:#FFFFFF;
-                  --acc:#7A5D0C;--ok:#175A52;--bad:#7E3320;--code:#D3DEE1}}
-            :root[data-theme="light"]{--bg:#E4EBED;--fg:#08161D;--mut:#4C626C;--line:#BFD0D4;
-                  --card:#FFFFFF;--acc:#6B510A;--ok:#175A52;--bad:#7E3320;--code:#D3DEE1}
-            :root[data-theme="dark"]{--bg:#07141A;--fg:#E6EFF0;--mut:#7B949C;--line:#1A3540;
-                  --card:#0D202A;--acc:#D8B23A;--ok:#5FBFB0;--bad:#E08066;--code:#040E13}
-            *{box-sizing:border-box}
-            body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 var(--sans)}
-            .theme{position:absolute;top:28px;right:20px;border:1px solid var(--line);
-                   background:none;color:var(--mut);border-radius:6px;padding:4px 10px;
-                   font:inherit;font-size:12.5px;cursor:pointer}
-            .theme:hover{border-color:var(--acc);color:var(--acc)}
-            .wrap{max-width:920px;margin:0 auto;padding:32px 20px 64px;position:relative}
-            h1{font-size:20px;margin:0 0 2px}
-            .sub{color:var(--mut);font-size:13px}
-            .grp{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);
-                 margin:28px 0 10px}
-            .card{background:var(--card);border:1px solid var(--line);border-radius:10px;
-                  padding:14px 16px;margin-bottom:10px}
-            .row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
-            .nm{font-weight:600}
-            .kind{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--acc);
-                  border:1px solid var(--line);border-radius:20px;padding:1px 8px}
-            .ok{color:var(--ok)} .bad{color:var(--bad)}
-            code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:12.5px}
-            .verbs{color:var(--mut);font-size:12.5px;margin-top:6px}
-            input{flex:1;min-width:240px;padding:8px 10px;border:1px solid var(--line);
-                  border-radius:8px;background:var(--card);color:var(--fg);font-size:14px}
-            button{padding:8px 14px;border:1px solid var(--line);border-radius:8px;
-                   background:var(--code);color:var(--fg);cursor:pointer;font-size:14px}
-            button:hover{border-color:var(--acc);color:var(--acc)}
-            .x{border:0;background:none;color:var(--mut);cursor:pointer;font-size:12.5px;padding:0}
-            .x:hover{color:var(--bad)}
-            .msg{margin-top:10px;font-size:13px;min-height:18px}
-            .note{color:var(--mut);font-size:12.5px;margin-top:26px;border-top:1px solid var(--line);
-                  padding-top:14px}
-            .doc h1{font-size:19px} .doc h2{font-size:16px} .doc h3{font-size:14px}
-            /* Asking and doing must not look alike. Everything else on this page changes
-               something; these only read, and the dashed outline is the difference a reader can
-               see before they click rather than after. */
-            .asks{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
-            .ask{background:none;border:1px dashed var(--line);color:var(--mut);border-radius:6px;
-                 padding:6px 11px;font:inherit;font-size:13px;cursor:pointer}
-            .ask:hover{border-color:var(--acc);color:var(--fg)}
+            /* The one question, given the size of an answer rather than of a heading. */
+            .headline{display:flex;align-items:center;gap:1.15rem;flex-wrap:wrap;
+                      margin:0 0 1.2rem}
+            .bignum{font-family:var(--mono);font-size:clamp(2.4rem,5vw,3.1rem);font-weight:600;
+                    line-height:1;color:var(--accent);font-variant-numeric:tabular-nums}
+            .bignum.clear{color:var(--patina)}
+            .headline .said{color:var(--ink-soft);font-size:.98rem;max-width:46ch}
+
+            /* Rows are rows: a surface, a grid with real columns, and a hover. Held apart by
+               spaces in a monospace dump they were a picture of a table. */
+            .rows{border:1px solid var(--rule);border-radius:11px;background:var(--bg-raised);
+                  box-shadow:var(--lift-1);overflow:hidden}
+            .row{padding:.85rem 1.1rem;border-bottom:1px solid var(--rule-soft);
+                 transition:background .15s ease}
+            .rows .row:last-child{border-bottom:0}
+            .row:hover{background:var(--bg-sunken)}
+            .row.you{border-left:2px solid var(--accent);padding-left:calc(1.1rem - 2px)}
+            .rtop{display:flex;align-items:baseline;gap:.7rem;flex-wrap:wrap}
+            .num{font-family:var(--mono);font-size:.84rem;font-weight:600;color:var(--accent);
+                 text-decoration:none;font-variant-numeric:tabular-nums}
+            .num:hover{text-decoration:underline}
+            .repo{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)}
+            .chip{font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;
+                  text-transform:uppercase;border:1px solid var(--rule);border-radius:999px;
+                  padding:.12rem .55rem;color:var(--ink-faint)}
+            .chip.take{color:var(--patina);border-color:var(--patina)}
+            .chip.changes{color:var(--rust);border-color:var(--rust)}
+            .why{margin-left:auto;font-family:var(--mono);font-size:.75rem;color:var(--ink-faint)}
+            .rttl{margin-top:.32rem;font-size:.95rem;color:var(--ink);line-height:1.45}
+            .rwhy{margin-top:.3rem;font-size:.82rem;color:var(--ink-faint)}
+            .score{font-family:var(--mono);font-size:.84rem;font-weight:600;color:var(--patina);
+                   font-variant-numeric:tabular-nums;min-width:2.6rem}
+            .racts{display:flex;gap:.45rem;margin-top:.6rem;flex-wrap:wrap}
+
+            /* Asking and doing must not look alike. Nothing reachable from this page writes any
+               more, but a read that starts a command still takes seconds and still deserves to
+               look different from a link that does not. */
+            .ask{background:transparent;border:1px dashed var(--rule);color:var(--ink-faint);
+                 border-radius:7px;padding:.3rem .65rem;font:inherit;font-family:var(--mono);
+                 font-size:.74rem;cursor:pointer;transition:border-color .15s ease,color .15s ease}
+            .ask:hover{border-color:var(--accent);color:var(--ink)}
             .ask[aria-busy="true"]{opacity:.55;cursor:progress}
-            .out{white-space:pre-wrap;font-family:var(--mono);
-                 font-size:12.5px;line-height:1.55;color:var(--fg);background:var(--card);
-                 border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-top:4px;
-                 max-height:420px;overflow:auto}
-            .ranby{color:var(--mut);font-size:12px;margin:6px 0 0}
-            /* Extensions are the least of what this page is for now that the runner and the
-               memory are both built in. Open on demand, so a page whose subject is the board does
-               not open on a box asking for a path nobody needs to paste. */
-            .ext{margin-top:28px;border-top:1px solid var(--line);padding-top:14px}
-            .ext summary{font-size:11px;text-transform:uppercase;letter-spacing:.08em;
-                         color:var(--mut);cursor:pointer;list-style:none}
-            .ext summary::-webkit-details-marker{display:none}
-            .ext summary:hover{color:var(--acc)}
-            /* A question that needs a number gets a field beside it, not a browser dialog: a
-               modal says nothing about what it wants until after it has interrupted you. */
-            .one{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 0}
-            .one input{flex:0 1 130px;min-width:90px;padding:6px 9px;font-size:13px}
-            .one .q{color:var(--mut);font-size:12.5px;flex:1 1 320px}
-            .rw{display:flex;align-items:baseline;gap:10px;padding:8px 0;
-                border-bottom:1px solid var(--line);flex-wrap:wrap}
-            .rw .pr{font-family:var(--mono);font-size:12.5px;color:var(--mut)}
-            .rw .rp{font-size:13px}
-            .rw .vd{font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;
-                    border:1px solid var(--line);border-radius:999px;padding:1px 8px;color:var(--mut)}
-            .rw .sp{flex:1}
-            </style></head><body><div class="wrap">
-            <a class="theme" href="/docs" title="Every document this build carries">docs</a>
-            <button class="theme" id="theme-btn" title="Same choice as the site makes">theme</button>
-            <h1>oss</h1>
-            <div class="sub">One core that knows. A <b>runner</b> runs something real; a <b>memory</b> remembers.</div>
 
-            <div class="grp">board</div>
-            <div class="asks" id="board"></div>
-            <div id="rows"></div>
-            <div class="out" id="boardout">reading the ledger…</div>
-            <p class="ranby" id="boardran"></p>
+            /* Command output wears the terminal chrome the site uses for the same thing --
+               because that is what it is, and a grey box said "quotation" instead. */
+            .term{background:var(--petrol-900);border:1px solid var(--petrol-600);
+                  border-radius:var(--radius);box-shadow:var(--lift-2);overflow:hidden;
+                  margin-top:.75rem}
+            .term-bar{display:flex;align-items:center;gap:.4rem;padding:.5rem .75rem;
+                      background:var(--petrol-700);border-bottom:1px solid var(--petrol-600)}
+            .dot{width:9px;height:9px;border-radius:50%;flex:none}
+            .term-cmd{font-family:var(--mono);font-size:.7rem;color:var(--term-dim);
+                      margin-left:.55rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+            .term-body{margin:0;padding:.85rem 1.05rem;font-family:var(--mono);font-size:.76rem;
+                       line-height:1.62;color:var(--term-ink);white-space:pre-wrap;
+                       max-height:24rem;overflow:auto}
 
-            <div class="grp">ask about one thing</div>
-            <div id="oneof"></div>
+            .ctl{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;
+                 padding:.7rem .9rem;border:1px solid var(--rule);border-radius:10px;
+                 background:var(--bg-raised);box-shadow:var(--lift-1);margin-bottom:.6rem}
+            .ctl .q{color:var(--ink-faint);font-size:.82rem;flex:1 1 16rem;min-width:0}
+            select,input{padding:.42rem .6rem;border:1px solid var(--rule);border-radius:7px;
+                         background:var(--bg-sunken);color:var(--ink);font:inherit;
+                         font-size:.85rem}
+            input{flex:0 1 12rem;min-width:7rem}
+            select{min-width:11rem;font-family:var(--mono);font-size:.8rem}
+            .go{padding:.42rem .85rem;border:1px solid var(--accent);border-radius:7px;
+                background:var(--accent);color:var(--accent-ink);cursor:pointer;font:inherit;
+                font-size:.83rem;font-weight:600}
+            .go:hover{background:var(--accent-bright);border-color:var(--accent-bright)}
+            .go[aria-busy="true"]{opacity:.6;cursor:progress}
 
-            <div class="grp">sweeps</div>
-            <div class="asks" id="asks"></div>
-            <div class="out" id="askout" hidden></div>
-            <p class="ranby" id="askran"></p>
+            .cards{display:grid;gap:.9rem;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))}
+            .stat{font-family:var(--mono);font-size:1.5rem;font-weight:600;color:var(--ink);
+                  font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+            .verbs{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.15rem}
+            .verb{font-family:var(--mono);font-size:.7rem;padding:.14rem .45rem;
+                  border:1px solid var(--rule);border-radius:5px;color:var(--ink-soft);
+                  background:var(--bg-sunken)}
+            .verb.no{color:var(--ink-faint);border-style:dashed}
+            .empty{color:var(--ink-faint);font-size:.88rem;padding:.9rem 1.1rem;
+                   border:1px dashed var(--rule);border-radius:10px}
+            details.more{margin-top:.7rem}
+            details.more>summary{cursor:pointer;color:var(--ink-faint);font-size:.84rem;
+                                 padding:.45rem .2rem;list-style:none}
+            details.more>summary::-webkit-details-marker{display:none}
+            details.more>summary::before{content:"▸ ";color:var(--accent)}
+            details.more[open]>summary::before{content:"▾ "}
+            details.more>summary:hover{color:var(--ink)}
+            .foot{margin-top:3rem;padding-top:1.2rem;border-top:1px solid var(--rule);
+                  color:var(--ink-faint);font-size:.82rem;line-height:1.65;max-width:var(--measure)}
+            .foot code{background:var(--bg-sunken);border:1px solid var(--rule-soft);
+                       padding:.06em .34em;border-radius:4px;color:var(--accent);font-size:.95em}
+            """;
 
-            <details class="ext">
-              <summary id="extsum">extensions</summary>
-              <div id="list"></div>
-              <div class="card">
-                <div class="row">
-                  <input id="path" placeholder="/path/to/a/repo containing oss-ext.json" />
-                  <button id="go">Attach</button>
-                </div>
-                <div class="msg" id="msg"></div>
+    private static final String BODY = """
+            <main>
+
+            <section class="sect" id="waiting">
+              <div class="sect-hd"><h2>Waiting on you</h2><span class="sp"></span></div>
+              <div class="headline">
+                <div class="bignum" id="wn">…</div>
+                <p class="said" id="wsaid">reading every recorded review</p>
               </div>
-            </details>
+              <div id="wlist"></div>
+              <div id="wthem"></div>
+            </section>
 
-            <div class="note">
-              Attaching records a path — nothing is uploaded or copied, and the extension stays an
-              ordinary repository. Detaching only forgets the path; it deletes nothing.<br><br>
-              This page attaches and reports. It deliberately does not <em>run</em> anything: an
-              outward write must be confirmed at a terminal, and a browser has none. Run verbs from
-              the CLI — <code>oss run &lt;verb&gt;</code>, <code>oss memory &lt;verb&gt;</code>.<br><br>
-              <b>You do not need this page.</b> Everything on it is two commands —
-              <code>oss ext add &lt;path&gt;</code> and <code>oss ext list</code> — and a
-              <b>pack</b> needs neither, because it has nothing to attach:
-              <code>oss run --pack &lt;dir&gt; &lt;verb&gt;</code>. If you have it running at login
-              and would rather not, <code>oss serve --uninstall</code> stops that and removes
-              nothing.
-            </div>
-            </div><script>
+            <section class="sect" id="next">
+              <div class="sect-hd"><h2>Work on next</h2><span class="sp"></span>
+                <p class="lede" id="pickhow"></p></div>
+              <div id="picks"><div class="empty">scoring the backlog against what you have written…</div></div>
+            </section>
+
+            <section class="sect" id="ask">
+              <div class="sect-hd"><h2>Ask about one thing</h2></div>
+              <div id="oneof"></div>
+            </section>
+
+            <section class="sect" id="sweeps">
+              <div class="sect-hd"><h2>Sweeps</h2></div>
+              <div class="ctl">
+                <select id="sweep"></select>
+                <button class="go" id="sweepgo">Ask</button>
+                <span class="q" id="sweepsays"></span>
+              </div>
+              <div id="askhost"></div>
+            </section>
+
+            <section class="sect" id="builtin">
+              <div class="sect-hd"><h2>Built in</h2></div>
+              <div class="cards" id="cards"></div>
+              <div id="skills"></div>
+            </section>
+
+            <footer class="foot">
+              <b>You do not need this page.</b> Every answer on it is one command, named in the
+              hover of the control that asks it, and a terminal will give you the same one.<br><br>
+              Nothing here writes. Verbs that change something — <code>oss run</code>,
+              <code>oss memory file</code>, <code>oss sync</code> — are not on this page and will
+              not be: an outward write is confirmed at a terminal, and a browser has none.
+              Extensions attach the same way, with <code>oss ext add &lt;path&gt;</code>.<br><br>
+              Running at login and would rather it were not?
+              <code>oss serve --uninstall</code> stops that and removes nothing.
+            </footer>
+
+            </main></div><script>
             const $=s=>document.querySelector(s);
-            function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-            function draw(x){
-              if(!x||!x.length){$('#list').innerHTML=
-                '<div class="card sub">Nothing attached yet. Paste a repo path below.</div>';return}
-              $('#list').innerHTML=x.map(e=>`<div class="card">
-                <div class="row"><span class="nm">${esc(e.name)}</span>
-                  <span class="kind">${esc(e.kind)}</span>
-                  <span class="${e.reachable?(e.stale?'bad':'ok'):'bad'}">${!e.reachable?'MISSING':(e.stale?'STALE':'reachable')}</span>
-                  <span style="flex:1"></span>
-                  <button class="x" data-detach="${esc(e.name)}">detach</button></div>
-                <div class="sub">${esc(e.description||'')}</div>
-                ${e.stale?'<div class="verbs bad">oss-ext.json changed on disk since it was attached — detach and attach again, or <code>oss ext refresh '+esc(e.name)+'</code>. Dispatch is refused until then.</div>':''}
-                <div class="verbs"><code>${esc(e.root)}</code></div>
-                <div class="verbs">${e.verbs.length} verbs: ${e.verbs.map(esc).join(', ')}
-                ${e.writes&&e.writes.length?' · <b>writes outward:</b> '+e.writes.map(esc).join(', '):''}</div>
-              </div>`).join('');
+            function el(t,c,x){const n=document.createElement(t);if(c)n.className=c;
+              if(x!=null)n.textContent=x;return n}
+            function link(href,cls,text){const a=el('a',cls,text);a.href=href;a.target='_blank';
+              a.rel='noopener noreferrer';return a}
+
+            // The terminal chrome, built once. Three dots, the command it ran, and the output --
+            // which is what this is, so it should look like it rather than like a quotation.
+            function term(){
+              const t=el('div','term'), bar=el('div','term-bar');
+              ['#E08066','#D8B23A','#5FBFB0'].forEach(c=>{
+                const d=el('span','dot'); d.setAttribute('style','background:'+c); bar.append(d)});
+              const cmd=el('span','term-cmd','');
+              bar.append(cmd);
+              const body=el('pre','term-body','');
+              t.append(bar,body);
+              t.cmd=cmd; t.body=body;
+              return t;
             }
-            // The page never reimplements a command. Every button below runs one and shows the
-            // output, so the two cannot disagree -- and nothing reachable from here writes.
-            const BOARD=['hub','pick'];
-            function ask(q,arg,outEl,ranEl,btn){
-              const url='api/ask?q='+encodeURIComponent(q)+(arg?'&arg='+encodeURIComponent(arg):'');
+
+            // The page never reimplements a command. A question runs one and shows what came back,
+            // so the two cannot disagree -- and the rows above are the same call the command makes,
+            // not a second reading of the ledger free to disagree with the first.
+            function ask(q,arg,host,btn){
+              let t=host.querySelector('.term');
+              if(!t){t=term();host.appendChild(t)}
               if(btn){btn.setAttribute('aria-busy','true')}
-              outEl.hidden=false; outEl.textContent='asking…';
+              t.body.textContent='asking…'; t.cmd.textContent='';
+              const url='api/ask?q='+encodeURIComponent(q)+(arg?'&arg='+encodeURIComponent(arg):'');
               return fetch(url).then(r=>r.json()).then(d=>{
-                outEl.textContent=d.error?d.error:(d.output||d.note||'');
-                if(ranEl){ranEl.textContent=d.runs?('ran  '+d.runs):''}
-              }).catch(e=>{outEl.textContent=String(e)})
+                t.body.textContent=d.error?d.error:(d.output||d.note||'');
+                t.cmd.textContent=d.runs||'';
+              }).catch(e=>{t.body.textContent=String(e)})
                .finally(()=>{if(btn){btn.removeAttribute('aria-busy')}});
             }
-            // The question goes where it is asked. "Seen this?" belongs on every row; "since I
-            // reviewed" only where a verdict exists, because anywhere else it answers about nothing.
-            function rows(){
-              return fetch('api/rows').then(r=>r.json()).then(d=>{
-                const host=document.getElementById('rows');
-                host.textContent='';
-                d.rows.forEach(r=>{
-                  const el=document.createElement('div'); el.className='rw';
-                  const pr=document.createElement('span'); pr.className='pr'; pr.textContent='#'+r.pr;
-                  const rp=document.createElement('span'); rp.className='rp'; rp.textContent=r.repo;
-                  const vd=document.createElement('span'); vd.className='vd'; vd.textContent=r.verdict;
-                  const sp=document.createElement('span'); sp.className='sp';
-                  el.append(pr,rp,vd,sp);
 
-                  const seen=document.createElement('button');
-                  seen.className='ask'; seen.textContent='Seen this?';
-                  seen.title='Have I worked this out before? Searches your own notes and synced issues by meaning.';
-                  seen.onclick=()=>ask('search',r.repo+' '+r.pr,
-                      document.getElementById('boardout'),document.getElementById('boardran'),seen);
-                  el.append(seen);
-
-                  if(r.hasVerdict){
-                    const since=document.createElement('button');
-                    since.className='ask'; since.textContent='Since I reviewed';
-                    since.title='What the author did after your verdict.';
-                    since.onclick=()=>ask('followup-one',String(r.pr),
-                        document.getElementById('boardout'),document.getElementById('boardran'),since);
-                    el.append(since);
-                  }
-                  host.append(el);
-                });
-              }).catch(()=>{});
+            // ------------------------------------------------------------------- waiting ---
+            function verdictClass(v){
+              const t=String(v||'').toLowerCase();
+              if(t==='take'||t==='approve'){return 'chip take'}
+              if(t==='changes'||t==='reject'){return 'chip changes'}
+              return 'chip';
             }
+            function waitingRow(r,urgent){
+              const it=el('div',urgent?'row you':'row');
+              const top=el('div','rtop');
+              top.append(link(r.url,'num','#'+r.pr), el('span','repo',r.repo),
+                         el('span',verdictClass(r.verdict),r.verdict||'none'),
+                         el('span','why',r.why||''));
+              it.append(top, el('div','rttl', r.title||'(no title)'));
+              const acts=el('div','racts');
+              const seen=el('button','ask','seen this?');
+              seen.title='Have I worked this out before? Searches your own notes and synced issues by meaning.';
+              seen.onclick=()=>ask('search',r.repo+' '+r.pr,it,seen);
+              acts.append(seen);
+              if(r.hasVerdict){
+                const since=el('button','ask','since I reviewed');
+                since.title='What the author did after your verdict.';
+                since.onclick=()=>ask('followup-one',String(r.pr),it,since);
+                acts.append(since);
+              }
+              it.append(acts);
+              return it;
+            }
+            function waiting(){
+              return fetch('api/waiting').then(r=>r.json()).then(d=>{
+                const n=d.onYou.length, num=$('#wn');
+                num.textContent=n===0?'clear':String(n);
+                num.className=n===0?'bignum clear':'bignum';
+                $('#navcount').textContent=d.checked===0?'':String(n);
+                let said=n===0
+                  ? 'Nothing you looked at has moved since you looked at it.'
+                  : (n===1?'One pull request has moved since your verdict.'
+                          :n+' pull requests have moved since your verdict.');
+                if(d.checked===0){
+                  said='Nothing reviewed yet — record one with oss followup --record.';
+                  num.textContent='—'; num.className='bignum';
+                }
+                if(d.unreachable){said+='  '+d.unreachable+' unreachable ('+d.why+').'}
+                $('#wsaid').textContent=said;
+
+                const list=$('#wlist'); list.textContent='';
+                if(d.onYou.length){
+                  const box=el('div','rows');
+                  d.onYou.forEach(r=>box.append(waitingRow(r,true)));
+                  list.append(box);
+                }
+                const them=$('#wthem'); them.textContent='';
+                if(d.onThem.length){
+                  const det=el('details','more');
+                  det.append(el('summary',null,d.onThem.length+' not waiting on you'));
+                  const box=el('div','rows');
+                  d.onThem.forEach(r=>box.append(waitingRow(r,false)));
+                  det.append(box);
+                  them.append(det);
+                }
+              }).catch(e=>{$('#wsaid').textContent='could not read the ledger: '+e});
+            }
+
+            // ---------------------------------------------------------------- work next ---
+            const PICK_EMPTY={
+              NO_PROFILE:'Nothing to score against yet. File a note or record a review — reviews count for more, because reviewing something means you read it.',
+              NOTHING_SYNCED:'No issues cached. Run oss sync.',
+              NO_OVERLAP:'Nothing in the backlog overlaps what you have written about. That is a real answer: file a few notes, or widen with oss sync.'
+            };
+            function picks(){
+              return fetch('api/suggestions').then(r=>r.json()).then(d=>{
+                const host=$('#picks'); host.textContent='';
+                if(!d.items||!d.items.length){
+                  host.append(el('div','empty',PICK_EMPTY[d.why]||d.error||'nothing to suggest'));
+                  return;
+                }
+                $('#pickhow').textContent='scored against '+d.profileSize+
+                  ' thing(s) you have written or reviewed — '+d.how;
+                const box=el('div','rows');
+                d.items.forEach(i=>{
+                  const it=el('div','row'), top=el('div','rtop');
+                  top.append(el('span','score',i.score.toFixed(2)),
+                             link(i.url,'num','#'+i.number), el('span','repo',i.repo));
+                  it.append(top, el('div','rttl',i.title));
+                  if(i.because&&i.because.length){
+                    it.append(el('div','rwhy','because you wrote: '+i.because.join('  ·  ')));
+                  }
+                  box.append(it);
+                });
+                host.append(box);
+              }).catch(e=>{$('#picks').textContent='could not score: '+e});
+            }
+
+            // ------------------------------------------------------------------ built in ---
+            function verbList(host,verbs){
+              const w=el('div','verbs');
+              verbs.forEach(v=>w.append(el('span','verb',v)));
+              host.append(w);
+            }
+            function builtin(){
+              return fetch('api/state').then(r=>r.json()).then(d=>{
+                const host=$('#cards'); host.textContent='';
+                const c=d.counts;
+
+                const run=el('div','card');
+                run.append(el('p','k','runner'));
+                if(d.runners.length){
+                  d.runners.forEach(e=>{
+                    run.append(el('h3',null,e.name));
+                    verbList(run,e.verbs);
+                    if(!e.reachable){run.append(el('p',null,'its path is gone — oss ext list'))}
+                    else if(e.stale){run.append(el('p',null,'oss-ext.json changed on disk; dispatch is refused until oss ext refresh '+e.name))}
+                  });
+                }else{
+                  run.append(el('h3',null,'built in'));
+                  verbList(run,d.runnerVerbs);
+                  run.append(el('p',null,'a pack needs nothing attached — oss run --pack <dir> list'));
+                }
+                host.append(run);
+
+                const mem=el('div','card');
+                mem.append(el('p','k','memory'));
+                mem.append(el('div','stat',c.notes.toLocaleString()+' notes'));
+                mem.append(el('p',null,c.chunks.toLocaleString()+' chunks indexed · '+
+                  c.issues.toLocaleString()+' issues cached · '+c.reviews+' reviews recorded'));
+                if(d.memories.length){
+                  d.memories.forEach(e=>mem.append(el('p',null,'archive attached: '+e.name)));
+                }else{
+                  verbList(mem,d.memoryVerbs);
+                }
+                host.append(mem);
+
+                // Named, not hidden. "Not on this page" with no list is indistinguishable from
+                // "not in this tool", and somebody looking for `oss sync` needs to be told where
+                // it went rather than left to conclude it does not exist.
+                const t=el('div','card');
+                t.append(el('p','k','needs a terminal'));
+                const w=el('div','verbs');
+                d.needsTerminal.forEach(v=>w.append(el('span','verb no',v)));
+                t.append(w);
+                t.append(el('p',null,'these change something, and an outward write is confirmed where you typed it'));
+                host.append(t);
+
+                const sk=$('#skills'); sk.textContent='';
+                if(d.skills&&d.skills.length){
+                  const det=el('details','more');
+                  const mine=d.skills.filter(s=>!s.builtIn).length;
+                  det.append(el('summary',null,d.skills.length+' skills oss ask works under'+
+                    (mine?(' — '+mine+' yours'):'')));
+                  const box=el('div','rows');
+                  d.skills.forEach(s=>{
+                    const it=el('div','row'), top=el('div','rtop');
+                    top.append(el('span','num',s.name),
+                               el('span','chip',s.builtIn?'built in':'yours'));
+                    it.append(top);
+                    if(s.summary){it.append(el('div','rttl',s.summary))}
+                    if(s.when&&s.when.length){it.append(el('div','rwhy','when: '+s.when.join(', ')))}
+                    box.append(it);
+                  });
+                  det.append(box); sk.append(det);
+                }
+              }).catch(e=>{$('#cards').textContent='could not read local state: '+e});
+            }
+
+            // ------------------------------------------------------------------ questions ---
+            // hub and pick are drawn as rows above rather than offered as buttons: they are what
+            // the page opens on, and a button asking a question the page has already answered is
+            // a button that redraws the answer.
+            const DRAWN=['hub','pick'];
             function questions(){
               return fetch('api/questions').then(r=>r.json()).then(d=>{
-                const board=document.getElementById('board'), asks=document.getElementById('asks'),
-                      oneof=document.getElementById('oneof');
+                const oneof=$('#oneof'), sweep=$('#sweep');
+                const sweeps=[];
                 d.questions.forEach(q=>{
-                  const onBoard=BOARD.includes(q.key);
-                  const out=()=>document.getElementById(onBoard?'boardout':'askout');
-                  const ran=()=>document.getElementById(onBoard?'boardran':'askran');
+                  if(DRAWN.includes(q.key)){return}
                   // A question that takes an argument gets its own row with a field and the
                   // sentence it answers. `triage` needs an issue number and used to open a browser
                   // prompt() -- a modal that interrupts first and explains second, and which left
                   // the page with no way to say that the question exists at all.
                   if(q.arg){
-                    const row=document.createElement('div'); row.className='one';
-                    const b=document.createElement('button');
-                    b.className='ask'; b.textContent=q.key; b.title='runs:  '+q.runs;
-                    const i=document.createElement('input');
+                    const wrap=el('div');
+                    const row=el('div','ctl');
+                    const b=el('button','go',q.key); b.title='runs:  '+q.runs;
+                    const i=el('input');
                     i.placeholder=q.arg==='num'?'issue or PR number':'what are you looking for?';
-                    const say=document.createElement('span'); say.className='q'; say.textContent=q.asks;
+                    const say=el('span','q',q.asks);
                     const go=()=>{const v=i.value.trim(); if(!v){i.focus();return}
-                      ask(q.key,v,document.getElementById('askout'),
-                          document.getElementById('askran'),b)};
+                      ask(q.key,v,wrap,b)};
                     b.onclick=go;
                     i.addEventListener('keydown',e=>{if(e.key==='Enter')go()});
-                    row.append(b,i,say); oneof.append(row);
+                    row.append(i,b,say); wrap.append(row); oneof.append(wrap);
                     return;
                   }
-                  const b=document.createElement('button');
+                  sweeps.push(q);
+                  const o=document.createElement('option');
+                  o.value=q.key; o.textContent=q.key; sweep.appendChild(o);
+                });
+                const says=()=>{
+                  const q=sweeps.find(x=>x.key===sweep.value);
+                  $('#sweepsays').textContent=q?q.asks:'';
                   // Doubled, because this page is a Java text block: a single \\n is an escape Java
                   // consumes, so what reached the browser was a real line break inside a quoted
                   // string -- an unterminated literal, a SyntaxError, and with it the whole script.
-                  // The board, the sweeps and every button are drawn by that script, so the page
-                  // rendered as its one piece of static markup: the extensions dropdown, alone.
-                  b.className='ask'; b.textContent=q.key; b.title=q.asks+'\\n\\nruns:  '+q.runs;
-                  b.onclick=()=>ask(q.key,null,out(),ran(),b);
-                  (onBoard?board:asks).appendChild(b);
-                });
-                // The board is what the page opens on, so it answers without being asked.
-                rows();
-                return ask('hub',null,document.getElementById('boardout'),
-                           document.getElementById('boardran'),null);
+                  // Everything below the rail is drawn by that script, so the page rendered as its
+                  // one piece of static markup and nothing else.
+                  sweep.title=q?(q.asks+'\\n\\nruns:  '+q.runs):'';
+                };
+                // Named rather than left to the browser's default selection. A select with options
+                // and no value set shows the first one but reports '' until something is chosen,
+                // and the sentence beside it is drawn from that value -- so the control opened
+                // labelled `duplicates` with no line saying what duplicates asks.
+                if(sweeps.length){sweep.value=sweeps[0].key}
+                sweep.onchange=says; says();
+                $('#sweepgo').onclick=()=>ask(sweep.value,null,$('#askhost'),$('#sweepgo'));
               });
             }
-            function load(){fetch('api/extensions').then(r=>r.json())
-              .then(d=>{draw(d.extensions);
-                const n=(d.extensions||[]).length;
-                // Say the count in the summary. Collapsed and unlabelled, "extensions" gives no
-                // reason to open it and no way to know whether anything is attached.
-                document.getElementById('extsum').textContent=
-                  n?('extensions — '+n+' attached'):'extensions — none attached (nothing here needs one)';
-              })}
-            function attach(){
-              const p=$('#path').value.trim(); if(!p)return;
-              $('#msg').textContent='attaching…'; $('#msg').className='msg sub';
-              fetch('api/attach',{method:'POST',headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({path:p})}).then(r=>r.json()).then(d=>{
-                if(d.error){$('#msg').textContent=d.error;$('#msg').className='msg bad';return}
-                $('#msg').textContent=(d.replaced?'updated ':'attached ')+d.name+' ('+d.kind+')';
-                $('#msg').className='msg ok'; $('#path').value='';
-                draw(d.extensions);
-              }).catch(e=>{$('#msg').textContent=String(e);$('#msg').className='msg bad'});
-            }
-            $('#go').onclick=attach;
-            $('#path').addEventListener('keydown',e=>{if(e.key==='Enter')attach()});
-            document.addEventListener('click',e=>{
-              const n=e.target.getAttribute&&e.target.getAttribute('data-detach'); if(!n)return;
-              fetch('api/detach',{method:'POST',headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({name:n})}).then(r=>r.json()).then(d=>{
-                  $('#msg').textContent=d.ok?('detached '+n):(d.error||'could not detach');
-                  $('#msg').className='msg '+(d.ok?'ok':'bad');
-                  draw(d.extensions);});
-            });
-            // The site's toggle, the site's key. A person who set the manual to light and
-            // opened the board should not have to set it twice -- and on a machine whose
-            // system theme disagrees with their choice, the stored answer is the one they
-            // actually gave.
+
+            // The rail follows what you are reading, so a long board still says where you are.
             (function(){
-              const root=document.documentElement, btn=document.getElementById('theme-btn');
-              try{const saved=localStorage.getItem('ubuos-theme');
-                  if(saved){root.setAttribute('data-theme',saved)}}catch(e){}
-              btn.onclick=function(){
-                let now=root.getAttribute('data-theme');
-                if(!now){now=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}
-                const next=now==='dark'?'light':'dark';
-                root.setAttribute('data-theme',next);
-                try{localStorage.setItem('ubuos-theme',next)}catch(e){}
-              };
+              const links=[...document.querySelectorAll('.side a.nav[href^="#"]')];
+              if(!links.length||!window.IntersectionObserver)return;
+              const io=new IntersectionObserver(es=>{
+                es.forEach(e=>{
+                  if(!e.isIntersecting)return;
+                  links.forEach(a=>a.classList.toggle('on',
+                    a.getAttribute('href')==='#'+e.target.id));
+                });
+              },{rootMargin:'-15% 0px -70% 0px'});
+              document.querySelectorAll('main section.sect').forEach(s=>io.observe(s));
             })();
-            load();
+
+            // Local reads first, so the page has something true on it within a frame; the two
+            // that go to the network fill in behind. Fired together rather than chained: pick
+            // scores fifteen thousand issues locally and hub waits on GitHub, and neither has
+            // any reason to wait for the other.
+            builtin();
             questions();
-            </script></body></html>
+            waiting();
+            picks();
+            </script>
             """;
+
+    private static final String PAGE = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+            + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+            + "<meta name=\"color-scheme\" content=\"dark light\">"
+            + FAVICON
+            + "<title>oss</title>"
+            + THEME_BOOT
+            + "<style>" + STYLE + BOARD_CSS + "</style></head>"
+            + "<body><div class=\"app\">"
+            + sidebar("board")
+            + BODY
+            + THEME_JS
+            + "</body></html>";
 }

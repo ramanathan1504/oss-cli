@@ -1,12 +1,6 @@
 package com.osscli.cli;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.osscli.github.GitHubClient;
-import com.osscli.review.ReviewLedger;
-import com.osscli.storage.SqliteStorage;
-import java.util.ArrayList;
-import java.util.Comparator;
+import com.osscli.review.Waiting;
 import java.util.List;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
@@ -20,8 +14,11 @@ import picocli.CommandLine.Option;
  * and the person who did the work waits. The cost of that is paid by a contributor, not by you,
  * which is exactly why it goes unnoticed.
  *
- * <p>So this sorts everything you have reviewed into two buckets by whose move it is. It reads the
- * ledger for what you reviewed and at which head, then asks GitHub what has happened since.
+ * <p>So this sorts everything you have reviewed into two buckets by whose move it is. The sorting
+ * itself is {@link Waiting}, not this class: what is here is the terminal rendering of it, and the
+ * board page is another rendering of the same call. It used to be one thing — the rule and the
+ * {@code printf} in the same method — and the only way the page could show this list was to run the
+ * command and paste the text into a browser, which is what it did.
  *
  * <p><b>It reads and does nothing else.</b> There is no send path here, no draft, no comment, and
  * no flag that could grow into one. Posting to a project you do not own is a decision a person
@@ -34,8 +31,6 @@ import picocli.CommandLine.Option;
         description = "Is anyone waiting on you? Every project you follow, in one list")
 public class HubCommand implements Callable<Integer> {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
-
     @Option(
             names = {"-r", "--repo"},
             description = "Only this repository, as owner/name")
@@ -44,183 +39,73 @@ public class HubCommand implements Callable<Integer> {
     @Option(names = "--all", description = "Include the ones where the ball is not in your court")
     boolean all;
 
+    private String me = "";
+
     @Override
     public Integer call() {
-        List<ReviewLedger.Row> rows = ReviewLedger.read();
-        if (rows.isEmpty()) {
+        me = Waiting.me();
+
+        // One API call per recorded review, and nothing said until all of them are back: 44 seconds
+        // of blank terminal on a 17-row ledger, measured on the installed build. The rule this
+        // repository states is that anything slower than a second reports what it is doing, and a
+        // command that reads a network in a loop is the case the rule was written for. The page
+        // passes Progress.SILENT for the same call, because a browser has no line to overwrite.
+        com.osscli.ui.Live live = com.osscli.ui.Live.start("reading recorded review(s)");
+        Waiting.Result result =
+                Waiting.read(repo, me, (done, total, what) -> live.step(done + " of " + total + " — " + what));
+
+        if (result.nothingRecorded()) {
+            live.done("nothing recorded");
+            // Two ways to read nothing, and they are not the same news. An empty ledger means you
+            // have not started; a filter that matched none of it means you have, elsewhere.
+            if (repo != null && !repo.isBlank()) {
+                System.out.printf("Nothing recorded for %s — oss hub lists every repository.%n", repo.trim());
+                return 0;
+            }
             System.out.println("Nothing reviewed yet, so nobody is waiting on you.");
             System.out.println();
             System.out.println("  oss followup --record <pr> --repo owner/name --verdict take");
             return 0;
         }
 
-        String me = me();
-        List<Item> yours = new ArrayList<>();
-        List<Item> theirs = new ArrayList<>();
-        int unreachable = 0;
-
-        // One API call per recorded review, and nothing said until all of them are back: 44 seconds
-        // of blank terminal on a 17-row ledger, measured on the installed build. The rule this
-        // repository states is that anything slower than a second reports what it is doing, and a
-        // command that reads a network in a loop is the case the rule was written for.
-        com.osscli.ui.Live live = com.osscli.ui.Live.start("reading " + rows.size() + " recorded review(s)");
-        List<ReviewLedger.Row> wanted = new ArrayList<>();
-        for (ReviewLedger.Row r : rows) {
-            if (repo == null || repo.isBlank() || r.repo.equalsIgnoreCase(repo.trim())) {
-                wanted.add(r);
-            }
-        }
-        // Three calls a row, six rows at a time. The ledger order is not the output order here --
-        // both lists are sorted by last activity below -- but the reads still come back in ledger
-        // order, so the counter above counts rows rather than whichever request finished first.
-        List<Item> fetched = com.osscli.util.Parallel.map(
-                wanted,
-                r -> read(r, me),
-                done -> live.step(done + " of " + wanted.size() + " — " + wanted.get(done - 1).repo + "#"
-                        + wanted.get(done - 1).pr));
-        int checked = wanted.size();
-        for (Item it : fetched) {
-            if (it == null) {
-                unreachable++;
-                continue;
-            }
-            (it.onYou ? yours : theirs).add(it);
-        }
-
-        yours.sort(Comparator.comparing((Item i) -> i.lastAt).reversed());
-        theirs.sort(Comparator.comparing((Item i) -> i.lastAt).reversed());
-
-        live.done(checked + " read");
+        live.done(result.checked() + " read");
         System.out.println();
-        print("Waiting on you", yours, true);
+        print("Waiting on you", result.onYou(), true);
         if (all) {
-            print("Waiting on them", theirs, false);
-        } else if (!theirs.isEmpty()) {
-            System.out.printf("  %d not waiting on you — oss hub --all%n%n", theirs.size());
+            print("Waiting on them", result.onThem(), false);
+        } else if (!result.onThem().isEmpty()) {
+            System.out.printf(
+                    "  %d not waiting on you — oss hub --all%n%n",
+                    result.onThem().size());
         }
-        if (unreachable > 0) {
+        if (result.unreachable() > 0) {
             // The reason is asked for rather than assumed. With the wifi off this listed seventeen
             // pull requests as "private, deleted, or no token" -- three explanations, all wrong,
             // each of which sends the reader hunting for a problem they do not have.
-            System.out.printf("  %d unreachable (%s)%n%n", unreachable, com.osscli.github.Reachability.whyUnreadable());
+            System.out.printf(
+                    "  %d unreachable (%s)%n%n", result.unreachable(), com.osscli.github.Reachability.whyUnreadable());
         }
         return 0;
     }
 
-    private void print(String heading, List<Item> items, boolean urgent) {
+    private void print(String heading, List<Waiting.Item> items, boolean urgent) {
         System.out.println("  " + heading.toUpperCase());
         if (items.isEmpty()) {
             System.out.println("    nothing" + (urgent ? " — you are clear" : ""));
             System.out.println();
             return;
         }
-        for (Item i : items) {
-            String why = i.merged
-                    ? "merged"
-                    : i.pushed && !i.lastBy.isEmpty() && !i.lastBy.equals(me())
-                            ? "pushed + replied"
-                            : i.pushed ? "pushed since your review" : i.lastBy.isEmpty() ? "-" : "reply:" + i.lastBy;
-            System.out.printf("    %-28s #%-6d %-12s %s%n", i.row.repo, i.row.pr, i.row.verdict, why);
-            System.out.printf("      %s%n", trim(i.title, 74));
-            if (urgent && i.pushed) {
-                System.out.printf("      oss followup --since %d%n", i.row.pr);
+        for (Waiting.Item i : items) {
+            System.out.printf("    %-28s #%-6d %-12s %s%n", i.row().repo, i.row().pr, i.row().verdict, i.why(me));
+            System.out.printf("      %s%n", trim(i.title(), 74));
+            if (urgent && i.pushed()) {
+                System.out.printf("      oss followup --since %d%n", i.row().pr);
             }
         }
         System.out.println();
     }
 
-    /**
-     * One row's reads, and the verdict they support. Null when the pull request cannot be read.
-     *
-     * <p>Called from several threads at once, which is safe because everything it touches is either
-     * a parameter or created here -- {@link #api} keeps no state of its own, and {@code me} is
-     * resolved once before any of this starts.
-     */
-    private Item read(ReviewLedger.Row r, String me) {
-        JsonNode pull = api("/repos/" + r.repo + "/pulls/" + r.pr);
-        if (pull == null) {
-            return null;
-        }
-        Item it = new Item();
-        it.row = r;
-        it.state = pull.path("state").asText("?");
-        it.merged = pull.path("merged_at").asText("").length() > 0;
-        it.head = pull.path("head").path("sha").asText("");
-        it.title = pull.path("title").asText("");
-        it.pushed = !it.head.isEmpty() && !it.head.equals(r.head);
-
-        Said last = lastWord(r.repo, r.pr);
-        it.lastBy = last == null ? "" : last.by;
-        it.lastAt = last == null ? "" : last.at;
-
-        // Whose move it is. Two things put it back on you: the author pushed after you looked, or
-        // the last word is somebody else's. Both mean the thing you decided was decided against a
-        // state that no longer exists.
-        it.onYou = !it.merged
-                && "open".equalsIgnoreCase(it.state)
-                && (it.pushed || (!it.lastBy.isEmpty() && !it.lastBy.equals(me)));
-        return it;
-    }
-
-    // ------------------------------------------------------------------- github ---
-
-    private JsonNode api(String path) {
-        try {
-            String json = new GitHubClient().getJson(path);
-            return (json == null || json.isBlank()) ? null : MAPPER.readTree(json);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private Said lastWord(String repoName, int pr) {
-        List<Said> all = new ArrayList<>();
-        collect(all, api("/repos/" + repoName + "/issues/" + pr + "/comments?per_page=100"), "created_at");
-        collect(all, api("/repos/" + repoName + "/pulls/" + pr + "/reviews?per_page=100"), "submitted_at");
-        all.removeIf(s -> s.at.isEmpty());
-        all.sort(Comparator.comparing(s -> s.at));
-        return all.isEmpty() ? null : all.get(all.size() - 1);
-    }
-
-    private static void collect(List<Said> into, JsonNode arr, String timeField) {
-        if (arr == null || !arr.isArray()) {
-            return;
-        }
-        for (JsonNode n : arr) {
-            Said s = new Said();
-            s.at = n.path(timeField).asText("");
-            s.by = n.path("user").path("login").asText("");
-            into.add(s);
-        }
-    }
-
-    private String me() {
-        try {
-            String u = SqliteStorage.loadConfig("github.username");
-            return u == null ? "" : u.trim();
-        } catch (Exception e) {
-            return "";
-        }
-    }
-
     private static String trim(String s, int n) {
         return s.length() <= n ? s : s.substring(0, n - 1) + "…";
-    }
-
-    private static final class Item {
-        ReviewLedger.Row row;
-        String state = "";
-        String title = "";
-        String head = "";
-        String lastBy = "";
-        String lastAt = "";
-        boolean merged;
-        boolean pushed;
-        boolean onYou;
-    }
-
-    private static final class Said {
-        String at = "";
-        String by = "";
     }
 }
