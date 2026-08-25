@@ -24,6 +24,7 @@ import com.osscli.model.IssueEmbedding;
 import com.osscli.model.JiraBridgeLink;
 import com.osscli.model.Label;
 import com.osscli.storage.SqliteStorage;
+import com.osscli.ui.Out;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -93,9 +94,10 @@ public class TriageCommand implements Callable<Integer> {
             return 1;
         }
 
-        LOGGER.info("==================================================");
-        LOGGER.info("Triage Report: {} #{} ({})", target.isPullRequest() ? "PR" : "Issue", issueNumber, repository);
-        LOGGER.info("==================================================");
+        // Through Out, like everything else. This block used to open with fifty equals signs,
+        // close with fifty more, and label its parts [METADATA] and [SEVERITY ASSESSMENT] in
+        // shouted brackets -- a 1990s log dump for something a person reads once and acts on.
+        Out.title((target.isPullRequest() ? "PR" : "Issue") + " #" + issueNumber + "  " + repository);
 
         // A. Metadata Output
         String labelsStr = target.labels() == null || target.labels().isEmpty()
@@ -105,11 +107,11 @@ public class TriageCommand implements Callable<Integer> {
         String authorName = target.user() != null ? target.user().login() : "unknown";
         String memberBadge = target.isOrgMember() ? " [Member]" : "";
 
-        LOGGER.info("[METADATA]");
-        LOGGER.info("  Title:      {}", target.title());
-        LOGGER.info("  Author:     {}{}", authorName, memberBadge);
-        LOGGER.info("  Labels:     {}", labelsStr);
-        LOGGER.info("  Comments:   {}", target.comments());
+        Out.section("what it is");
+        Out.kv("title", target.title());
+        Out.kv("author", authorName + memberBadge);
+        Out.kv("labels", labelsStr);
+        Out.kv("comments", String.valueOf(target.comments()));
 
         // B. Severity Assessments
         SeverityAnalyzer severityAnalyzer = new SeverityAnalyzer();
@@ -123,7 +125,7 @@ public class TriageCommand implements Callable<Integer> {
             }
         }
 
-        LOGGER.info("[SEVERITY ASSESSMENT]");
+        Out.section("how bad");
         LOGGER.info("  • V1 Rule Score: {} ({})", v1Analysis.score(), v1Analysis.severity());
         if (targetAi != null) {
             LOGGER.info(
@@ -144,7 +146,7 @@ public class TriageCommand implements Callable<Integer> {
             }
         }
 
-        LOGGER.info("[BACKLOG OVERLAP]");
+        Out.section("seen before");
         if (targetVector == null) {
             LOGGER.info("  No vector embedding found. Run 'duplicates' first to check for overlaps.");
         } else {
@@ -182,7 +184,7 @@ public class TriageCommand implements Callable<Integer> {
         }
 
         // D. Ecosystem / JIRA Bridges
-        LOGGER.info("[ECOSYSTEM / JIRA BRIDGES]");
+        Out.section("linked elsewhere");
         List<JiraBridgeLink> filteredBridges =
                 jiraBridges.stream().filter(b -> b.localNumber() == issueNumber).toList();
 
@@ -199,7 +201,7 @@ public class TriageCommand implements Callable<Integer> {
         }
 
         // E. Action Log & Recommendation Logic
-        LOGGER.info("[RECOMMENDED ACTION LOG]");
+        Out.section("what to do");
         List<String> actions = new ArrayList<>();
 
         // Logic check: Hidden Critical
@@ -238,7 +240,6 @@ public class TriageCommand implements Callable<Integer> {
                 LOGGER.info(" {} ", act);
             }
         }
-        LOGGER.info("==================================================");
 
         return 0;
     }
