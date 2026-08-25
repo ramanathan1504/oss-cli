@@ -28,6 +28,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -66,6 +68,42 @@ class AskableTest {
             }
         }
         assertTrue(offences.isEmpty(), "a browser cannot confirm an outward write: " + offences);
+    }
+
+    @Test
+    @DisplayName("every command this program has is classified as reading or writing")
+    void everyCommandIsClassified() throws IOException {
+        Surface surface = Surface.fromJson(Files.readString(Path.of("release-surface.json")));
+
+        // Top-level verbs only. The surface lists subcommand paths such as "ext add"; the
+        // classification is of the verb, because that is what an argv on the table begins with.
+        Set<String> verbs = new TreeSet<>();
+        for (String name : surface.commands().keySet()) {
+            verbs.add(name.split(" ")[0]);
+        }
+
+        Set<String> classified = new TreeSet<>(Askable.WRITES);
+        classified.addAll(Askable.READS);
+
+        Set<String> unclassified = new TreeSet<>(verbs);
+        unclassified.removeAll(classified);
+        assertTrue(
+                unclassified.isEmpty(),
+                "these commands are neither in Askable.WRITES nor Askable.READS, so nothing knows "
+                        + "whether the page may run them -- say which they are: " + unclassified);
+
+        Set<String> both = new TreeSet<>(Askable.WRITES);
+        both.retainAll(Askable.READS);
+        assertTrue(both.isEmpty(), "classified as both reading and writing: " + both);
+
+        // A name that no longer exists is the failure that made this necessary in the first place:
+        // a list kept by hand drifts, and a stale entry protects nothing while looking as though
+        // it does. Aliases are allowed through -- they are commands, under an older name.
+        Set<String> aliases = Set.of("bench", "kb");
+        Set<String> ghosts = new TreeSet<>(classified);
+        ghosts.removeAll(verbs);
+        ghosts.removeAll(aliases);
+        assertTrue(ghosts.isEmpty(), "classified, but not a command this program has: " + ghosts);
     }
 
     @Test
