@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.5.3
+
+_2026-08-25_
+
+- `oss run help` listed a verb that answers "moved", and setup pointed at it too (#208)
+
+  The hub left the matrix engine: the read-only half is in the core, the half
+  that could POST stayed with the pack that owned its review composer. Two
+  places still advertised `oss run hub` as though it ran. The help block now
+  says where it went and names `oss hub` and `oss serve`.
+
+  The one that mattered is `oss setup`: its Upstream writes section is the only
+  place a reader is told how to permit an outward write, and it demonstrated
+  the flag on that dead verb. It reads `oss run <verb> --approve-upstream
+  owner/name` now -- the flag lives on the dispatcher, and which verb writes is
+  whatever the attached extension declared, so naming one was wrong regardless.
+
+- The landing page answered `oss` convincingly, and could not (#207)
+
+  The interactive shell on ubuos.com is replaced by a recorded session that
+  plays. A page cannot run `oss`, so every answer it gave was a promise kept by
+  hand against a switch statement, aimed at the one visitor who has installed
+  nothing yet. 265 lines out, 152 in.
+
 ## 4.5.2
 
 _2026-08-25_
