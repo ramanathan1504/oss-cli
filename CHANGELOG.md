@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.7.0
+
+_2026-08-25_
+
+- Nobody had designed what this prints (#213)
+- Six things that were wrong every time you used it (#212)
+
+
 ## 4.6.0
 
 _2026-08-25_
