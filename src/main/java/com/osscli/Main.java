@@ -147,7 +147,7 @@ public class Main {
                     com.osscli.ui.CommandGroups.GROUPS.entrySet()) {
                 b.append(System.lineSeparator())
                         .append("  ")
-                        .append(group.getKey())
+                        .append(com.osscli.ui.Out.faint(group.getKey()))
                         .append(System.lineSeparator());
                 for (String name : group.getValue()) {
                     CommandLine sub = subs.get(name);
@@ -155,17 +155,25 @@ public class Main {
                         continue;
                     }
                     String[] description = sub.getCommandSpec().usageMessage().description();
-                    b.append(String.format(
-                            "    %-9s %s%n", name, description.length > 0 ? firstSentence(description[0]) : ""));
+                    // Padded before it is painted. An escape code has width zero on screen and
+                    // plenty of width to printf, so %-9s on a coloured string pads to nine
+                    // characters of which five are invisible, and the column staggers.
+                    String padded = name.length() >= 9 ? name : name + " ".repeat(9 - name.length());
+                    b.append("    ")
+                            .append(com.osscli.ui.Out.cmd(padded))
+                            .append(" ")
+                            .append(description.length > 0 ? firstSentence(description[0]) : "")
+                            .append(System.lineSeparator());
                 }
                 // `run` is the only command needing something the reader must supply, and the list
                 // said nothing about it -- so the group read as if `oss run` were self-contained,
                 // when the first thing it does without one is refuse.
                 if ("run it for real".equals(group.getKey())) {
                     b.append("    ")
-                            .append("a pack is what run walks — your apps, configs, versions:")
+                            .append(com.osscli.ui.Out.faint("a pack is what run walks — your apps, configs, versions"))
                             .append(System.lineSeparator())
-                            .append("              cd <your-pack> && oss run list")
+                            .append("              ")
+                            .append(com.osscli.ui.Out.cmd("cd <your-pack> && oss run list"))
                             .append(System.lineSeparator());
                 }
             }
@@ -176,12 +184,15 @@ public class Main {
             // listing them beside `search` invited reading them as things you could run alone.
             String prefixes = String.join(" ", com.osscli.llm.Ai.prefixes());
             b.append(System.lineSeparator())
-                    .append("  who answers")
+                    .append("  ")
+                    .append(com.osscli.ui.Out.faint("who answers"))
                     .append(System.lineSeparator())
                     .append("    ")
-                    .append(prefixes)
+                    .append(com.osscli.ui.Out.cmd(prefixes))
                     .append(System.lineSeparator())
-                    .append("    put one in front of a command: oss claude review 12")
+                    .append("    ")
+                    .append(com.osscli.ui.Out.faint("put one in front of a command: "))
+                    .append(com.osscli.ui.Out.cmd("oss claude review 12"))
                     .append(System.lineSeparator());
             return b.toString();
         });

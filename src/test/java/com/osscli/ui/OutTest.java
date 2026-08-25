@@ -120,6 +120,26 @@ class OutTest {
     }
 
     @Test
+    @DisplayName("a variable that is set to nothing is not set")
+    void emptyIsNotSet() {
+        // `CLICOLOR_FORCE=` is how somebody turns forcing off when `unset` is not to hand, and
+        // reading a present-but-empty value as "yes" made NO_COLOR=1 CLICOLOR_FORCE= write
+        // fifty-eight escape sequences into a pipe. Both variables mean the same thing by "set",
+        // so both are read by the same helper -- this asserts that helper exists and is used.
+        String source = "";
+        try {
+            source = java.nio.file.Files.readString(java.nio.file.Path.of("src/main/java/com/osscli/ui/Out.java"));
+        } catch (java.io.IOException e) {
+            org.junit.jupiter.api.Assertions.fail("could not read Out.java: " + e.getMessage());
+        }
+        assertFalse(
+                source.contains("System.getenv(\"CLICOLOR_FORCE\") != null"),
+                "present-but-empty must not count as set");
+        assertFalse(source.contains("System.getenv(\"NO_COLOR\") != null"), "same for NO_COLOR");
+        assertTrue(source.contains("value != null && !value.isEmpty()"), "one helper decides what set means");
+    }
+
+    @Test
     @DisplayName("NO_COLOR and a pipe are both honoured without asking the caller")
     void theDecisionIsNotTheCallers() {
         // Not settable from a test, so this asserts the shape rather than the value: whatever

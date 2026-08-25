@@ -87,10 +87,14 @@ public final class Out {
         if (colourOverride != null) {
             return colourOverride;
         }
-        if (System.getenv("CLICOLOR_FORCE") != null) {
+        // Set-but-empty is not set. `CLICOLOR_FORCE=` is how somebody turns forcing OFF -- it is
+        // what unsetting looks like in a shell that does not have `unset` to hand -- and reading it
+        // as "force" made NO_COLOR=1 CLICOLOR_FORCE= emit fifty-eight escape sequences into a pipe.
+        // Both variables follow the same convention, so both are read the same way.
+        if (set("CLICOLOR_FORCE")) {
             return true;
         }
-        if (System.getenv("NO_COLOR") != null) {
+        if (set("NO_COLOR")) {
             return false;
         }
         String term = System.getenv("TERM");
@@ -98,6 +102,12 @@ public final class Out {
             return false;
         }
         return System.console() != null;
+    }
+
+    /** Present and not empty, which is what every one of these variables means by "set". */
+    private static boolean set(String name) {
+        String value = System.getenv(name);
+        return value != null && !value.isEmpty();
     }
 
     /** For tests, which have no terminal and still need to see both forms. */
