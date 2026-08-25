@@ -279,18 +279,30 @@ public class SetupCommand implements Callable<Integer> {
                     "    Run: security add-generic-password -a \"$USER\" -s anthropic_api_key -w \"<YOUR_KEY>\" -U");
         }
 
-        // 11. Optional capabilities — a bench that runs, an archive that remembers.
+        // 11. Optional capabilities — and for almost everyone, nothing to do here.
         //
-        // Everything below is optional by design. OSS-CLI is useful with none of it: it reads any
-        // repository through the API and needs no clone. These only add the two things it cannot do
-        // alone, and each is skipped by pressing Enter.
+        // Both capabilities this used to ask you to attach now ship inside the tool: the matrix
+        // engine is `oss run`, and memory is `oss memory`. Asking for a path without saying that
+        // reads as a missing dependency, and someone answers it by pasting the nearest repository
+        // they have. Enter is the ordinary answer; a path is the exception.
+        //
+        // A pack must not be pasted here. It is data the built-in engine reads off disk, with no
+        // program to call and nothing to register -- `oss ext add` on one fails, correctly.
         LOGGER.info("\n--- Optional capabilities (press Enter to skip any) ---");
-        LOGGER.info("Nothing here is required. OSS-CLI works with none of it.");
+        LOGGER.info("Nothing here is required, and both capabilities are already built in:");
+        LOGGER.info("  running    oss run      the matrix engine ships inside oss");
+        LOGGER.info("  memory     oss memory   files and indexes notes with nothing attached");
+        LOGGER.info("Answer only if you have written your own program to do one of these.");
+        LOGGER.info("A pack is not one of them: run it with `oss run --pack <dir>`, do not add it here.");
 
         registerOptionalExtension(
-                scanner, "bench", "a repo that RUNS things (real apps, real JVMs) — e.g. ~/projects/your-bench");
+                scanner,
+                com.osscli.ext.Extension.Kind.RUNNER,
+                "your own program that RUNS things — not a pack, and not needed for `oss run`");
         registerOptionalExtension(
-                scanner, "kb", "a repo that REMEMBERS (files and indexes notes) — e.g. ~/knowledge-creator");
+                scanner,
+                com.osscli.ext.Extension.Kind.MEMORY,
+                "your own program that REMEMBERS — not needed for `oss memory`");
 
         // 12. Upstream writes.
         //
@@ -319,7 +331,7 @@ public class SetupCommand implements Callable<Integer> {
             LOGGER.info("  {}<{}>  {}", e.kind().lower(), e.getName(), e.getRoot());
         }
         if (com.osscli.ext.ExtensionRegistry.all().isEmpty()) {
-            LOGGER.info("  bench/kb  none registered (oss ext add <repo>)");
+            LOGGER.info("  runner/memory  none registered, and none needed (oss run, oss memory)");
         }
         LOGGER.info(
                 "  upstream  refused unless {} names the repo, and confirmed each time", UpstreamGuard.APPROVE_FLAG);
@@ -334,8 +346,8 @@ public class SetupCommand implements Callable<Integer> {
      * the wizard with a mistyped path should not lose the model and token settings they already
      * entered.
      */
-    private void registerOptionalExtension(Scanner scanner, String kind, String hint) {
-        LOGGER.info("\nRegister a {} extension? {}", kind, hint);
+    private void registerOptionalExtension(Scanner scanner, com.osscli.ext.Extension.Kind kind, String hint) {
+        LOGGER.info("\nRegister a {} extension? {}", kind.lower(), hint);
         LOGGER.info("Path to the repo (or press Enter to skip):");
         String path = ask(scanner);
         if (path.isEmpty()) {
@@ -348,11 +360,11 @@ public class SetupCommand implements Callable<Integer> {
         }
         try {
             com.osscli.ext.Extension ext = com.osscli.ext.ExtensionRegistry.readManifest(java.nio.file.Path.of(path));
-            if (!ext.kind().lower().equals(kind)) {
+            if (ext.kind() != kind) {
                 LOGGER.warn(
                         "  ⚠ that repo declares kind '{}', not '{}' — registering it anyway",
                         ext.kind().lower(),
-                        kind);
+                        kind.lower());
             }
             com.osscli.ext.ExtensionRegistry.add(ext);
             LOGGER.info(
