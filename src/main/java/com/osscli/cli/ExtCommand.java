@@ -23,6 +23,7 @@ import com.osscli.ext.ExtensionRunner;
 import com.osscli.memory.BuiltinMemory;
 import com.osscli.safety.UpstreamGuard;
 import com.osscli.ui.NextSteps;
+import com.osscli.ui.Out;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -108,12 +109,14 @@ public class ExtCommand implements Callable<Integer> {
             // declares. Saying only the second half is what made attaching look mandatory.
             builtIns();
             if (all.isEmpty()) {
-                System.out.println("  Nothing attached — the built-ins above are answering.");
-                System.out.println();
-                System.out.println("  oss ext add <repo>     a repo with an oss-ext.json at its root");
-                System.out.println("  kinds: runner (executes something real) · memory (remembers)");
-                System.out.println("  \"supports\": \"owner/name\" in that manifest files it under one");
-                System.out.println("                         repository you follow, instead of all of them");
+                Out.section("attached");
+                Out.none("nothing — the built-ins above are answering, which is the ordinary state");
+                Out.section("writing one");
+                Out.hint("oss ext add <repo>", "a repo with an oss-ext.json at its root");
+                Out.item(Out.faint("kinds: runner (executes something real) · memory (remembers)"));
+                Out.item(Out.faint("\"supports\": \"owner/name\" in that manifest files it under one repository"));
+                Out.item(Out.faint("you follow, instead of all of them"));
+                Out.gap();
                 return 0;
             }
 
@@ -156,37 +159,40 @@ public class ExtCommand implements Callable<Integer> {
          * with no pack used to look broken rather than answer.
          */
         private static void builtIns() {
-            System.out.println("  BUILT IN, ON BY DEFAULT");
-            System.out.printf(
-                    "    %-10s %s%n", "memory", "file, search, index — an attached memory extension takes over");
+            Out.section("built in, on by default");
+            Out.kv("memory", "file, search, index " + Out.faint("— an attached memory extension takes over"));
             // Not "an attached pack". A pack is data this reads off disk, with no program to call
             // and nothing to register, and saying otherwise here is where the belief that one must
             // be attached comes from -- `oss ext add` on a pack then fails, which is a confusing
             // way to learn the difference from the tool that just implied it.
-            System.out.printf(
-                    "    %-10s %s%n",
-                    "runner", "detect, init, build, test, doctor — an attached runner extension takes over");
-            System.out.println();
+            Out.kv(
+                    "runner",
+                    "detect, init, build, test, doctor " + Out.faint("— an attached runner extension takes over"));
         }
 
         /** One extension, with the state only a live check can know. */
         private static void row(Extension e) {
             boolean ok = ExtensionRunner.isReachable(e);
             boolean stale = ExtensionRegistry.isStale(e);
-            System.out.printf(
-                    "  └─ %-13s %-7s %-9s %s%n",
+            // State first and coloured, because it is the only part worth scanning a column for.
+            // MISSING and STALE used to be shouted in a middle column of four, which is where the
+            // eye goes last.
+            String detail = String.format(
+                    "%-13s %-7s %s",
                     e.getName(),
                     e.kind().lower(),
-                    !ok ? "MISSING" : stale ? "STALE" : "ok",
-                    String.join(", ", e.getVerbs().keySet()));
+                    Out.faint(String.join(", ", e.getVerbs().keySet())));
             if (!ok) {
+                Out.warn(detail);
                 // Naming the path it expected is the difference between "something is wrong"
                 // and a one-line fix; a moved checkout is the common cause.
-                System.out.println("     expected: " + e.execPath());
-            }
-            if (stale) {
-                System.out.println("     " + Extension.MANIFEST
-                        + " changed on disk since it was registered — oss ext refresh " + e.getName());
+                Out.item("  " + Out.faint("expected: " + e.execPath()));
+            } else if (stale) {
+                Out.note(detail);
+                Out.item("  " + Out.faint(Extension.MANIFEST + " changed on disk since it was registered"));
+                Out.item("  " + Out.cmd("oss ext refresh " + e.getName()));
+            } else {
+                Out.ok(detail);
             }
         }
     }
