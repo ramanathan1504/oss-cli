@@ -25,6 +25,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
@@ -39,6 +41,7 @@ import org.junit.jupiter.api.io.TempDir;
  * every version rule in every generated pack silently never fired. A pack that skips no cells looks
  * exactly like a pack with nothing to skip. Reading the output did not show it; running it did.
  */
+@DisabledOnOs(value = OS.WINDOWS, disabledReason = "the engine is POSIX shell; oss says so itself on Windows")
 class PackHooksAreDataTest {
 
     /** One pack using every hook that has a declarative form. */
