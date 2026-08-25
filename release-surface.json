@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 16,
+  "schemaVersion": 17,
   "commands": {
     "alias": ["--force", "--help", "--list", "--remove", "--version", "-V", "-h"],
     "analyze": ["--help", "--model", "--repo", "--version", "-V", "-h", "-m", "-r"],

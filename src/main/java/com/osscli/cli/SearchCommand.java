@@ -43,7 +43,7 @@ public class SearchCommand implements Callable<Integer> {
     private static final Logger LOGGER = LogManager.getLogger(SearchCommand.class);
 
     @Parameters(index = "0", description = "The plain text search query (wrap in quotes if it contains spaces)")
-    private String query;
+    String query;
 
     @Option(
             names = {"-r", "--repo"},
@@ -97,6 +97,24 @@ public class SearchCommand implements Callable<Integer> {
             // the model". Falling back keeps finding working; the model, when present, still wins on
             // meaning and this becomes the floor rather than the ceiling.
             return searchWithoutAModel(issueMap);
+        }
+
+        // A number is a number, not a sentence.
+        //
+        // Typing "4226" means "show me 4226". Embedding it asks the model what a bare integer is
+        // ABOUT, which it cannot know -- the answer came back as five unrelated issues at 0.13 to
+        // 0.26 similarity, none of them 4226, while 4226 itself sat in the same store with a title
+        // on it. That is worse than no result: five confident wrong ones, reported as a success.
+        java.util.Optional<Issue> exact = byNumber(issueMap);
+        if (exact.isPresent()) {
+            Issue hit = exact.get();
+            LOGGER.info("#{} — {}", hit.number(), hit.title());
+            LOGGER.info("");
+            LOGGER.info("  oss followup {}   what you decided, and what has happened since", hit.number());
+            LOGGER.info("  oss triage {}     everything known about it at once", hit.number());
+            LOGGER.info("");
+            LOGGER.info("  By meaning instead:  oss search \"{}\"", hit.title());
+            return 0;
         }
 
         LOGGER.info("Generating semantic vector for query: \"{}\" (Model: {})...", query, Embeddings.MODEL);
@@ -190,6 +208,32 @@ public class SearchCommand implements Callable<Integer> {
      * enough to surface related work rather than only exact matches: "database manager" reaches
      * AbstractDatabaseManager because identifiers are indexed split as well as whole.
      */
+    /**
+     * The issue this query names, when the query is only a number.
+     *
+     * <p>Deliberately exact and deliberately narrow: an all-digit query, and only when that number
+     * is one this store actually has. A query that merely contains a number -- "4226 startup delay"
+     * -- is still a search, because that one really is a sentence.
+     */
+    java.util.Optional<Issue> byNumber(Map<String, Issue> issueMap) {
+        String trimmed = query == null ? "" : query.trim();
+        if (trimmed.isEmpty() || !trimmed.chars().allMatch(Character::isDigit)) {
+            return java.util.Optional.empty();
+        }
+        long wanted;
+        try {
+            wanted = Long.parseLong(trimmed);
+        } catch (NumberFormatException e) {
+            return java.util.Optional.empty(); // longer than a long is not an issue number
+        }
+        for (Issue candidate : issueMap.values()) {
+            if (candidate.number() == wanted) {
+                return java.util.Optional.of(candidate);
+            }
+        }
+        return java.util.Optional.empty();
+    }
+
     private Integer searchWithoutAModel(Map<String, Issue> issueMap) {
         if (issueMap.isEmpty()) {
             LOGGER.error("Nothing indexed yet. Run 'sync' first.");

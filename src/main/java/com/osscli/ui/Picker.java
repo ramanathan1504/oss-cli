@@ -56,7 +56,8 @@ public final class Picker {
     private final int width;
     private final int rows;
 
-    private Picker() {
+    /** Package-private so a test can draw a frame into a buffer and read it back. */
+    Picker() {
         this.width = envInt("COLUMNS", 80, 20, 200);
         this.rows = envInt("LINES", 24, 10, 100);
     }
@@ -173,7 +174,23 @@ public final class Picker {
         }
     }
 
-    private <T> void draw(
+    /** Raw mode means the terminal will not add the carriage return for us. */
+    private static final String NL = "\r\n";
+
+    /**
+     * One frame, written with CRLF because the terminal is in raw mode.
+     *
+     * <p>{@code stty raw} turns off OPOST, and with it ONLCR -- the post-processing that normally
+     * turns a newline into carriage-return-plus-newline on the way out. So a bare {@code \n} here
+     * is a pure line feed: the cursor drops one row and <b>stays in the column it was already in</b>.
+     * Every line then starts where the previous one ended, and the menu walks off the right of the
+     * screen one entry at a time.
+     *
+     * <p>Package-private so it can be drawn into a buffer and inspected. Every other test in this
+     * file exercises the numbered fallback, because that is the half that runs without a terminal --
+     * which is exactly how a menu nobody could read shipped with twelve tests passing.
+     */
+    <T> void draw(
             String title,
             List<T> items,
             Function<T, String> row,
@@ -183,7 +200,7 @@ public final class Picker {
             int visibleRows) {
 
         StringBuilder b = new StringBuilder(HOME_AND_CLEAR);
-        b.append(BOLD).append(title).append(RESET).append("\n\n");
+        b.append(BOLD).append(title).append(RESET).append(NL).append(NL);
 
         int end = Math.min(items.size(), top + visibleRows);
         for (int i = top; i < end; i++) {
@@ -193,7 +210,7 @@ public final class Picker {
             } else {
                 b.append("   ").append(text);
             }
-            b.append("\n");
+            b.append(NL);
         }
         if (items.size() > visibleRows) {
             b.append(DIM)
@@ -202,18 +219,18 @@ public final class Picker {
                     .append(" of ")
                     .append(items.size())
                     .append(RESET)
-                    .append("\n");
+                    .append(NL);
         }
 
-        b.append("\n").append(DIM).append(rule()).append(RESET).append("\n");
+        b.append(NL).append(DIM).append(rule()).append(RESET).append(NL);
         for (String line : preview.apply(items.get(selected))) {
-            b.append("  ").append(clip(line, width - 3)).append("\n");
+            b.append("  ").append(clip(line, width - 3)).append(NL);
         }
-        b.append(DIM).append(rule()).append(RESET).append("\n");
+        b.append(DIM).append(rule()).append(RESET).append(NL);
         b.append(DIM)
                 .append("  ↑↓ or j/k move   enter open   q cancel")
                 .append(RESET)
-                .append("\n");
+                .append(NL);
 
         out.print(b);
         out.flush();

@@ -32,7 +32,7 @@ public class DatabaseManager {
 
     private static final Logger LOGGER = LogManager.getLogger(DatabaseManager.class);
     // private static final String DB_URL = "jdbc:sqlite:data/issue_intelligence.db";
-    private static final int CURRENT_SCHEMA_VERSION = 16;
+    private static final int CURRENT_SCHEMA_VERSION = 17;
 
     /**
      * How long a statement waits for a lock before giving up.
@@ -501,6 +501,55 @@ public class DatabaseManager {
                             + " id UNINDEXED, kind UNINDEXED, title, body, excerpt UNINDEXED);");
                 }
             }
+        },
+
+        // Migration 17: the footprint required a row that is never there
+        new Migration() {
+            @Override
+            public int getTargetVersion() {
+                return 17;
+            }
+
+            /**
+             * Drops a foreign key that made a whole feature impossible.
+             *
+             * <p>{@code personal_code_footprint} declared {@code FOREIGN KEY (repository,
+             * issue_number) REFERENCES issues(repository, number)}. But it records <b>your</b>
+             * merged pull requests, found through GitHub's search API across every repository you
+             * have ever contributed to, and {@code issues} holds only what has been synced from the
+             * repositories you follow. Those two sets have almost nothing in common, so almost
+             * every insert violated the constraint.
+             *
+             * <p>Not intermittently: thirteen of thirteen, with a warning per pull request and an
+             * exit code of zero. The vector was then built from the titles and bodies alone, and
+             * "which files this person actually touches" -- the thing the footprint exists to
+             * answer -- was empty while the command reported success.
+             *
+             * <p>{@code personal_pr_memory} stores the other half of the same feature, keyed the
+             * same way, with no such constraint. The two halves disagreeing is what says this was a
+             * mistake rather than a design: one of them worked.
+             *
+             * <p>SQLite cannot drop a constraint, so the table is rebuilt. Rows are carried over --
+             * whatever got in under the old rule is still true.
+             */
+            @Override
+            public void execute(Connection conn) throws SQLException {
+                LOGGER.info("Upgrading database schema to Version 17 (your own contributions can be recorded)...");
+                if (!tableExists(conn, "personal_code_footprint")) {
+                    try (Statement stmt = conn.createStatement()) {
+                        stmt.execute(getCreatePersonalCodeFootprintTableSql());
+                    }
+                    return;
+                }
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE personal_code_footprint RENAME TO old_personal_code_footprint;");
+                    stmt.execute(getCreatePersonalCodeFootprintTableSql());
+                    stmt.execute("INSERT OR IGNORE INTO personal_code_footprint"
+                            + " (repository, issue_number, file_path)"
+                            + " SELECT repository, issue_number, file_path FROM old_personal_code_footprint;");
+                    stmt.execute("DROP TABLE old_personal_code_footprint;");
+                }
+            }
         }
     };
 
@@ -664,7 +713,13 @@ public class DatabaseManager {
     }
 
     public static void initializeSchema() {
-        LOGGER.info("Initializing local SQLite database connection...");
+        // Not info. This was the first line of every command's output -- above `oss --version`,
+        // above a review, above an answer -- announcing that a local file was opened, which is
+        // not news and is not what anybody ran the command for. ServeCommand already had to
+        // strip it back out again before showing a command's output on the page, which is the
+        // clearest sign it should not have been printed. A migration still announces itself,
+        // because that one IS news: it changes the store.
+        LOGGER.debug("Opening the local SQLite database...");
 
         try (Connection conn = getConnection()) {
             try (Statement stmt = conn.createStatement()) {
@@ -958,8 +1013,7 @@ public class DatabaseManager {
                     repository TEXT,
                     issue_number INTEGER,
                     file_path TEXT,
-                    PRIMARY KEY (repository, issue_number, file_path),
-                    FOREIGN KEY (repository, issue_number) REFERENCES issues(repository, number) ON DELETE CASCADE
+                    PRIMARY KEY (repository, issue_number, file_path)
                 );
                 """;
     }

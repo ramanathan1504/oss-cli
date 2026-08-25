@@ -18,6 +18,7 @@ package com.osscli.ui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -35,6 +36,45 @@ import org.junit.jupiter.api.Test;
  * it and the part a terminal test could not reach anyway.
  */
 class PickerTest {
+
+    @Test
+    @DisplayName("a drawn frame returns the cursor to column zero on every line")
+    void everyLineCarriageReturns() {
+        // stty raw turns off OPOST, and with it ONLCR. A bare \n is then a pure line feed: the
+        // cursor drops a row and keeps its column, so each line starts where the last one ended
+        // and the menu walks off the right of the screen one entry at a time. It looked like this:
+        //
+        //     Anthropic Claude - an API key
+        //                                  Google Gemini - an API key
+        //                                                            OpenAI - an API key
+        java.io.PrintStream realErr = System.err;
+        java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+        String frame;
+        try {
+            System.setErr(new java.io.PrintStream(buffer, true, java.nio.charset.StandardCharsets.UTF_8));
+            new Picker()
+                    .draw(
+                            "Which should answer?",
+                            List.of("Anthropic Claude", "Google Gemini", "OpenAI"),
+                            t -> t,
+                            t -> List.of("Sends this question to that provider."),
+                            1,
+                            0,
+                            3);
+            frame = buffer.toString(java.nio.charset.StandardCharsets.UTF_8);
+        } finally {
+            System.setErr(realErr);
+        }
+
+        assertTrue(frame.contains("Google Gemini"), "the frame should contain what it was asked to draw");
+        int bare = 0;
+        for (int i = 0; i < frame.length(); i++) {
+            if (frame.charAt(i) == '\n' && (i == 0 || frame.charAt(i - 1) != '\r')) {
+                bare++;
+            }
+        }
+        assertEquals(0, bare, "a line feed with no carriage return before it leaves the cursor mid-row");
+    }
 
     @Test
     @DisplayName("an empty list chooses nothing rather than throwing")

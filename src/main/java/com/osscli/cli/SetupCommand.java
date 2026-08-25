@@ -279,30 +279,23 @@ public class SetupCommand implements Callable<Integer> {
                     "    Run: security add-generic-password -a \"$USER\" -s anthropic_api_key -w \"<YOUR_KEY>\" -U");
         }
 
-        // 11. Optional capabilities — and for almost everyone, nothing to do here.
+        // 11. Capabilities — and there is nothing to do here, so it does not ask.
         //
-        // Both capabilities this used to ask you to attach now ship inside the tool: the matrix
-        // engine is `oss run`, and memory is `oss memory`. Asking for a path without saying that
-        // reads as a missing dependency, and someone answers it by pasting the nearest repository
-        // they have. Enter is the ordinary answer; a path is the exception.
+        // This prompted twice for a path to an extension. Both capabilities ship inside the tool,
+        // so the correct answer was Enter both times, every time, for everybody -- and a question
+        // whose right answer is always the same is not a question, it is two chances to get
+        // something wrong. Saying "not needed" beside a prompt does not help: a wizard that asks
+        // is understood to be asking because it needs to know.
         //
-        // A pack must not be pasted here. It is data the built-in engine reads off disk, with no
-        // program to call and nothing to register -- `oss ext add` on one fails, correctly.
-        LOGGER.info("\n--- Optional capabilities (press Enter to skip any) ---");
-        LOGGER.info("Nothing here is required, and both capabilities are already built in:");
-        LOGGER.info("  running    oss run      the matrix engine ships inside oss");
-        LOGGER.info("  memory     oss memory   files and indexes notes with nothing attached");
-        LOGGER.info("Answer only if you have written your own program to do one of these.");
-        LOGGER.info("A pack is not one of them: run it with `oss run --pack <dir>`, do not add it here.");
-
-        registerOptionalExtension(
-                scanner,
-                com.osscli.ext.Extension.Kind.RUNNER,
-                "your own program that RUNS things — not a pack, and not needed for `oss run`");
-        registerOptionalExtension(
-                scanner,
-                com.osscli.ext.Extension.Kind.MEMORY,
-                "your own program that REMEMBERS — not needed for `oss memory`");
+        // The capability is not removed. `oss ext add <path>` registers one and `oss ext list`
+        // shows it, which is the right place for something almost nobody does: reached when you
+        // go looking, rather than put in front of everyone setting the tool up for the first time.
+        LOGGER.info("\n--- Capabilities ---");
+        LOGGER.info("  running   oss run      the matrix engine, built in");
+        LOGGER.info("  memory    oss memory   files and indexes notes, built in");
+        LOGGER.info("  Nothing to attach and nothing to configure. Point the runner at a pack:");
+        LOGGER.info("    cd <your-pack> && oss run list      or   oss run --pack <dir> list");
+        LOGGER.info("  Written your own program to do one of these? oss ext add <path>");
 
         // 12. Upstream writes.
         //
@@ -341,45 +334,6 @@ public class SetupCommand implements Callable<Integer> {
                 "  upstream  refused unless {} names the repo, and confirmed each time", UpstreamGuard.APPROVE_FLAG);
 
         return 0;
-    }
-
-    /**
-     * Offer to register one optional extension.
-     *
-     * <p>Failure here is reported and stepped over rather than aborting: someone half way through
-     * the wizard with a mistyped path should not lose the model and token settings they already
-     * entered.
-     */
-    private void registerOptionalExtension(Scanner scanner, com.osscli.ext.Extension.Kind kind, String hint) {
-        LOGGER.info("\nRegister a {} extension? {}", kind.lower(), hint);
-        LOGGER.info("Path to the repo (or press Enter to skip):");
-        String path = ask(scanner);
-        if (path.isEmpty()) {
-            LOGGER.info("  ↳ skipped");
-            return;
-        }
-        // Shell tilde expansion never happened -- this came from a Scanner, not a shell.
-        if (path.startsWith("~")) {
-            path = System.getProperty("user.home") + path.substring(1);
-        }
-        try {
-            com.osscli.ext.Extension ext = com.osscli.ext.ExtensionRegistry.readManifest(java.nio.file.Path.of(path));
-            if (ext.kind() != kind) {
-                LOGGER.warn(
-                        "  ⚠ that repo declares kind '{}', not '{}' — registering it anyway",
-                        ext.kind().lower(),
-                        kind.lower());
-            }
-            com.osscli.ext.ExtensionRegistry.add(ext);
-            LOGGER.info(
-                    "  ↳ registered {} ({}) — verbs: {}",
-                    ext.getName(),
-                    ext.kind().lower(),
-                    String.join(", ", ext.getVerbs().keySet()));
-        } catch (RuntimeException e) {
-            LOGGER.warn("  ⚠ not registered: {}", e.getMessage());
-            LOGGER.warn("    The rest of your setup is unaffected; add it later with: oss ext add {}", path);
-        }
     }
 
     private boolean checkMacKeychain(String serviceName) throws Exception {
