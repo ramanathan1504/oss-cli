@@ -74,9 +74,12 @@ jobs:
           java -jar "$JAR" --help > help.txt
           java -jar "$JAR" --version
 
-          # The everyday dozen must be reachable from the root command.
+          # Four spaces, not two. `oss --help` groups its commands: the group heading sits
+          # at two and the commands under it at four. Anchored at two, every one of these
+          # looked missing and the smoke test failed on a help screen that was correct --
+          # which is the same mistake tools/check-site.sh made, from the same change.
           for cmd in sync review search ask triage hub pr doctor ext serve; do
-            grep -q "^  $cmd" help.txt || {
+            grep -q "^    $cmd" help.txt || {
               echo "::error::'$cmd' is missing from --help; the subcommand is not wired up"
               cat help.txt
               exit 1
