@@ -20,6 +20,7 @@ import com.osscli.analyzer.Severity;
 import com.osscli.analyzer.SeverityAnalyzer;
 import com.osscli.model.Issue;
 import com.osscli.storage.SqliteStorage;
+import com.osscli.ui.Out;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -86,7 +87,7 @@ public class PrsCommand implements Callable<Integer> {
                             criticalIssueNumbers.add((int) analysis.issue().number()));
         }
 
-        LOGGER.info("Pull Request Intelligence Report");
+        Out.title("pull requests");
         LOGGER.info("================================\n");
 
         List<Issue> stalePrs = new ArrayList<>();
@@ -125,7 +126,7 @@ public class PrsCommand implements Callable<Integer> {
         }
 
         // Print Stale PRs
-        LOGGER.info("STALE PULL REQUESTS (No activity > 30 days)");
+        Out.section("stale — no activity in 30 days");
         if (stalePrs.isEmpty()) {
             LOGGER.info("('none')");
         } else {
@@ -136,7 +137,7 @@ public class PrsCommand implements Callable<Integer> {
         }
 
         // Print Reviews Needed
-        LOGGER.info("REVIEW NEEDED (No comments/reviews yet)");
+        Out.section("review needed — no comments yet");
         if (reviewsNeeded.isEmpty()) {
             LOGGER.info("(none)");
         } else {

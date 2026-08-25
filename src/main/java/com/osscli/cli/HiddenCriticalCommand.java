@@ -19,6 +19,7 @@ package com.osscli.cli;
 import com.osscli.model.AiAnalysisResult;
 import com.osscli.model.Issue;
 import com.osscli.storage.SqliteStorage;
+import com.osscli.ui.Out;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -74,7 +75,7 @@ public class HiddenCriticalCommand implements Callable<Integer> {
         Map<Long, AiAnalysisResult> aiMap =
                 aiResults.stream().collect(Collectors.toMap(AiAnalysisResult::issueNumber, result -> result));
 
-        LOGGER.info("Hidden Critical Issues Report for '{}'", repository);
+        Out.title(repository + "  " + Out.faint("· severity nobody labelled"));
 
         int count = 0;
 
@@ -126,9 +127,9 @@ public class HiddenCriticalCommand implements Callable<Integer> {
         }
 
         if (count == 0) {
-            LOGGER.info("No hidden critical issues detected in this database snapshot for '{}'.", repository);
+            Out.none("Nothing hidden in what is stored for " + repository + ".");
         } else {
-            LOGGER.info("Detection completed. Found {} potential hidden critical issues for '{}'.", count, repository);
+            Out.ok(count + " issue(s) look more serious than their labels say");
         }
 
         return 0;

@@ -20,6 +20,7 @@ import com.osscli.model.Issue;
 import com.osscli.model.IssueEmbedding;
 import com.osscli.retrieval.Embeddings;
 import com.osscli.storage.SqliteStorage;
+import com.osscli.ui.Out;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -190,7 +191,7 @@ public class DuplicatesCommand implements Callable<Integer> {
         } else {
             for (int k = 0; k < clusters.size(); k++) {
                 List<Issue> cluster = clusters.get(k);
-                LOGGER.info("Cluster {} (Size: {})", k + 1, cluster.size());
+                Out.section("cluster " + (k + 1) + " — " + cluster.size() + " issue(s)");
 
                 for (Issue issue : cluster) {
                     LOGGER.info("  #{}: {}", issue.number(), issue.title());

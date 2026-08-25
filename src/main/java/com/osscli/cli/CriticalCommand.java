@@ -22,6 +22,7 @@ import com.osscli.analyzer.SeverityAnalyzer;
 import com.osscli.model.Issue;
 import com.osscli.model.Label;
 import com.osscli.storage.SqliteStorage;
+import com.osscli.ui.Out;
 import java.util.List;
 import java.util.concurrent.Callable;
 import org.apache.logging.log4j.LogManager;
@@ -82,11 +83,11 @@ public class CriticalCommand implements Callable<Integer> {
                 analyses.stream().filter(a -> a.severity() == Severity.MEDIUM).count();
         long low = analyses.stream().filter(a -> a.severity() == Severity.LOW).count();
 
-        LOGGER.info("Repository: {} (Offline Mode)", repository);
+        Out.title(repository + "  " + Out.faint("· offline"));
         LOGGER.info("");
 
-        LOGGER.info("Critical: {}", critical);
-        LOGGER.info("High: {}", high);
+        Out.kv("critical", String.valueOf(critical));
+        Out.kv("high", String.valueOf(high));
         LOGGER.info("Medium: {}", medium);
         LOGGER.info("Low: {}", low);
 
