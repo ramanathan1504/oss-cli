@@ -54,6 +54,23 @@
 #   cd ~/my-project && oss run list
 #   oss run --pack ~/my-project list
 #
+# There is no search upwards. Standing in a subdirectory of a pack is not
+# standing in the pack, and the error says which directory it looked in.
+#
+# A pack is a directory with a pack.json (or the older pack.sh) in it. Two
+# shapes, and a repository may be either:
+#
+#   my-project/pack.json              this repository IS a pack
+#   my-project/packs/<name>/pack.json this repository CARRIES packs
+#
+# The second is for a repository holding several — one per subsystem, say.
+# Name the one you mean, from the repository root:
+#
+#   BENCH_PACK=<name> oss run list
+#
+# Undocumented until now, which meant the only way to find it was to read this
+# script. `oss run list` in a repository that carries packs names what it has.
+#
 # Every run forks a real JVM with an explicit classpath rather than running
 # inside Maven's, so what executes here is exactly what a repro zip would ship.
 
