@@ -1,5 +1,30 @@
 # Changelog
 
+## 4.6.0
+
+_2026-08-25_
+
+- A pack could be described as data, but it could not be one (#210)
+
+  The matrix engine offers eighteen hooks a pack may define, and a pack file
+  could express two. Anyone whose project needed a third -- a JDK floor for one
+  application, a config property spelled differently on one major version, a
+  reason a cell cannot run -- wrote `pack.sh` by hand and kept it.
+
+  Sixteen are fields now: `minJavaFor`, `minVersionFor`, `requiresConfigFor`,
+  `requiresAppFor`, `interactiveApps`, `skipWhen`, `buildFlags` and
+  `buildFlagsWhen`, `alwaysJvmArgs`, `jvmArgsFor`, `configArgs` and
+  `configArgsAlso`, `gradleVersionFlag`, `upstreamRepo`, `sourceClone` and
+  `sourceCloneHint`. Keys are glob patterns; `{app}`, `{config}`, `{version}`
+  and `{java}` stand for what the rule was asked about.
+
+  Two are not data and are not pretended to be: one lists a project's modules
+  out of a checkout, the other filters a classpath on stdin. Both are
+  pipelines, so `shell` carries them verbatim -- needing one costs a field
+  rather than the whole file.
+
+  Nothing about `pack.sh` changes, and a pack that has one is unaffected.
+
 ## 4.5.3
 
 _2026-08-25_
