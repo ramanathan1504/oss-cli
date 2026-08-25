@@ -31,8 +31,14 @@
 #   oss run repro 4143 --version 3.8.1              build a standalone repro zip
 #   oss run pr 4133 --checkout --install            read a PR, and run it here
 #   oss run review 4133                             every mechanical fact about a PR
-#   oss run hub                                     every repo you follow, one local page
-#   oss run hub --pr 4133                           write and send the review, on the page
+#
+# The hub is not one of these any more, and listing it here was telling people to
+# type something that answers "moved". The read-only half went into the core; the
+# half that could POST stayed with the pack that owned its review composer. If
+# your pack carries a hub.py, `oss run hub` still hands over to it. Otherwise:
+#
+#   oss hub                                         is anyone waiting on you
+#   oss serve                                       the same, as a page on localhost:1504
 #
 # The application names and versions above are placeholders: they come from YOUR
 # pack, and there is no list of them here because this engine does not know what
