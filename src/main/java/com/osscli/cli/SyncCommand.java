@@ -21,6 +21,7 @@ import com.osscli.github.GitHubClient;
 import com.osscli.llm.OllamaClient;
 import com.osscli.model.Issue;
 import com.osscli.storage.SqliteStorage;
+import com.osscli.ui.Out;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -192,9 +193,10 @@ public class SyncCommand implements Callable<Integer> {
         // 4. Update the sync timestamp in SQLite
         SqliteStorage.updateLastSyncedAt(targetRepo, startRunTime.toString());
 
-        LOGGER.info("Repository: {}", targetRepo);
-        LOGGER.info("Open Issues Saved: {}", realIssues.size());
-        LOGGER.info("Open PRs Saved: {}", pullRequests.size());
+        Out.section("saved");
+        Out.kv("repository", targetRepo);
+        Out.kv("issues", String.valueOf(realIssues.size()));
+        Out.kv("pull requests", String.valueOf(pullRequests.size()));
 
         printMostCommented(realIssues);
         printOldest(realIssues);

@@ -18,6 +18,7 @@ package com.osscli.cli;
 
 import com.osscli.agent.Skill;
 import com.osscli.agent.Skills;
+import com.osscli.ui.Out;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.Callable;
@@ -44,7 +45,7 @@ public class SkillCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        System.out.println("  BUILT IN, ON BY DEFAULT");
+        Out.section("built in, on by default");
         int mine = 0;
         for (Skill s : Skills.all()) {
             if (!s.builtIn()) {
@@ -54,18 +55,20 @@ public class SkillCommand implements Callable<Integer> {
             row(s);
         }
         if (mine > 0) {
-            System.out.println();
-            System.out.println("  YOURS  (" + Skills.DIR + ")");
+            Out.section("yours");
+            Out.none(String.valueOf(Skills.DIR));
             for (Skill s : Skills.all()) {
                 if (!s.builtIn()) {
                     row(s);
                 }
             }
         }
-        System.out.println();
-        System.out.println("  A file of yours with the same name replaces one of ours entirely.");
-        System.out.println("  oss skill new <name>     start one, with the front matter filled in");
-        System.out.println("  oss skill show <name>    read the one that is in force");
+        Out.section("writing one");
+        Out.none("a file of yours with the same name replaces one of ours entirely");
+        Out.hints(java.util.List.of(
+                new String[] {"oss skill new <name>", "start one, with the front matter filled in"},
+                new String[] {"oss skill show <name>", "read the one that is in force"}));
+        Out.gap();
         return 0;
     }
 
