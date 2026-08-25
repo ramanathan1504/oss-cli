@@ -313,7 +313,11 @@ public class SetupCommand implements Callable<Integer> {
         LOGGER.info("\n--- Upstream writes ---");
         LOGGER.info("  Refused by default, everywhere, and there is no setting to change that.");
         LOGGER.info("  To permit ONE write, name the repository on the command line:");
-        LOGGER.info("    oss run hub {} owner/name", UpstreamGuard.APPROVE_FLAG);
+        // Not a named verb. The flag lives on the dispatcher, and which verb writes is
+        // whatever the attached extension declared -- naming one here meant naming `hub`,
+        // which moved, so the single most safety-critical line in this wizard pointed at a
+        // command that answers "moved".
+        LOGGER.info("    oss run <verb> {} owner/name", UpstreamGuard.APPROVE_FLAG);
         LOGGER.info("  You are still asked to confirm, every time, at the terminal.");
 
         // 13. What is on, and what is simply not configured.
