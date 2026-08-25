@@ -22,6 +22,7 @@ import com.osscli.model.RepoIssue;
 import com.osscli.retrieval.Embeddings;
 import com.osscli.storage.SqliteStorage;
 import com.osscli.ui.NextSteps;
+import com.osscli.ui.Out;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -166,22 +167,20 @@ public class SearchCommand implements Callable<Integer> {
         // -- which is the default, and what -r asks for -- was labelled as covering all of them.
         // The results were correctly scoped; only the sentence above them was wrong, which is the
         // worse way round: nothing in the output contradicts it.
-        LOGGER.info(
-                "Top {} Semantic Search Results ({}):",
-                Math.min(limit, results.size()),
-                global ? "all repositories" : repository);
+        Out.title((global ? "all repositories" : repository) + "  " + Out.faint("· " + query));
 
         for (int i = 0; i < Math.min(limit, results.size()); i++) {
             SearchResult res = results.get(i);
-            String typeBadge = res.issue().isPullRequest() ? "[PR]" : "[Issue]";
-            LOGGER.info(
-                    "{}. {} {}#{}  Similarity: {}",
-                    i + 1,
-                    typeBadge,
+            String kind = res.issue().isPullRequest() ? "PR" : "issue";
+            // Number first and coloured, because it is the thing you type next. The score is dim:
+            // it decides the order and is almost never the reason anybody reads the line.
+            Out.item(String.format(
+                    "%s  %-5s %-26s %s",
+                    Out.cmd(String.format("#%-6d", res.issue().number())),
+                    Out.faint(kind),
                     res.repoName(),
-                    res.issue().number(),
-                    String.format("%.2f", res.similarity()));
-            LOGGER.info("   Title: {}", res.issue().title());
+                    Out.faint(String.format("%.2f", res.similarity()))));
+            Out.item("  " + res.issue().title());
         }
 
         // The moment a search finishes is the moment "which of these is worth my

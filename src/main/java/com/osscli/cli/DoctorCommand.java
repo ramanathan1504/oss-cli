@@ -19,6 +19,7 @@ package com.osscli.cli;
 import com.osscli.AppPaths;
 import com.osscli.llm.OllamaClient;
 import com.osscli.storage.SqliteStorage;
+import com.osscli.ui.Out;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -93,28 +94,39 @@ public class DoctorCommand implements Callable<Integer> {
         checkThresholds();
         checkData();
 
-        LOGGER.info("");
-        LOGGER.info("  oss doctor");
-        LOGGER.info("  ─────────────────────────────────────────────────────────────");
+        // Through Out. The tag used to be a bracketed [ ok ] / [ FAIL ] in the same grey as
+        // everything around it, so a failure among twelve passes had to be found by reading. A
+        // colour is the one thing the eye does without being asked.
+        Out.title("oss doctor");
         for (Check c : checks) {
-            LOGGER.info("  [{}] {} — {}", c.level().tag, c.what(), c.detail());
+            String line = c.what() + " " + Out.faint("— " + c.detail());
+            switch (c.level()) {
+                case OK -> Out.ok(line);
+                case WARN -> Out.note(line);
+                case FAIL -> Out.warn(line);
+            }
         }
 
         List<Check> problems = checks.stream().filter(c -> c.fix() != null).toList();
         long fails = checks.stream().filter(c -> c.level() == Level.FAIL).count();
 
         if (problems.isEmpty()) {
-            LOGGER.info("  ─────────────────────────────────────────────────────────────");
-            LOGGER.info("  Everything checks out.");
+            Out.section("nothing to fix");
+            Out.item("everything checks out");
+            Out.gap();
             return 0;
         }
 
-        LOGGER.info("  ─────────────────────────────────────────────────────────────");
-        LOGGER.info("  To fix:");
+        Out.section("to fix");
         for (Check c : problems) {
-            LOGGER.info("    {}  {}", c.level() == Level.FAIL ? "!" : "·", c.fix());
+            // The fix is a command, so it is painted like one: this list exists to be pasted.
+            if (c.level() == Level.FAIL) {
+                Out.warn(Out.cmd(c.fix()));
+            } else {
+                Out.note(Out.cmd(c.fix()));
+            }
         }
-        LOGGER.info("");
+        Out.gap();
         // Warnings alone are not a failure: the tool still runs, just not at its best.
         return fails > 0 ? 1 : 0;
     }

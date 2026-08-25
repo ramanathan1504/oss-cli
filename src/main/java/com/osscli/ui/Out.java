@@ -197,6 +197,17 @@ public final class Out {
         out().println("    " + good("●") + " " + text);
     }
 
+    /**
+     * Neither good nor bad -- present, and worth seeing.
+     *
+     * <p>Its glyph goes in the same gutter as {@link #ok} and {@link #warn}. Written as an item
+     * with the mark pushed into the text instead, it indented two further than the lines it sits
+     * between, and a column of checks is exactly where that shows.
+     */
+    public static void note(String text) {
+        out().println("    " + faint("○") + " " + text);
+    }
+
     /** It did not, and it is worth stopping for. */
     public static void warn(String text) {
         out().println("    " + bad("●") + " " + text);

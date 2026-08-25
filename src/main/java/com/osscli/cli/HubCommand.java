@@ -1,6 +1,7 @@
 package com.osscli.cli;
 
 import com.osscli.review.Waiting;
+import com.osscli.ui.Out;
 import java.util.List;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
@@ -74,39 +75,42 @@ public class HubCommand implements Callable<Integer> {
         if (all) {
             print("Waiting on them", result.onThem(), false);
         } else if (!result.onThem().isEmpty()) {
-            System.out.printf(
-                    "  %d not waiting on you — oss hub --all%n%n",
-                    result.onThem().size());
+            Out.gap();
+            Out.hint("oss hub --all", result.onThem().size() + " more, not waiting on you");
         }
         if (result.unreachable() > 0) {
             // The reason is asked for rather than assumed. With the wifi off this listed seventeen
             // pull requests as "private, deleted, or no token" -- three explanations, all wrong,
             // each of which sends the reader hunting for a problem they do not have.
-            System.out.printf(
-                    "  %d unreachable (%s)%n%n", result.unreachable(), com.osscli.github.Reachability.whyUnreadable());
+            Out.note(result.unreachable() + " unreachable — " + com.osscli.github.Reachability.whyUnreadable());
         }
         return 0;
     }
 
     private void print(String heading, List<Waiting.Item> items, boolean urgent) {
-        System.out.println("  " + heading.toUpperCase());
+        // Was SHOUTED IN CAPITALS, which is the oldest way of making a heading stand out and the
+        // one that stops working the moment there are two of them. Out.section is dim and lower
+        // case: the indentation under it is already saying "these belong to that".
+        Out.section(heading);
         if (items.isEmpty()) {
-            System.out.println("    nothing" + (urgent ? " — you are clear" : ""));
-            System.out.println();
+            Out.none("nothing" + (urgent ? " — you are clear" : ""));
             return;
         }
         for (Waiting.Item i : items) {
-            System.out.printf("    %-28s #%-6d %-12s %s%n", i.row().repo, i.row().pr, i.row().verdict, i.why(me));
-            System.out.printf("      %s%n", trim(i.title(), 74));
-            // The one line here that came from running the code rather than reading it.
+            // The pull request is the thing you act on, so it is the thing that is coloured.
+            Out.item(String.format(
+                    "%-28s %-8s %-12s %s",
+                    i.row().repo, Out.cmd("#" + i.row().pr), i.row().verdict, Out.faint(i.why(me))));
+            Out.item("  " + trim(i.title(), 74));
+            // The one line here that came from running the code rather than reading it, which is
+            // why it is the one that gets a colour rather than a prefix nobody scans for.
             if (!i.benchSaid().isEmpty()) {
-                System.out.printf("      runner: %s%n", trim(i.benchSaid(), 74));
+                Out.item("  " + Out.good("runner") + " " + trim(i.benchSaid(), 74));
             }
             if (urgent && i.pushed()) {
-                System.out.printf("      oss followup --since %d%n", i.row().pr);
+                Out.item("  " + Out.cmd("oss followup --since " + i.row().pr));
             }
         }
-        System.out.println();
     }
 
     private static String trim(String s, int n) {
