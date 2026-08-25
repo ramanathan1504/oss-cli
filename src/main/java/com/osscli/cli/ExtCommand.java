@@ -157,9 +157,15 @@ public class ExtCommand implements Callable<Integer> {
          */
         private static void builtIns() {
             System.out.println("  BUILT IN, ON BY DEFAULT");
-            System.out.printf("    %-10s %s%n", "memory", "file, search, index — an attached archive takes over");
             System.out.printf(
-                    "    %-10s %s%n", "runner", "detect, init, build, test, doctor — an attached pack takes over");
+                    "    %-10s %s%n", "memory", "file, search, index — an attached memory extension takes over");
+            // Not "an attached pack". A pack is data this reads off disk, with no program to call
+            // and nothing to register, and saying otherwise here is where the belief that one must
+            // be attached comes from -- `oss ext add` on a pack then fails, which is a confusing
+            // way to learn the difference from the tool that just implied it.
+            System.out.printf(
+                    "    %-10s %s%n",
+                    "runner", "detect, init, build, test, doctor — an attached runner extension takes over");
             System.out.println();
         }
 
@@ -430,7 +436,7 @@ public class ExtCommand implements Callable<Integer> {
             name = "run",
             aliases = {"bench"},
             mixinStandardHelpOptions = true,
-            description = "Run something real through an attached runner")
+            description = "Run something real — built in; an attached runner takes over")
     public static class BenchDispatch extends Dispatch {
 
         @Option(names = "--pack", description = "The pack to run: a directory containing pack.sh")
