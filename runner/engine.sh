@@ -209,6 +209,18 @@ pack_source_clone_hint()    { :; }
 # Any other pack reaching this line built somebody else's module.
 pack_gradle_prereq()        { :; }
 
+# How a generated pack asks whether a name is in one of the arrays above. A rule
+# that quoted the list instead would be a second copy of it, and the copy is the
+# one that goes stale -- a pack editing APPS_2X_ONLY would silently keep testing
+# against the old list. Defined here rather than emitted into every pack so that
+# there is one of it.
+_pack_in_list() {
+  local needle="$1"; shift
+  local candidate
+  for candidate in "$@"; do [[ "$candidate" == "$needle" ]] && return 0; done
+  return 1
+}
+
 # shellcheck source=packs/example/pack.sh
 . "$PACK_FILE"
 
