@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.5.1
+
+_2026-08-25_
+
+- Setup asked for a path to something it already had (#202)
+
+  `oss setup` offered to register a "bench" and a "kb". Both names died in the
+  rename, and both capabilities ship inside the tool -- the matrix engine is
+  `oss run`, memory is `oss memory` -- so the prompt read as a missing
+  dependency and invited a path where none was wanted. It now says what is
+  built in before it asks, and says a pack does not belong there.
+
+  The kind check behind the prompt could never pass: it compared a manifest
+  kind, `runner` or `memory`, against the literal `bench` or `kb` the caller
+  still passed, so a correct extension was always warned about being the wrong
+  kind before being registered anyway. It compares the enum now.
+
 ## 4.5.0
 
 _2026-08-24_
