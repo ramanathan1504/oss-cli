@@ -543,17 +543,24 @@ public class ServeCommand implements Callable<Integer> {
                     .append("<a class=\"nav\" href=\"/\">Back to the board</a></div>");
         }
 
-        b.append("<div class=\"navgrp\"><p class=\"navlbl\">manual</p>");
-        for (String d : DOCS) {
-            b.append("<a class=\"nav")
-                    .append(d.equals(here) ? " on" : "")
-                    .append("\" href=\"/docs/")
-                    .append(d)
-                    .append("\">")
-                    .append(d.replace(".md", "").toLowerCase(java.util.Locale.ROOT))
-                    .append("</a>");
+        // No manual in the sidebar. Five links to README, COMMANDS, OFFLINE, SETUP and
+        // CONTRIBUTING sat beside four sections that are the actual page, so a third of the
+        // chrome pointed away from the thing you opened. The documents are still served -- a
+        // /docs/ URL and the links inside a document still work -- they are just not offered
+        // as navigation from a board whose controls each name their own command on hover.
+        if (!onBoard) {
+            b.append("<div class=\"navgrp\"><p class=\"navlbl\">manual</p>");
+            for (String d : DOCS) {
+                b.append("<a class=\"nav")
+                        .append(d.equals(here) ? " on" : "")
+                        .append("\" href=\"/docs/")
+                        .append(d)
+                        .append("\">")
+                        .append(d.replace(".md", "").toLowerCase(java.util.Locale.ROOT))
+                        .append("</a>");
+            }
+            b.append("</div>");
         }
-        b.append("</div>");
 
         b.append("<div class=\"bottom\">")
                 .append("<button class=\"theme-btn\" id=\"theme-btn\" ")

@@ -163,7 +163,7 @@ class SchemaTest {
             assertTrue(rs.next());
             // The number itself is not the point; that the tables exist at it is. Bump this with
             // CURRENT_SCHEMA_VERSION, and only after the two tests above still pass.
-            assertEquals(16, rs.getInt("v"));
+            assertEquals(17, rs.getInt("v"));
         }
     }
 
