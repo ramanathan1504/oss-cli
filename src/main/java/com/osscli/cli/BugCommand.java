@@ -20,6 +20,7 @@ import com.osscli.bug.BugReport;
 import com.osscli.bug.Crash;
 import com.osscli.bug.Home;
 import com.osscli.github.GitHubClient;
+import com.osscli.ui.Out;
 import com.osscli.util.CredentialManager;
 import java.io.Console;
 import java.util.Optional;
@@ -79,8 +80,8 @@ public class BugCommand implements Callable<Integer> {
         Optional<Crash> remembered = Crash.last();
 
         if (last && remembered.isEmpty()) {
-            System.out.println("  Nothing remembered. oss has not hit an unexpected error since this store was made.");
-            System.out.println("  Describe one instead:  oss bug \"what happened\"");
+            Out.none("Nothing remembered — oss has not hit an unexpected error since it last ran.");
+            Out.hint("oss bug \"what happened\"", "describe one instead");
             return 0;
         }
         if (!last && said.isBlank()) {
@@ -119,7 +120,8 @@ public class BugCommand implements Callable<Integer> {
             return null;
         }
         System.out.println();
-        System.out.println("  What went wrong? One or two sentences is plenty.");
+        Out.section("what went wrong");
+        Out.none("one or two sentences is plenty");
         System.out.print("  > ");
         String line = console.readLine();
         return line == null || line.isBlank() ? null : line.strip();

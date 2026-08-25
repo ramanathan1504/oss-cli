@@ -187,7 +187,13 @@ public final class Out {
         out().println(GUTTER + text);
     }
 
-    /** Nothing to report, said in a way that does not look like a failure. */
+    /**
+     * Nothing to report, said in a way that does not look like a failure.
+     *
+     * <p>Body text keeps its own capitalisation. Only {@link #section} lower-cases, because a
+     * heading is a label; a sentence is a sentence, and a journey test asserting on one is a
+     * reason to change it deliberately rather than in a sweep.
+     */
     public static void none(String text) {
         out().println(GUTTER + faint(text));
     }

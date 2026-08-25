@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.osscli.model.PrEvidence;
 import com.osscli.review.PrEvidenceFetcher;
 import com.osscli.storage.SqliteStorage;
+import com.osscli.ui.Out;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -166,7 +167,7 @@ public class ReviewCommand implements Callable<Integer> {
         }
 
         LOGGER.info("");
-        LOGGER.info("── Verification (built and run, not read) ──");
+        Out.section("verification — built and run, not read");
         // Two Maven runs over somebody else's repository is minutes, and this printed one line at
         // the start of each and then nothing -- which is the case Live exists for. The rule in this
         // repository is that anything slower than a second says what it is doing while it does it,
@@ -243,7 +244,7 @@ public class ReviewCommand implements Callable<Integer> {
             return;
         }
         LOGGER.info("");
-        LOGGER.info("── Your prior work on this area ({}) ──", notes.size());
+        Out.section("your prior work on this area (" + notes.size() + ")");
         for (com.osscli.model.PromptContextChunk n : notes) {
             LOGGER.info("  {}  ({}% match)", n.sourceRef(), Math.round(n.relevanceScore() * 100));
         }
@@ -306,7 +307,7 @@ public class ReviewCommand implements Callable<Integer> {
         }
 
         LOGGER.info("");
-        LOGGER.info("── Project conventions ──");
+        Out.section("project conventions");
         if (notes.isEmpty()) {
             LOGGER.info("  no gate in this project's profile applies to these files");
         }
@@ -693,12 +694,11 @@ public class ReviewCommand implements Callable<Integer> {
     // ── Layer 0: the facts ───────────────────────────────────────────────────
 
     private void printFacts(PrEvidence ev) throws Exception {
-        LOGGER.info("");
-        LOGGER.info("╔══════════════════════════════════════════════════════════╗");
-        LOGGER.info("║  REVIEW  |  {} #{}", ev.repository(), ev.prNumber());
-        LOGGER.info("╚══════════════════════════════════════════════════════════╝");
-        LOGGER.info("");
-        LOGGER.info("  {}", ev.title() == null ? "(no title)" : ev.title());
+        // A three-line box drawn to a fixed 58 columns, which was wrong on every terminal that
+        // was not 58 columns and wrapped into six lines on a narrow one. The accent bar is one
+        // character and cannot be the wrong width.
+        Out.title("review  " + ev.repository() + " #" + ev.prNumber());
+        Out.item(ev.title() == null ? Out.faint("(no title)") : ev.title());
         LOGGER.info(
                 "  by {} · {} · into {} · head {}",
                 ev.author(),
@@ -719,7 +719,7 @@ public class ReviewCommand implements Callable<Integer> {
             return;
         }
         LOGGER.info("");
-        LOGGER.info("── Commits ({}) ──", commits.size());
+        Out.section("commits (" + commits.size() + ")");
         for (Map<String, Object> c : commits) {
             JsonNode node = MAPPER.valueToTree(c);
             String message = node.path("commit").path("message").asText("");
@@ -734,7 +734,7 @@ public class ReviewCommand implements Callable<Integer> {
             return;
         }
         LOGGER.info("");
-        LOGGER.info("── Files ({}) ──", files.size());
+        Out.section("files (" + files.size() + ")");
 
         // Grouped by top-level directory: which areas a change touches is the first thing a maintainer checks, and a
         // flat list of eighty paths hides it.
@@ -760,7 +760,7 @@ public class ReviewCommand implements Callable<Integer> {
     private void printChecks(PrEvidence ev) throws Exception {
         if (ev.checksJson() == null || ev.checksJson().isBlank()) {
             LOGGER.info("");
-            LOGGER.info("── CI ──");
+            Out.section("ci");
             LOGGER.info("  no check runs reported for this commit");
             return;
         }
@@ -768,13 +768,13 @@ public class ReviewCommand implements Callable<Integer> {
         JsonNode runs = root.path("check_runs");
         if (!runs.isArray() || runs.isEmpty()) {
             LOGGER.info("");
-            LOGGER.info("── CI ──");
+            Out.section("ci");
             LOGGER.info("  no check runs reported for this commit");
             return;
         }
 
         LOGGER.info("");
-        LOGGER.info("── CI ({}) ──", runs.size());
+        Out.section("ci (" + runs.size() + ")");
         for (JsonNode run : runs) {
             String conclusion = run.path("conclusion").asText("pending");
             String marker =
@@ -793,7 +793,7 @@ public class ReviewCommand implements Callable<Integer> {
         List<Map<String, Object>> comments = readList(ev.commentsJson());
 
         LOGGER.info("");
-        LOGGER.info("── Discussion ──");
+        Out.section("discussion");
         LOGGER.info("  {} review(s), {} inline comment(s)", reviews.size(), comments.size());
 
         for (Map<String, Object> r : reviews) {
@@ -816,7 +816,7 @@ public class ReviewCommand implements Callable<Integer> {
      */
     private void printLadder(boolean verdictGiven, boolean conventionsChecked, boolean notesUsed, boolean verified) {
         LOGGER.info("");
-        LOGGER.info("── What this review used ──");
+        Out.section("what this review used");
         LOGGER.info("  ✔ Facts from GitHub");
         report(conventionsChecked, "Convention checks against this project's rules", "run 'profile' to build it");
         report(notesUsed, "Your own prior work", whyNoNotes());
