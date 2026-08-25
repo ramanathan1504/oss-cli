@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.5.2
+
+_2026-08-25_
+
+- The list that decides what a browser may run was kept by hand (#204)
+
+  `oss serve` may dispatch a command only because a test proves nothing on its
+  table writes. That test read `Askable.WRITES` -- a list kept by hand -- and
+  believed it, so a verb left off was silently treated as harmless. Five were
+  missing, including `bug`, which posts a GitHub issue. Nothing on the page
+  asked it, so nothing was wrong yet, but a button that did would have passed
+  the test written to forbid exactly that.
+
+  `Askable.READS` is added, and between the two lists every command the program
+  has must now be classified against the recorded surface. A new command fails
+  the build until somebody says which it is, and a classified name that no
+  longer exists fails too.
+
+- `oss ext list` said a pack gets attached, and `oss run --help` agreed (#205)
+
+  A pack is data read off disk, with no program to call and nothing to
+  register, so it cannot be attached. `oss run` describes itself as built in
+  now, the way `oss memory` beside it already did.
+
 ## 4.5.1
 
 _2026-08-25_
