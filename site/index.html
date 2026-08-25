@@ -467,75 +467,42 @@ kbd{
 .term-body .r{color:var(--rust)}
 .term-body .h{color:#fff;font-weight:600}
 
-/* ---------- interactive demo ---------- */
-.demo-grid{display:grid;gap:1.5rem;grid-template-columns:1fr;margin-top:2.25rem}
-@media (min-width:1020px){.demo-grid{grid-template-columns:minmax(0,1fr) 16rem;gap:2rem}}
-
-.demo{position:relative}
-.demo:focus-within{box-shadow:0 0 0 2px var(--accent),0 18px 44px -22px rgba(2,8,11,.75)}
-.demo-screen{
-  margin:0;padding:1rem 1.1rem .4rem;overflow-y:auto;overflow-x:auto;
-  height:clamp(20rem,46vh,27rem);
+/* ---------- a recorded session ---------- */
+.play{position:relative;margin-top:2.25rem}
+.play-screen{
+  margin:0;padding:1rem 1.1rem 1.1rem;overflow-x:auto;
+  /* Fixed height so the page does not move under a reader as scenes change
+     length. Layout shifting is worse than a little empty space. */
+  height:clamp(17rem,38vh,22rem);
   font-family:var(--mono);font-size:.79rem;line-height:1.62;color:var(--term-ink);
-  font-variant-numeric:tabular-nums;
+  font-variant-numeric:tabular-nums;white-space:pre-wrap;word-break:break-word;
 }
-.demo-screen .ln{white-space:pre-wrap;word-break:break-word;min-height:1.28em}
-.demo-screen .c{color:var(--term-dim)}
-.demo-screen .ok{color:var(--patina)}
-.demo-screen .b{color:var(--brass)}
-.demo-screen .r{color:var(--rust)}
-.demo-screen .h{color:#fff;font-weight:600}
-.demo-screen .cmd{color:#fff}
-.demo-screen .sp{color:var(--patina)}
-.demo-screen .frame{color:var(--term-frame)}
-
-/* the live input line */
-.demo-line{
-  display:flex;align-items:baseline;gap:.5ch;padding:.35rem 1.1rem 1rem;
-  font-family:var(--mono);font-size:.79rem;line-height:1.62;
-}
-.demo-prompt{color:var(--patina);flex:none;user-select:none}
-.demo-prompt .path{color:var(--term-dim)}
-.demo-field{position:relative;flex:1;min-width:0}
-.demo-mirror{
-  color:var(--term-ink);white-space:pre;overflow:hidden;display:block;
-  text-overflow:clip;
-}
-.demo-caret{
+.play-screen .c{color:var(--term-dim)}
+.play-screen .ok{color:var(--patina)}
+.play-screen .b{color:var(--brass)}
+.play-screen .r{color:var(--rust)}
+.play-screen .h{color:#fff;font-weight:600}
+.play-screen .cmd{color:#fff}
+.play-screen .sp{color:var(--patina)}
+.play-screen .car{
   display:inline-block;width:.6em;height:1.05em;vertical-align:text-bottom;
   background:var(--term-ink);opacity:.9;margin-bottom:-.14em;
   animation:blink 1.06s steps(1,end) infinite;
 }
-.demo:not(:focus-within) .demo-caret{opacity:.28;animation:none}
-.demo[data-busy="1"] .demo-caret{display:none}
 @keyframes blink{0%,50%{opacity:.9}50.01%,100%{opacity:0}}
-.demo-input{
-  position:absolute;inset:0;width:100%;height:100%;
-  background:transparent;border:0;padding:0;margin:0;
-  font:inherit;color:transparent;caret-color:transparent;
-}
-.demo-input:focus{outline:none}
-.demo-input::selection{background:rgba(95,191,176,.35);color:transparent}
-.demo[data-busy="1"] .demo-prompt{opacity:.4}
 
-.demo-hint{
-  margin-top:.8rem;font-size:.82rem;color:var(--ink-faint);
-  display:flex;flex-wrap:wrap;gap:.35rem .9rem;align-items:center;
+.play-legend{margin-top:1.6rem}
+.play-legend h3{font-size:.95rem;letter-spacing:-.01em}
+.play-legend>p{margin-top:.4rem;color:var(--ink-soft);font-size:.9rem}
+.play-legend ul{
+  margin:1rem 0 0;padding:0;list-style:none;display:grid;gap:.5rem;
+  grid-template-columns:1fr;font-size:.86rem;color:var(--ink-faint);
 }
-.demo-side h3{font-size:.95rem;letter-spacing:-.01em}
-.demo-side p{margin-top:.5rem;color:var(--ink-soft);font-size:.9rem}
-.chips{margin-top:1rem;display:flex;flex-wrap:wrap;gap:.45rem}
-.chip{
-  font:inherit;font-family:var(--mono);font-size:.78rem;cursor:pointer;
-  background:var(--bg-raised);border:1px solid var(--rule);border-radius:7px;
-  padding:.34rem .6rem;color:var(--ink-soft);text-align:left;
-  transition:border-color .15s ease,color .15s ease;
+@media (min-width:900px){.play-legend ul{grid-template-columns:1fr 1fr;gap:.5rem 2rem}}
+.play-legend li{
+  border-left:2px solid var(--rule);padding-left:.85rem;line-height:1.55;
 }
-.chip:hover{border-color:var(--accent);color:var(--ink)}
-.demo-note{
-  margin-top:1.25rem;font-size:.84rem;color:var(--ink-faint);
-  border-left:2px solid var(--rule);padding-left:.85rem;
-}
+.play-legend code{display:block;color:var(--ink-soft)}
 
 /* ---------- the ladder ---------- */
 .ladder{margin-top:2.5rem;display:grid;gap:0;border-top:1px solid var(--rule)}
@@ -655,7 +622,7 @@ td .need,td.need{font-family:var(--mono);font-size:.78rem;color:var(--ink-faint)
   }
   /* The replay is rendered complete rather than typed, by replay.js below. */
   .replay-caret{animation:none;opacity:.5}
-  .demo-caret{opacity:.9;animation:none}
+  .play-screen .car{opacity:.9;animation:none}
 }
 </style>
 </head>
@@ -778,71 +745,42 @@ oss ask --allow-edit "fix the null check in the parser"</pre>
   </div>
 </section>
 
-<!-- ══════════════ interactive demo ══════════════ -->
+<!-- ══════════════ a recorded session ══════════════ -->
 <section class="band band-dark" id="demo">
   <div class="shell">
-    <p class="eyebrow">Try it</p>
-    <h2>A shell you can type into, right here.</h2>
+    <p class="eyebrow">What it looks like</p>
+    <h2>A session, playing itself.</h2>
     <p class="sub">
-      This is a simulation running entirely in your browser — no network, nothing installed.
-      The output is the real thing's voice, on a made-up repository called <code>owner/name</code>.
-      Start with <code>oss doctor</code>, then fetch the model and search again — or try
-      <code>oss history</code> to see how a saved conversation is picked back up.
+      Output copied from real runs, on a made-up repository called <code>owner/name</code>.
+      This plays; it does not take input. A box on a web page cannot run <code>oss</code>,
+      and one that behaves as though it can teaches the wrong shape of the tool —
+      every line below is something you type in your own terminal.
     </p>
 
-    <div class="demo-grid">
-      <div>
-        <div class="term demo" id="demo-term" data-busy="0">
-          <div class="term-bar">
-            <span class="dot" style="background:#E0685C"></span>
-            <span class="dot" style="background:#E0B44C"></span>
-            <span class="dot" style="background:#5BB98C"></span>
-            <span class="term-title">oss — simulated shell (offline)</span>
-          </div>
-          <div class="demo-screen" id="demo-screen" role="log" tabindex="0"
-               aria-live="polite" aria-atomic="false"
-               aria-label="Simulated terminal output, scrollable"></div>
-          <div class="demo-line">
-            <span class="demo-prompt" aria-hidden="true"><span class="path">owner/name</span> $</span>
-            <span class="demo-field">
-              <span class="demo-mirror" aria-hidden="true"><span id="demo-pre"></span><i class="demo-caret"></i><span id="demo-post"></span></span>
-              <label class="sr-only" for="demo-input">Type an oss command, then press Enter</label>
-              <input class="demo-input" id="demo-input" type="text" autocomplete="off"
-                     autocapitalize="off" autocorrect="off" spellcheck="false"
-                     aria-describedby="demo-hint">
-            </span>
-          </div>
-        </div>
-        <p class="demo-hint" id="demo-hint">
-          <span><kbd>Enter</kbd> run</span>
-          <span><kbd>↑</kbd> <kbd>↓</kbd> history</span>
-          <span><kbd>Tab</kbd> complete</span>
-          <span><kbd>Esc</kbd> leave the terminal</span>
-          <span><code>help</code> lists everything</span>
-        </p>
+    <div class="term play" id="play">
+      <div class="term-bar">
+        <span class="dot" style="background:#E0685C"></span>
+        <span class="dot" style="background:#E0B44C"></span>
+        <span class="dot" style="background:#5BB98C"></span>
+        <span class="term-title">oss — recorded output</span>
       </div>
+      <pre class="play-screen" id="play-screen" role="img"
+           aria-label="A terminal replaying three oss sessions: doctor, search and followup"></pre>
+    </div>
 
-      <div class="demo-side">
-        <h3>Things worth typing</h3>
-        <p>Each of these changes what the next one can do — exactly like the real tool.</p>
-        <div class="chips">
-          <button class="chip" type="button" data-cmd="oss doctor">oss doctor</button>
-          <button class="chip" type="button" data-cmd="oss search rollover compression">oss search rollover compression</button>
-          <button class="chip" type="button" data-cmd="oss model">oss model</button>
-          <button class="chip" type="button" data-cmd="oss model --fetch">oss model --fetch</button>
-          <button class="chip" type="button" data-cmd="oss sync --all">oss sync --all</button>
-          <button class="chip" type="button" data-cmd="oss ask">oss ask</button>
-          <button class="chip" type="button" data-cmd="oss skill">oss skill</button>
-          <button class="chip" type="button" data-cmd="oss history">oss history</button>
-          <button class="chip" type="button" data-cmd="help">help</button>
-          <button class="chip" type="button" data-cmd="clear">clear</button>
-        </div>
-        <p class="demo-note">
-          Nothing here talks to a server. The whole demo is a few hundred lines of
-          JavaScript on this page, which is roughly the point: the real tool works
-          the same way — offline, on what you already have.
-        </p>
-      </div>
+    <div class="play-legend">
+      <h3>Things worth typing</h3>
+      <p>Each of these changes what the next one can do.</p>
+      <ul>
+        <li><code>oss doctor</code> every prerequisite at once, with the fix for each</li>
+        <li><code>oss model --fetch</code> about 22 MB, once — then search is by meaning</li>
+        <li><code>oss sync --all</code> pull down what you follow, so the rest works offline</li>
+        <li><code>oss search "rollover compression" --global</code> across everything synced</li>
+        <li><code>oss followup --changed</code> what moved since you last reviewed it</li>
+        <li><code>oss ask</code> a question about one issue, answered from what is stored</li>
+        <li><code>oss history</code> pick a saved conversation back up</li>
+        <li><code>oss skill</code> the routines it knows, and your own alongside them</li>
+      </ul>
     </div>
   </div>
 </section>
@@ -1574,167 +1512,116 @@ oss review 4234 -r owner/name</pre>
 })();
 
 /* ============================================================
-   THE SIMULATED SHELL
-   Every byte of this is local. There is no fetch, no worker and
-   no hidden endpoint: the demo is a switch statement over canned
-   output, written in the same voice the real binary uses.
+   THE RECORDED SESSION
+   It plays and it does not listen. There was an interactive shell
+   here -- an input, a history ring, tab completion -- and a page
+   that answers `oss` convincingly is teaching a tool that does not
+   exist: the answers were a switch statement, and every one of
+   them had to be kept true by hand as the real commands moved.
+   What is worth having is the aliveness, so that is all this is.
+   Output is canned, copied from real runs.
    ============================================================ */
 (function () {
-  var root   = document.getElementById('demo-term');
-  var scr    = document.getElementById('demo-screen');
-  var input  = document.getElementById('demo-input');
-  var pre    = document.getElementById('demo-pre');
-  var post   = document.getElementById('demo-post');
-  if (!root || !scr || !input) return;
+  var screen = document.getElementById('play-screen');
+  if (!screen) return;
 
-  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  // ---- session state. The demo has a memory, so the ladder is felt
-  // rather than described: fetch the model, and search changes shape.
-  var state = { model: false, issues: 1284, busy: false };
-
-  var hist   = [];
-  var histAt = 0;    // index into hist; === length means "the live line"
-  var draft   = '';  // what was typed before arrowing into history
-
-  // ---- rendering -------------------------------------------------
-  function esc(s) {
-    return String(s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-  function line(html) {
-    var el = document.createElement('div');
-    el.className = 'ln';
-    el.innerHTML = html === undefined || html === '' ? '&nbsp;' : html;
-    scr.appendChild(el);
-    return el;
-  }
-  function lines(arr) { arr.forEach(function (h) { line(h); }); }
-  function toBottom() { scr.scrollTop = scr.scrollHeight; }
-
-  function echo(cmd) {
-    line('<span class="sp">owner/name $</span> <span class="cmd">' + esc(cmd) + '</span>');
-  }
-
-  // ---- the live status line ---------------------------------------
-  // Mirrors ui/Live: braille frames, the current step, and elapsed time,
-  // settling to a single ✓ line that stays behind.
-  var FRAMES = [
-    {
-      cmd: 'oss ask',
-      out: [
-        '  <span class="h">local qwen2.5:0.5b · nothing leaves this machine</span> · ~/owner/name · <span class="ok">read-only</span>',
-        '',
-        '  Ask anything about this project. Blank line or ctrl-d to leave.',
-        '',
-        '  <span class="sigil">&rsaquo;</span> why does the pool only deadlock above 200 threads?',
-        '',
-        '<span class="c">&hellip; looking</span>',
-        '  <span class="c">·</span> recall pool deadlock threads',
-        '  <span class="c">·</span> read_file src/main/java/&hellip;/Pool.java',
-        '<span class="ok">&check;</span> looking &mdash; 2 looks (18.4s)',
-        '',
-        '  the borrow path takes the locks in the opposite order to the',
-        '  eviction sweep, so above the point where the sweep overlaps a',
-        '  borrow they can wait on each other.',
-        '',
-        '  <span class="sigil">&rsaquo;</span>',
-        '',
-        '  <span class="c">kept — oss ask --resume picks this up.</span>'
-      ],
-      hold: 3400
-    },
-    {
-      cmd: 'oss ask --resume',
-      out: [
-        '  <span class="h">local qwen2.5:0.5b · nothing leaves this machine</span> · ~/owner/name · <span class="ok">read-only</span>',
-        '',
-        '  Ask anything about this project. Blank line or ctrl-d to leave.',
-        '',
-        '  <span class="sigil">&rsaquo;</span> so the eviction sweep is the one to change?',
-        '',
-        '<span class="c">&hellip; looking</span>',
-        '  <span class="c">·</span> recall eviction sweep lock order',
-        '<span class="ok">&check;</span> looking &mdash; 1 look (11.2s)',
-        '',
-        '  yes — order it like borrow and the cycle goes. You worked the',
-        '  same shape out in #812 and that fix is still in the tree.',
-        '',
-        '  <span class="sigil">&rsaquo;</span>'
-      ],
-      hold: 4600
-    }
+  // [kind, text]. `cmd` is typed a character at a time because that is the part
+  // a person does; everything else arrives whole, because that is how output
+  // arrives. The flags shown are real ones -- DocumentedFlagsTest reads this
+  // page and fails the build for a flag the command does not have.
+  var scenes = [
+    [
+      ['cmd', 'oss doctor'],
+      ['ok',  'github token      found, 4,998 requests left this hour'],
+      ['ok',  'local model       all-MiniLM-L6-v2, in this process'],
+      ['dim', 'ollama            not running - cloud triage stays off'],
+      ['out', ''],
+      ['ok',  'nothing else is required']
+    ],
+    [
+      ['cmd', 'oss search "rollover compression" --global'],
+      ['dim', 'searching 17,845 stored item(s) by meaning'],
+      ['out', '1. [owner/name#46498]   HTTP compression minimum size          0.61'],
+      ['out', '2. [owner/other#1152]   Support different compression types    0.58'],
+      ['out', '3. [owner/name#41230]   Add selector support in rollover       0.55'],
+      ['ok',  'no server, no account - answered from your own disk']
+    ],
+    [
+      ['cmd', 'oss followup --changed'],
+      ['out', 'owner/name    #4234   blocked   review requested   -'],
+      ['out', 'owner/other   #112    take      approved           merged'],
+      ['out', 'owner/name    #3901   waiting   changes requested  -'],
+      ['ok',  'every project you follow, in one list']
+    ]
   ];
 
-  var timers = [];
-  function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
-  function stop() { timers.forEach(clearTimeout); timers = []; }
-
-  function render(html) { screen.innerHTML = html; }
-
-  function lineHtml(html) { return '<span class="ln">' + html + '</span>\n'; }
-
-  /* The whole thing at once, for anyone who has asked not to be animated and
-     for browsers where the timers never run. Same content, no motion. */
-  function still() {
-    var f = FRAMES[FRAMES.length - 1];
-    var html = lineHtml(PROMPT + f.cmd);
-    f.out.forEach(function (l) { html += lineHtml(l); });
-    render(html);
+  function esc(t) {
+    return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
-  function play(index) {
-    if (index >= FRAMES.length) { later(function () { play(0); }, 1800); return; }
-    var f = FRAMES[index];
-    var typed = 0;
+  // Painted whole before anything animates. A visitor arriving with JavaScript
+  // slow, blocked or off sees a finished session rather than an empty box, and
+  // the first frame is the only one some people ever see.
+  function paint(lines, upto, partial) {
+    var html = '';
+    for (var i = 0; i < upto; i++) {
+      var k = lines[i][0], t = esc(lines[i][1]);
+      html += k === 'cmd' ? '<span class="sp">$</span> <span class="cmd">' + t + '</span>\n'
+            : k === 'ok'  ? '<span class="ok">' + t + '</span>\n'
+            : k === 'dim' ? '<span class="c">' + t + '</span>\n'
+            : t + '\n';
+    }
+    if (partial != null && lines[upto] && lines[upto][0] === 'cmd') {
+      html += '<span class="sp">$</span> <span class="cmd">'
+            + esc(lines[upto][1].slice(0, partial)) + '</span><span class="car"></span>\n';
+    }
+    screen.innerHTML = html;
+  }
 
-    (function type() {
-      typed++;
-      render(lineHtml(PROMPT + f.cmd.slice(0, typed) + '<span class="replay-caret"></span>'));
-      if (typed < f.cmd.length) {
-        // Uneven, because an even cadence reads as a progress bar rather than typing.
-        later(type, 38 + Math.random() * 45);
-      } else {
-        later(function () { emit(f, 0); }, 420);
+  paint(scenes[0], scenes[0].length, null);
+
+  // Motion is decoration here; the finished frame already says everything.
+  if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  var scene = 0, playing = false;
+  function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  async function play() {
+    await wait(1800);
+    for (;;) {
+      var lines = scenes[scene];
+      screen.innerHTML = '';
+      for (var i = 0; i < lines.length; i++) {
+        if (lines[i][0] === 'cmd') {
+          for (var c = 0; c <= lines[i][1].length; c++) {
+            paint(lines, i, c);
+            await wait(30);
+          }
+          await wait(340);
+        }
+        paint(lines, i + 1, null);
+        await wait(lines[i][0] === 'ok' ? 1500 : 260);
       }
-    })();
-  }
-
-  function emit(frame, upto) {
-    var html = lineHtml(PROMPT + frame.cmd);
-    for (var i = 0; i < upto; i++) { html += lineHtml(frame.out[i]); }
-    render(html);
-    if (upto < frame.out.length) {
-      later(function () { emit(frame, upto + 1); }, 55);
-    } else {
-      var next = FRAMES.indexOf(frame) + 1;
-      later(function () { play(next); }, frame.hold);
+      await wait(2800);
+      scene = (scene + 1) % scenes.length;
     }
   }
 
-  function start() {
-    stop();
-    if (reduced) { still(); return; }
-    play(0);
-  }
-
-  if (again) {
-    again.addEventListener('click', start);
-    if (reduced) { again.textContent = 'Play'; }
-  }
-
-  /* Nothing animates until it is on screen, and it stops again when it is not:
-     a hero looping in a background tab is work nobody asked for. */
+  // Only once it has been seen. Animating a terminal nobody has scrolled to
+  // spends a phone's battery drawing frames that are never looked at.
   if ('IntersectionObserver' in window) {
-    var seen = new IntersectionObserver(function (entries) {
+    var io = new IntersectionObserver(function (entries) {
       entries.forEach(function (e) {
-        if (e.isIntersecting) { start(); } else { stop(); }
+        if (!e.isIntersecting || playing) return;
+        playing = true;
+        io.disconnect();
+        play();
       });
     }, { threshold: 0.25 });
-    seen.observe(screen);
-    still();
+    io.observe(screen);
   } else {
-    start();
+    playing = true;
+    play();
   }
 })();
 </script>
