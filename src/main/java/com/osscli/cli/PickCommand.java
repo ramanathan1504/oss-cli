@@ -1,6 +1,7 @@
 package com.osscli.cli;
 
 import com.osscli.retrieval.Suggestions;
+import com.osscli.ui.Out;
 import java.util.Locale;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
@@ -59,7 +60,7 @@ public class PickCommand implements Callable<Integer> {
             switch (r.why()) {
                 case NO_PROFILE -> {
                     live.done("nothing to score against");
-                    System.out.println("Nothing to score against yet.");
+                    Out.none("Nothing to score against yet.");
                     System.out.println();
                     System.out.println("  oss memory file <notes.md>          keep what you work out");
                     System.out.println("  oss followup --record <pr> --repo … record what you review");
@@ -70,7 +71,8 @@ public class PickCommand implements Callable<Integer> {
                 }
                 case NOTHING_SYNCED -> {
                     live.done("nothing cached");
-                    System.out.println("No issues cached. Run: oss sync");
+                    Out.none("No issues cached.");
+                    Out.hint("oss sync", "fetch them first");
                     return 0;
                 }
                 case NO_OVERLAP -> {

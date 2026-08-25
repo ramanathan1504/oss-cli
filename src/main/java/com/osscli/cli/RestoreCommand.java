@@ -194,11 +194,9 @@ public class RestoreCommand implements Callable<Integer> {
                 }
             }
 
-            LOGGER.info("==================================================");
             LOGGER.info("✔ Restoration completed successfully!");
             LOGGER.info("  1. Your database, vectors, and memory are fully restored.");
             LOGGER.info("  2. Your local models and note folders were preserved.");
-            LOGGER.info("==================================================");
 
         } catch (Exception e) {
             LOGGER.error("Failed to restore backup archive: {}", e.getMessage());

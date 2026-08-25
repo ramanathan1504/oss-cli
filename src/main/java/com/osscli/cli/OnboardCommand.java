@@ -314,7 +314,13 @@ public class OnboardCommand implements Callable<Integer> {
     /** @return true when starter issues were found and listed */
     private boolean printStarterIssues() {
         try {
-            List<Issue> issues = SqliteStorage.loadIssues(repository);
+            // Seconds of silence on a real store before this, which reads as a hang rather than
+            // as work. Live also carries the elapsed time, so a long wait can be judged.
+            List<Issue> issues;
+            try (com.osscli.ui.Live live = com.osscli.ui.Live.start("reading the backlog to find a way in")) {
+                issues = SqliteStorage.loadIssues(repository);
+                live.done(issues.size() + " read");
+            }
             if (issues.isEmpty()) {
                 LOGGER.info("");
                 LOGGER.info("── Where to start ──");

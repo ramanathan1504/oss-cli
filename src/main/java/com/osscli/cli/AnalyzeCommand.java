@@ -70,7 +70,13 @@ public class AnalyzeCommand implements Callable<Integer> {
             }
         }
 
-        List<Issue> issues = SqliteStorage.loadIssues(repository);
+        // Silent for seconds on a real store before this. A status line is not decoration
+        // when the alternative is a person wondering whether the command is running.
+        List<Issue> issues;
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("reading the backlog to judge severity")) {
+            issues = SqliteStorage.loadIssues(repository);
+            live.done(issues.size() + " issue(s) read");
+        }
         if (issues.isEmpty()) {
             LOGGER.error("No local issues found for '{}'. Please run 'sync' first.", repository);
             return 1;

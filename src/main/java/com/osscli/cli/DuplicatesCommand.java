@@ -20,6 +20,7 @@ import com.osscli.model.Issue;
 import com.osscli.model.IssueEmbedding;
 import com.osscli.retrieval.Embeddings;
 import com.osscli.storage.SqliteStorage;
+import com.osscli.ui.Out;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -64,7 +65,13 @@ public class DuplicatesCommand implements Callable<Integer> {
                 return 1;
             }
         }
-        List<Issue> issues = SqliteStorage.loadIssues(repository);
+        // Silent for seconds on a real store before this. A status line is not decoration
+        // when the alternative is a person wondering whether the command is running.
+        List<Issue> issues;
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("comparing every issue with every other")) {
+            issues = SqliteStorage.loadIssues(repository);
+            live.done(issues.size() + " issue(s) read");
+        }
         if (issues.isEmpty()) {
             LOGGER.error("No local issues found for '{}'. Please run 'sync' first.", repository);
             return 1;
@@ -184,7 +191,7 @@ public class DuplicatesCommand implements Callable<Integer> {
         } else {
             for (int k = 0; k < clusters.size(); k++) {
                 List<Issue> cluster = clusters.get(k);
-                LOGGER.info("Cluster {} (Size: {})", k + 1, cluster.size());
+                Out.section("cluster " + (k + 1) + " — " + cluster.size() + " issue(s)");
 
                 for (Issue issue : cluster) {
                     LOGGER.info("  #{}: {}", issue.number(), issue.title());

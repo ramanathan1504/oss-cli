@@ -82,7 +82,6 @@ public class TrendCommand implements Callable<Integer> {
         }
 
         LOGGER.info("Project Health Trends Dashboard for '{}'", repository);
-        LOGGER.info("=====================================================");
 
         LOGGER.info(String.format(
                 "%-12s | %-15s | %-13s | %-18s | %-18s",
@@ -127,7 +126,13 @@ public class TrendCommand implements Callable<Integer> {
 
     private void saveTodaySnapshot() throws Exception {
         // Load data specifically for this repository
-        List<Issue> issues = SqliteStorage.loadIssues(repository);
+        // Silent for seconds on a real store before this. A status line is not decoration
+        // when the alternative is a person wondering whether the command is running.
+        List<Issue> issues;
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("reading the backlog over time")) {
+            issues = SqliteStorage.loadIssues(repository);
+            live.done(issues.size() + " issue(s) read");
+        }
         List<Issue> prs = SqliteStorage.loadPullRequests(repository);
         List<IssueEmbedding> embeddings = SqliteStorage.loadEmbeddings(repository);
 

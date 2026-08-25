@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.osscli.github.GitHubClient;
 import com.osscli.github.Reachability;
 import com.osscli.ui.NextSteps;
+import com.osscli.ui.Out;
 import java.util.concurrent.Callable;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -99,23 +100,25 @@ public class PrCommand implements Callable<Integer> {
                 return 0;
             }
 
-            System.out.printf("%n  %s #%d%n", repo, number);
-            System.out.printf("  %s%n%n", pr.path("title").asText(""));
-            System.out.printf(
-                    "  author      %s%n", pr.path("user").path("login").asText("?"));
-            System.out.printf(
-                    "  state       %s%s%n",
-                    pr.path("state").asText("?"), pr.path("draft").asBoolean(false) ? " (draft)" : "");
-            System.out.printf("  base        %s%n", pr.path("base").path("ref").asText("?"));
-            System.out.printf(
-                    "  head        %s%n", shortSha(pr.path("head").path("sha").asText("")));
-            System.out.printf(
-                    "  size        +%d −%d, %d file(s)%n",
-                    pr.path("additions").asInt(),
-                    pr.path("deletions").asInt(),
-                    pr.path("changed_files").asInt());
-            System.out.printf(
-                    "  mergeable   %s%n",
+            // The title is the heading, not a fact in the list: it is the one line that says what
+            // this pull request is, and it used to sit above an unlabelled blank line looking like
+            // a stray string.
+            Out.title(repo + " #" + number);
+            Out.item(pr.path("title").asText(""));
+            Out.section("the facts");
+            Out.kv("author", pr.path("user").path("login").asText("?"));
+            Out.kv("state", pr.path("state").asText("?") + (pr.path("draft").asBoolean(false) ? " (draft)" : ""));
+            Out.kv("base", pr.path("base").path("ref").asText("?"));
+            Out.kv("head", shortSha(pr.path("head").path("sha").asText("")));
+            Out.kv(
+                    "size",
+                    String.format(
+                            "+%d −%d, %d file(s)",
+                            pr.path("additions").asInt(),
+                            pr.path("deletions").asInt(),
+                            pr.path("changed_files").asInt()));
+            Out.kv(
+                    "mergeable",
                     pr.path("mergeable").isNull()
                             ? "unknown"
                             : pr.path("mergeable").asText());

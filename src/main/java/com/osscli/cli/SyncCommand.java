@@ -21,6 +21,7 @@ import com.osscli.github.GitHubClient;
 import com.osscli.llm.OllamaClient;
 import com.osscli.model.Issue;
 import com.osscli.storage.SqliteStorage;
+import com.osscli.ui.Out;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -121,9 +122,7 @@ public class SyncCommand implements Callable<Integer> {
             LOGGER.info("Starting batch sync for {} active repositories...", activeRepos.size());
             int failed = 0;
             for (String repo : activeRepos) {
-                LOGGER.info("==================================================");
                 LOGGER.info("Syncing: {}", repo);
-                LOGGER.info("==================================================");
                 try {
                     syncRepository(repo);
                 } catch (Exception e) {
@@ -131,7 +130,6 @@ public class SyncCommand implements Callable<Integer> {
                     LOGGER.error("  ↳ [Error] Failed to sync '{}': {}", repo, e.getMessage());
                 }
             }
-            LOGGER.info("==================================================");
             if (failed > 0) {
                 // Reporting success here regardless of outcome is what made a fully broken sync look like a
                 // working one -- the per-repo errors scroll past and the last line is the one that is believed.
@@ -142,7 +140,6 @@ public class SyncCommand implements Callable<Integer> {
                 return 1;
             }
             LOGGER.info("Batch synchronization completed successfully.");
-            LOGGER.info("==================================================");
             return 0;
         }
 
@@ -196,9 +193,10 @@ public class SyncCommand implements Callable<Integer> {
         // 4. Update the sync timestamp in SQLite
         SqliteStorage.updateLastSyncedAt(targetRepo, startRunTime.toString());
 
-        LOGGER.info("Repository: {}", targetRepo);
-        LOGGER.info("Open Issues Saved: {}", realIssues.size());
-        LOGGER.info("Open PRs Saved: {}", pullRequests.size());
+        Out.section("saved");
+        Out.kv("repository", targetRepo);
+        Out.kv("issues", String.valueOf(realIssues.size()));
+        Out.kv("pull requests", String.valueOf(pullRequests.size()));
 
         printMostCommented(realIssues);
         printOldest(realIssues);

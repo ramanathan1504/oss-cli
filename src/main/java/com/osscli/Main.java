@@ -133,6 +133,69 @@ public class Main {
         // prints exactly as picocli printed it; what is added is that the crash is written down and
         // the person in front of it is asked, once, whether to file it.
         commandLine.setExecutionExceptionHandler(new com.osscli.bug.Reporter());
+
+        // The command list, grouped by what somebody is trying to do.
+        //
+        // picocli renders it flat, which put `bug` between `doctor` and `hub` -- so the only way to
+        // find the command you wanted was to already know its name, which is the one situation help
+        // is not for. Fifteen commands is a short list and it was still unreadable, because an
+        // alphabet is not an order anybody thinks in.
+        commandLine.getHelpSectionMap().put(CommandLine.Model.UsageMessageSpec.SECTION_KEY_COMMAND_LIST, help -> {
+            StringBuilder b = new StringBuilder();
+            java.util.Map<String, CommandLine> subs = help.commandSpec().subcommands();
+            for (java.util.Map.Entry<String, java.util.List<String>> group :
+                    com.osscli.ui.CommandGroups.GROUPS.entrySet()) {
+                b.append(System.lineSeparator())
+                        .append("  ")
+                        .append(com.osscli.ui.Out.faint(group.getKey()))
+                        .append(System.lineSeparator());
+                for (String name : group.getValue()) {
+                    CommandLine sub = subs.get(name);
+                    if (sub == null || sub.getCommandSpec().usageMessage().hidden()) {
+                        continue;
+                    }
+                    String[] description = sub.getCommandSpec().usageMessage().description();
+                    // Padded before it is painted. An escape code has width zero on screen and
+                    // plenty of width to printf, so %-9s on a coloured string pads to nine
+                    // characters of which five are invisible, and the column staggers.
+                    String padded = name.length() >= 9 ? name : name + " ".repeat(9 - name.length());
+                    b.append("    ")
+                            .append(com.osscli.ui.Out.cmd(padded))
+                            .append(" ")
+                            .append(description.length > 0 ? firstSentence(description[0]) : "")
+                            .append(System.lineSeparator());
+                }
+                // `run` is the only command needing something the reader must supply, and the list
+                // said nothing about it -- so the group read as if `oss run` were self-contained,
+                // when the first thing it does without one is refuse.
+                if ("run it for real".equals(group.getKey())) {
+                    b.append("    ")
+                            .append(com.osscli.ui.Out.faint("a pack is what run walks — your apps, configs, versions"))
+                            .append(System.lineSeparator())
+                            .append("              ")
+                            .append(com.osscli.ui.Out.cmd("cd <your-pack> && oss run list"))
+                            .append(System.lineSeparator());
+                }
+            }
+            // `run` is the only command that needs something you have to supply, and the list
+            // said nothing about it -- so the group read as though `oss run` were self-contained,
+            // and the first thing it does is refuse for want of a pack.
+            // Not verbs. `oss claude review 12` is review, answered by somebody in particular, and
+            // listing them beside `search` invited reading them as things you could run alone.
+            String prefixes = String.join(" ", com.osscli.llm.Ai.prefixes());
+            b.append(System.lineSeparator())
+                    .append("  ")
+                    .append(com.osscli.ui.Out.faint("who answers"))
+                    .append(System.lineSeparator())
+                    .append("    ")
+                    .append(com.osscli.ui.Out.cmd(prefixes))
+                    .append(System.lineSeparator())
+                    .append("    ")
+                    .append(com.osscli.ui.Out.faint("put one in front of a command: "))
+                    .append(com.osscli.ui.Out.cmd("oss claude review 12"))
+                    .append(System.lineSeparator());
+            return b.toString();
+        });
         java.util.List<String> dispatchers = new java.util.ArrayList<>(java.util.List.of("run", "memory", "backlog"));
         dispatchers.addAll(com.osscli.llm.Ai.prefixes());
         for (String dispatcher : dispatchers) {
@@ -142,6 +205,23 @@ public class Main {
             }
         }
         return commandLine;
+    }
+
+    /**
+     * Enough of a description to choose by.
+     *
+     * <p>Several run to three lines in the full help, which is right there and wrong in a list of
+     * fifteen: the list exists to get somebody to the right command, and the command's own --help
+     * is where the detail belongs.
+     */
+    private static String firstSentence(String description) {
+        String flat = description.replace('\n', ' ').trim();
+        int stop = flat.indexOf(" — ");
+        if (stop < 0) {
+            stop = flat.indexOf(". ");
+        }
+        String cut = stop > 0 ? flat.substring(0, stop) : flat;
+        return cut.length() > 62 ? cut.substring(0, 59).trim() + "..." : cut;
     }
 
     /** True when the first argument is one of the commands that stays available. */

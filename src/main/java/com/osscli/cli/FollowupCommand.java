@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.osscli.github.GitHubClient;
 import com.osscli.review.ReviewLedger;
 import com.osscli.storage.SqliteStorage;
+import com.osscli.ui.Out;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -126,7 +127,7 @@ public class FollowupCommand implements Callable<Integer> {
                     System.out.println("  oss followup --record " + only + " --repo owner/name --verdict take");
                     return 1;
                 }
-                System.out.println("Nothing recorded yet.");
+                Out.none("Nothing recorded yet.");
                 System.out.println();
                 System.out.println("  oss followup --record <pr> --repo owner/name --verdict take");
                 // Asking about ONE pull request that is not there is a failed lookup, and it stayed

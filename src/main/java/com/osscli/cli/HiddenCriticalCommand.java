@@ -19,6 +19,7 @@ package com.osscli.cli;
 import com.osscli.model.AiAnalysisResult;
 import com.osscli.model.Issue;
 import com.osscli.storage.SqliteStorage;
+import com.osscli.ui.Out;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -54,7 +55,13 @@ public class HiddenCriticalCommand implements Callable<Integer> {
             }
         }
         // Load issues and AI analysis results specifically for this repository context
-        List<Issue> issues = SqliteStorage.loadIssues(repository);
+        // Seconds of silence on a real store before this, which reads as a hang rather than
+        // as work. Live also carries the elapsed time, so a long wait can be judged.
+        List<Issue> issues;
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("looking for severity nobody labelled")) {
+            issues = SqliteStorage.loadIssues(repository);
+            live.done(issues.size() + " read");
+        }
         List<AiAnalysisResult> aiResults = SqliteStorage.loadAiAnalysis(repository);
 
         if (issues.isEmpty() || aiResults.isEmpty()) {
@@ -68,8 +75,7 @@ public class HiddenCriticalCommand implements Callable<Integer> {
         Map<Long, AiAnalysisResult> aiMap =
                 aiResults.stream().collect(Collectors.toMap(AiAnalysisResult::issueNumber, result -> result));
 
-        LOGGER.info("Hidden Critical Issues Report for '{}'", repository);
-        LOGGER.info("====================================================");
+        Out.title(repository + "  " + Out.faint("· severity nobody labelled"));
 
         int count = 0;
 
@@ -121,9 +127,9 @@ public class HiddenCriticalCommand implements Callable<Integer> {
         }
 
         if (count == 0) {
-            LOGGER.info("No hidden critical issues detected in this database snapshot for '{}'.", repository);
+            Out.none("Nothing hidden in what is stored for " + repository + ".");
         } else {
-            LOGGER.info("Detection completed. Found {} potential hidden critical issues for '{}'.", count, repository);
+            Out.ok(count + " issue(s) look more serious than their labels say");
         }
 
         return 0;

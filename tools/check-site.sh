@@ -42,7 +42,25 @@ fi
 
 # Only the commands `oss --help` SHOWS. The hidden ones still work, and a page
 # that never mentions `hidden-critical` is not out of date, it is uncluttered.
-SHOWN=$(java -jar "$JAR" --help 2>/dev/null | grep -oE "^  [a-z][a-z-]+" | awk '{print $1}' | sort -u)
+# Four spaces, not two. `oss --help` groups its commands now: the group heading
+# sits at two spaces and the commands under it at four. Reading two meant this
+# collected "find", "one", "remember", "run", "start", "teach", "what", "when"
+# and "who" -- the first word of each heading -- and then checked the page
+# explained commands by those names. It would have reported the whole surface
+# undocumented, on a page that was fine.
+#
+# A command row is a name padded to a column, so it is followed by at least two
+# spaces. The prose lines under a group -- "put one in front of a command", "cd
+# <your-pack> && oss run list" -- are ordinary sentences at the same indent, and
+# matching them made "put" a command this page was failing to explain.
+#
+# The engine prefixes are listed on one line under "who answers" and are not
+# commands to document, so they are dropped by name.
+SHOWN=$(java -jar "$JAR" --help 2>/dev/null \
+  | grep -oE "^    [a-z][a-z-]+ {2,}" \
+  | awk '{print $1}' \
+  | grep -vE '^(llm|claude|gemini|codex|junie|cd)$' \
+  | sort -u)
 [[ -z "$SHOWN" ]] && { echo "  (could not read --help)" >&2; exit 0; }
 
 fatal=0

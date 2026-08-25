@@ -23,6 +23,7 @@ import com.osscli.agent.RunVerb;
 import com.osscli.agent.Rungs;
 import com.osscli.agent.Tool;
 import com.osscli.agent.Workspace;
+import com.osscli.ui.Out;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -140,11 +141,12 @@ public class AskCommand implements Callable<Integer> {
             System.out.println();
             System.out.println(held.strip());
             System.out.println();
-            System.out.println("  ⚠ This is what your archive holds, ranked — not an answer.");
-            System.out.println("    No model on this machine writes prose, so nothing above was read,");
-            System.out.println("    weighed or summarised. Attach one and the same question is answered:");
-            System.out.println("      ollama serve            then  oss ask \"" + asked + "\"");
-            System.out.println("      oss claude ask \"" + asked + "\"   or gemini, codex, junie");
+            Out.warn("this is what your archive holds, ranked — not an answer");
+            Out.none("no model on this machine writes prose, so nothing above was read, weighed");
+            Out.none("or summarised. Attach one and the same question is answered:");
+            Out.hints(java.util.List.of(
+                    new String[] {"ollama serve", "then oss ask \"" + asked + "\""},
+                    new String[] {"oss claude ask \"" + asked + "\"", "or gemini, codex, junie"}));
             return 0;
         }
 

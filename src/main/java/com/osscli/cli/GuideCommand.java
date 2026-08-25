@@ -73,7 +73,13 @@ public class GuideCommand implements Callable<Integer> {
         }
 
         // 2. Load the target issue details
-        List<Issue> issues = SqliteStorage.loadIssues(repository);
+        // Seconds of silence on a real store before this, which reads as a hang rather than
+        // as work. Live also carries the elapsed time, so a long wait can be judged.
+        List<Issue> issues;
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("reading the backlog for context")) {
+            issues = SqliteStorage.loadIssues(repository);
+            live.done(issues.size() + " read");
+        }
         List<Issue> prs = SqliteStorage.loadPullRequests(repository);
         Issue target = issues.stream()
                 .filter(i -> i.number() == issueNumber)

@@ -20,6 +20,7 @@ import com.osscli.analyzer.Severity;
 import com.osscli.analyzer.SeverityAnalyzer;
 import com.osscli.model.Issue;
 import com.osscli.storage.SqliteStorage;
+import com.osscli.ui.Out;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -61,7 +62,13 @@ public class PrsCommand implements Callable<Integer> {
             }
         }
         List<Issue> prs = SqliteStorage.loadPullRequests(repository);
-        List<Issue> issues = SqliteStorage.loadIssues(repository);
+        // Seconds of silence on a real store before this, which reads as a hang rather than
+        // as work. Live also carries the elapsed time, so a long wait can be judged.
+        List<Issue> issues;
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("reading the pull requests this machine knows")) {
+            issues = SqliteStorage.loadIssues(repository);
+            live.done(issues.size() + " read");
+        }
 
         if (prs.isEmpty()) {
             LOGGER.error("No local pull request data found. Please run 'sync' first.");
@@ -80,7 +87,7 @@ public class PrsCommand implements Callable<Integer> {
                             criticalIssueNumbers.add((int) analysis.issue().number()));
         }
 
-        LOGGER.info("Pull Request Intelligence Report");
+        Out.title("pull requests");
         LOGGER.info("================================\n");
 
         List<Issue> stalePrs = new ArrayList<>();
@@ -119,8 +126,7 @@ public class PrsCommand implements Callable<Integer> {
         }
 
         // Print Stale PRs
-        LOGGER.info("STALE PULL REQUESTS (No activity > 30 days)");
-        LOGGER.info("------------------------------------------");
+        Out.section("stale — no activity in 30 days");
         if (stalePrs.isEmpty()) {
             LOGGER.info("('none')");
         } else {
@@ -131,8 +137,7 @@ public class PrsCommand implements Callable<Integer> {
         }
 
         // Print Reviews Needed
-        LOGGER.info("REVIEW NEEDED (No comments/reviews yet)");
-        LOGGER.info("---------------------------------------");
+        Out.section("review needed — no comments yet");
         if (reviewsNeeded.isEmpty()) {
             LOGGER.info("(none)");
         } else {
@@ -144,7 +149,6 @@ public class PrsCommand implements Callable<Integer> {
 
         // Print Critical Fixes
         LOGGER.info("CRITICAL FIXES (PRs linked to Critical Issues)");
-        LOGGER.info("----------------------------------------------");
         if (criticalFixes.isEmpty()) {
             LOGGER.info("(none)");
         } else {

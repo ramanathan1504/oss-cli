@@ -18,6 +18,7 @@ package com.osscli.cli;
 
 import com.osscli.safety.UpstreamGuard;
 import com.osscli.storage.SqliteStorage;
+import com.osscli.ui.Out;
 import java.util.Scanner;
 import java.util.concurrent.Callable;
 import org.apache.logging.log4j.LogManager;
@@ -75,9 +76,7 @@ public class SetupCommand implements Callable<Integer> {
     }
 
     private Integer wizard(Scanner scanner) throws Exception {
-        LOGGER.info("==================================================");
-        LOGGER.info("            oss Interactive Setup Wizard          ");
-        LOGGER.info("==================================================");
+        Out.title("oss setup");
 
         // 1. Configure GitHub Username
         String currentUsername = SqliteStorage.loadConfig("github.username");
@@ -315,23 +314,22 @@ public class SetupCommand implements Callable<Integer> {
 
         // 13. What is on, and what is simply not configured.
         LOGGER.info("\n==================================================");
-        LOGGER.info("Configuration successfully updated in local SQLite!");
-        LOGGER.info("==================================================");
-        LOGGER.info("Optional, and their state now:");
-        LOGGER.info(
-                "  ollama    {}",
-                currentTriageModel == null ? "not set (offline AI features stay off)" : currentTriageModel);
-        LOGGER.info(
-                "  claude    {}",
-                currentClaudeModel == null ? "not set (cloud escalation stays off)" : currentClaudeModel);
+        Out.section("saved");
+        Out.ok("configuration written to the local database");
+
+        Out.section("where things stand");
+        Out.kv("ollama", currentTriageModel == null ? Out.faint("not set — offline AI stays off") : currentTriageModel);
+        Out.kv(
+                "claude",
+                currentClaudeModel == null ? Out.faint("not set — cloud escalation stays off") : currentClaudeModel);
         for (com.osscli.ext.Extension e : com.osscli.ext.ExtensionRegistry.all()) {
-            LOGGER.info("  {}<{}>  {}", e.kind().lower(), e.getName(), e.getRoot());
+            Out.kv(e.kind().lower() + " " + e.getName(), String.valueOf(e.getRoot()));
         }
         if (com.osscli.ext.ExtensionRegistry.all().isEmpty()) {
-            LOGGER.info("  runner/memory  none registered, and none needed (oss run, oss memory)");
+            Out.kv("attached", Out.faint("nothing, and nothing needed — oss run and oss memory are built in"));
         }
-        LOGGER.info(
-                "  upstream  refused unless {} names the repo, and confirmed each time", UpstreamGuard.APPROVE_FLAG);
+        Out.kv("upstream", Out.faint("refused unless " + UpstreamGuard.APPROVE_FLAG + " names the repo, every time"));
+        Out.gap();
 
         return 0;
     }

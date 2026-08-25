@@ -20,6 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.osscli.ext.Extension;
 import com.osscli.ext.ExtensionRegistry;
 import com.osscli.ext.ExtensionRunner;
+import com.osscli.ui.Out;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.Console;
@@ -158,10 +159,14 @@ public class ServeCommand implements Callable<Integer> {
         server.start();
 
         String url = "http://localhost:" + port + "/";
-        System.out.println("oss serving on " + url + "   (ctrl-c to stop)");
+        Out.title("oss serve");
+        // The URL is the one thing here somebody is going to act on -- click it, or paste it --
+        // so it is the one thing painted. It used to sit in the middle of a sentence.
+        Out.item(Out.cmd(url) + "   " + Out.faint("ctrl-c to stop"));
         // Not "attach an extension" any more: the box that did that is gone from the page, and a
         // startup line advertising a field nobody can find is worse than no line at all.
-        System.out.println("  reads only — anything that writes stays on the command line");
+        Out.none("reads only — anything that writes stays on the command line");
+        Out.gap();
         if (!noOpen) {
             openBrowser(url);
         }

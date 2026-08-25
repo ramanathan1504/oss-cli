@@ -22,6 +22,7 @@ import com.osscli.analyzer.SeverityAnalyzer;
 import com.osscli.model.Issue;
 import com.osscli.model.Label;
 import com.osscli.storage.SqliteStorage;
+import com.osscli.ui.Out;
 import java.util.List;
 import java.util.concurrent.Callable;
 import org.apache.logging.log4j.LogManager;
@@ -55,7 +56,13 @@ public class CriticalCommand implements Callable<Integer> {
             }
         }
         // Load issues specifically for this repository
-        List<Issue> issues = SqliteStorage.loadIssues(repository);
+        // Silent for seconds on a real store before this. A status line is not decoration
+        // when the alternative is a person wondering whether the command is running.
+        List<Issue> issues;
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("scoring the backlog for severity")) {
+            issues = SqliteStorage.loadIssues(repository);
+            live.done(issues.size() + " issue(s) read");
+        }
         if (issues.isEmpty()) {
             LOGGER.error("No local data found for '{}'. Please run the 'sync' command first.", repository);
             return 1;
@@ -76,17 +83,16 @@ public class CriticalCommand implements Callable<Integer> {
                 analyses.stream().filter(a -> a.severity() == Severity.MEDIUM).count();
         long low = analyses.stream().filter(a -> a.severity() == Severity.LOW).count();
 
-        LOGGER.info("Repository: {} (Offline Mode)", repository);
+        Out.title(repository + "  " + Out.faint("· offline"));
         LOGGER.info("");
 
-        LOGGER.info("Critical: {}", critical);
-        LOGGER.info("High: {}", high);
+        Out.kv("critical", String.valueOf(critical));
+        Out.kv("high", String.valueOf(high));
         LOGGER.info("Medium: {}", medium);
         LOGGER.info("Low: {}", low);
 
         LOGGER.info("");
         LOGGER.info("CRITICAL");
-        LOGGER.info("========");
         analyses.stream().filter(a -> a.severity() == Severity.CRITICAL).forEach(this::printIssue);
 
         LOGGER.info("");
