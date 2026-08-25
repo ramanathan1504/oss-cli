@@ -64,7 +64,13 @@ public class DuplicatesCommand implements Callable<Integer> {
                 return 1;
             }
         }
-        List<Issue> issues = SqliteStorage.loadIssues(repository);
+        // Silent for seconds on a real store before this. A status line is not decoration
+        // when the alternative is a person wondering whether the command is running.
+        List<Issue> issues;
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("comparing every issue with every other")) {
+            issues = SqliteStorage.loadIssues(repository);
+            live.done(issues.size() + " issue(s) read");
+        }
         if (issues.isEmpty()) {
             LOGGER.error("No local issues found for '{}'. Please run 'sync' first.", repository);
             return 1;

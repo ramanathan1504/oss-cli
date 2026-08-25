@@ -61,7 +61,13 @@ public class PrsCommand implements Callable<Integer> {
             }
         }
         List<Issue> prs = SqliteStorage.loadPullRequests(repository);
-        List<Issue> issues = SqliteStorage.loadIssues(repository);
+        // Seconds of silence on a real store before this, which reads as a hang rather than
+        // as work. Live also carries the elapsed time, so a long wait can be judged.
+        List<Issue> issues;
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("reading the pull requests this machine knows")) {
+            issues = SqliteStorage.loadIssues(repository);
+            live.done(issues.size() + " read");
+        }
 
         if (prs.isEmpty()) {
             LOGGER.error("No local pull request data found. Please run 'sync' first.");
@@ -120,7 +126,6 @@ public class PrsCommand implements Callable<Integer> {
 
         // Print Stale PRs
         LOGGER.info("STALE PULL REQUESTS (No activity > 30 days)");
-        LOGGER.info("------------------------------------------");
         if (stalePrs.isEmpty()) {
             LOGGER.info("('none')");
         } else {
@@ -132,7 +137,6 @@ public class PrsCommand implements Callable<Integer> {
 
         // Print Reviews Needed
         LOGGER.info("REVIEW NEEDED (No comments/reviews yet)");
-        LOGGER.info("---------------------------------------");
         if (reviewsNeeded.isEmpty()) {
             LOGGER.info("(none)");
         } else {
@@ -144,7 +148,6 @@ public class PrsCommand implements Callable<Integer> {
 
         // Print Critical Fixes
         LOGGER.info("CRITICAL FIXES (PRs linked to Critical Issues)");
-        LOGGER.info("----------------------------------------------");
         if (criticalFixes.isEmpty()) {
             LOGGER.info("(none)");
         } else {

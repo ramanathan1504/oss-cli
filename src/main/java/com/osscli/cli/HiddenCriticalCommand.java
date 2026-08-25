@@ -54,7 +54,13 @@ public class HiddenCriticalCommand implements Callable<Integer> {
             }
         }
         // Load issues and AI analysis results specifically for this repository context
-        List<Issue> issues = SqliteStorage.loadIssues(repository);
+        // Seconds of silence on a real store before this, which reads as a hang rather than
+        // as work. Live also carries the elapsed time, so a long wait can be judged.
+        List<Issue> issues;
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("looking for severity nobody labelled")) {
+            issues = SqliteStorage.loadIssues(repository);
+            live.done(issues.size() + " read");
+        }
         List<AiAnalysisResult> aiResults = SqliteStorage.loadAiAnalysis(repository);
 
         if (issues.isEmpty() || aiResults.isEmpty()) {
@@ -69,7 +75,6 @@ public class HiddenCriticalCommand implements Callable<Integer> {
                 aiResults.stream().collect(Collectors.toMap(AiAnalysisResult::issueNumber, result -> result));
 
         LOGGER.info("Hidden Critical Issues Report for '{}'", repository);
-        LOGGER.info("====================================================");
 
         int count = 0;
 

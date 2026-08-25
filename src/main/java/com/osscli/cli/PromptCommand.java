@@ -294,11 +294,15 @@ public class PromptCommand implements Callable<Integer> {
     private void recordResolution(String source, String context, String answer) {
         String title = null;
         try {
-            title = SqliteStorage.loadIssues(repository).stream()
-                    .filter(i -> i.number() == issueNumber)
-                    .map(com.osscli.model.Issue::title)
-                    .findFirst()
-                    .orElse(null);
+            // Reads every issue to resolve one title, which is seconds on a real store.
+            try (com.osscli.ui.Live live = com.osscli.ui.Live.start("finding what that number refers to")) {
+                title = SqliteStorage.loadIssues(repository).stream()
+                        .filter(i -> i.number() == issueNumber)
+                        .map(com.osscli.model.Issue::title)
+                        .findFirst()
+                        .orElse(null);
+                live.done(title == null ? "no issue with that number" : title);
+            }
         } catch (Exception e) {
             // A missing title is cosmetic; the note is still worth writing without it.
             LOGGER.debug("Could not load issue title for #{}: {}", issueNumber, e.getMessage());

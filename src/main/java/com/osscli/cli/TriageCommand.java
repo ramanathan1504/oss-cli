@@ -65,7 +65,13 @@ public class TriageCommand implements Callable<Integer> {
             }
         }
         // 1. Load Datasets
-        List<Issue> issues = SqliteStorage.loadIssues(repository);
+        // Seconds of silence on a real store before this, which reads as a hang rather than
+        // as work. Live also carries the elapsed time, so a long wait can be judged.
+        List<Issue> issues;
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("reading everything known about this one")) {
+            issues = SqliteStorage.loadIssues(repository);
+            live.done(issues.size() + " read");
+        }
         List<Issue> prs = SqliteStorage.loadPullRequests(repository);
         List<AiAnalysisResult> aiResults = SqliteStorage.loadAiAnalysis(repository);
         List<IssueEmbedding> embeddings = SqliteStorage.loadEmbeddings(repository);

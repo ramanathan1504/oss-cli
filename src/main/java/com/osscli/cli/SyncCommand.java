@@ -121,9 +121,7 @@ public class SyncCommand implements Callable<Integer> {
             LOGGER.info("Starting batch sync for {} active repositories...", activeRepos.size());
             int failed = 0;
             for (String repo : activeRepos) {
-                LOGGER.info("==================================================");
                 LOGGER.info("Syncing: {}", repo);
-                LOGGER.info("==================================================");
                 try {
                     syncRepository(repo);
                 } catch (Exception e) {
@@ -131,7 +129,6 @@ public class SyncCommand implements Callable<Integer> {
                     LOGGER.error("  ↳ [Error] Failed to sync '{}': {}", repo, e.getMessage());
                 }
             }
-            LOGGER.info("==================================================");
             if (failed > 0) {
                 // Reporting success here regardless of outcome is what made a fully broken sync look like a
                 // working one -- the per-repo errors scroll past and the last line is the one that is believed.
@@ -142,7 +139,6 @@ public class SyncCommand implements Callable<Integer> {
                 return 1;
             }
             LOGGER.info("Batch synchronization completed successfully.");
-            LOGGER.info("==================================================");
             return 0;
         }
 

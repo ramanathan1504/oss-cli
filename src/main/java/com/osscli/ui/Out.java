@@ -61,6 +61,16 @@ public final class Out {
     private static final String BOLD = "\u001b[1m";
     private static final String OFF = "\u001b[0m";
 
+    /**
+     * Where content starts, for everything inside a block.
+     *
+     * <p>Six, and a status glyph sits in the two columns to its left rather than shifting its own
+     * line right. Otherwise a bullet and the plain line under it begin in different columns, which
+     * is the one thing a column of facts exists not to do -- and it is visible immediately, because
+     * the eye is already reading down the left edge.
+     */
+    private static final String GUTTER = "      ";
+
     /** The accent down the left of a heading. */
     private static final String BAR = "\u258c";
 
@@ -159,17 +169,17 @@ public final class Out {
 
     /** A fact, aligned so that a column of them reads down. */
     public static void kv(String key, String value) {
-        out().printf("    %s %s%n", faint(pad(key, 11)), value);
+        out().printf("%s%s %s%n", GUTTER, faint(pad(key, 10)), value);
     }
 
     /** One of several things. */
     public static void item(String text) {
-        out().println("    " + text);
+        out().println(GUTTER + text);
     }
 
     /** Nothing to report, said in a way that does not look like a failure. */
     public static void none(String text) {
-        out().println("    " + faint(text));
+        out().println(GUTTER + faint(text));
     }
 
     /** It worked. */
@@ -189,7 +199,7 @@ public final class Out {
      * {@code oss sync} leaves the reader with a second question.
      */
     public static void hint(String command, String why) {
-        out().printf("    %s   %s%n", cmd(command), faint(why));
+        out().printf("%s%s   %s%n", GUTTER, cmd(command), faint(why));
     }
 
     /** Several of those, aligned to the longest, so the reasons line up. */
@@ -199,7 +209,7 @@ public final class Out {
             width = Math.max(width, p[0].length());
         }
         for (String[] p : pairs) {
-            out().printf("    %s%s   %s%n", cmd(p[0]), " ".repeat(width - p[0].length()), faint(p[1]));
+            out().printf("%s%s%s   %s%n", GUTTER, cmd(p[0]), " ".repeat(width - p[0].length()), faint(p[1]));
         }
     }
 

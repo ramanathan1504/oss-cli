@@ -384,7 +384,6 @@ public class ChatCommand implements Callable<Integer> {
 
     private void banner(
             ChatSession session, Issue target, String modelName, Cloud cloud, List<ChatTurn> turns, Backends backends) {
-        LOGGER.info("==================================================");
         LOGGER.info(" Issue #{} — {}", session.issueNumber(), target.title());
         LOGGER.info(" {} · conversation {}", session.repository(), session.id());
         // Names what is actually answering. "Local: null" would be worse than useless, and a user
@@ -395,7 +394,6 @@ public class ChatCommand implements Callable<Integer> {
             LOGGER.info(" Local: none · answering with: {}", cloud.name());
             LOGGER.info(" Every turn goes to {}. Attach a local model to keep them here.", cloud.name());
         }
-        LOGGER.info("==================================================");
 
         if (!turns.isEmpty()) {
             LOGGER.info("");

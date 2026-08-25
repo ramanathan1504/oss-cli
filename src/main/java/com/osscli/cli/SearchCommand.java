@@ -83,12 +83,24 @@ public class SearchCommand implements Callable<Integer> {
                     return 1;
                 }
             }
-            List<Issue> issues = SqliteStorage.loadIssues(repository);
-            List<Issue> prs = SqliteStorage.loadPullRequests(repository);
-            embeddings = SqliteStorage.loadEmbeddings(repository);
+            // A status line, because this is not instant and used to look like nothing happening:
+            // loading every embedding for a repository is tens of thousands of 384-float rows, and
+            // on a real store it is seconds of silence before the first output.
+            try (com.osscli.ui.Live live = com.osscli.ui.Live.start("reading what this machine knows")) {
+                List<Issue> issues = SqliteStorage.loadIssues(repository);
+                live.step(issues.size() + " issue(s)");
+                List<Issue> prs = SqliteStorage.loadPullRequests(repository);
+                live.step(issues.size() + " issue(s), " + prs.size() + " pull request(s)");
+                embeddings = SqliteStorage.loadEmbeddings(repository);
+                live.step("comparing against " + embeddings.size() + " stored vector(s)");
 
-            issues.forEach(i -> issueMap.put(repository + "_" + i.number(), i));
-            prs.forEach(p -> issueMap.put(repository + "_" + p.number(), p));
+                issues.forEach(i -> issueMap.put(repository + "_" + i.number(), i));
+                prs.forEach(p -> issueMap.put(repository + "_" + p.number(), p));
+                live.done(
+                        embeddings.isEmpty()
+                                ? "nothing indexed yet — searching by text"
+                                : "searching " + embeddings.size() + " by meaning");
+            }
         }
 
         if (embeddings.isEmpty()) {
@@ -158,7 +170,6 @@ public class SearchCommand implements Callable<Integer> {
                 "Top {} Semantic Search Results ({}):",
                 Math.min(limit, results.size()),
                 global ? "all repositories" : repository);
-        LOGGER.info("==========================================================================");
 
         for (int i = 0; i < Math.min(limit, results.size()); i++) {
             SearchResult res = results.get(i);

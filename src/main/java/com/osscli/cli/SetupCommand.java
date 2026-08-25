@@ -75,9 +75,7 @@ public class SetupCommand implements Callable<Integer> {
     }
 
     private Integer wizard(Scanner scanner) throws Exception {
-        LOGGER.info("==================================================");
         LOGGER.info("            oss Interactive Setup Wizard          ");
-        LOGGER.info("==================================================");
 
         // 1. Configure GitHub Username
         String currentUsername = SqliteStorage.loadConfig("github.username");
@@ -316,7 +314,6 @@ public class SetupCommand implements Callable<Integer> {
         // 13. What is on, and what is simply not configured.
         LOGGER.info("\n==================================================");
         LOGGER.info("Configuration successfully updated in local SQLite!");
-        LOGGER.info("==================================================");
         LOGGER.info("Optional, and their state now:");
         LOGGER.info(
                 "  ollama    {}",
