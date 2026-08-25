@@ -42,8 +42,7 @@ import org.junit.jupiter.api.io.TempDir;
 class PackHooksAreDataTest {
 
     /** One pack using every hook that has a declarative form. */
-    private static final String PACK =
-            """
+    private static final String PACK = """
             {
               "name": "demo",
               "description": "every hook, as data",
@@ -151,8 +150,7 @@ class PackHooksAreDataTest {
     @Test
     @DisplayName("a hostile value is still data")
     void valuesCannotEscape(@TempDir Path dir) throws Exception {
-        String hostile =
-                """
+        String hostile = """
                 {
                   "name": "x", "apps": ["a"], "versions": ["1"], "defaultVersion": "1",
                   "minJavaFor": { "a": "8'; touch /tmp/oss-pack-escape; echo '" },
@@ -172,7 +170,8 @@ class PackHooksAreDataTest {
     private String ask(Path dir, String call) throws IOException, InterruptedException {
         if (Files.notExists(dir.resolve("p.sh"))) {
             Files.writeString(dir.resolve("pack.json"), PACK);
-            Files.writeString(dir.resolve("p.sh"), PackFile.find(dir).orElseThrow().toShell());
+            Files.writeString(
+                    dir.resolve("p.sh"), PackFile.find(dir).orElseThrow().toShell());
         }
         return run(dir, call).trim().replace("\n", " ");
     }

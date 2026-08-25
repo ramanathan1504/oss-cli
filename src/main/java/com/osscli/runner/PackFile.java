@@ -386,10 +386,16 @@ public final class PackFile {
                 star = value;
                 continue;
             }
-            out.append("    ").append(glob(key)).append(") printf '%s' ").append(home(value)).append(" ;;\n");
+            out.append("    ")
+                    .append(glob(key))
+                    .append(") printf '%s' ")
+                    .append(home(value))
+                    .append(" ;;\n");
         }
         String last = star != null ? star : fallback;
-        out.append("    *) ").append(last == null ? ":" : "printf '%s' " + home(last)).append(" ;;\n");
+        out.append("    *) ")
+                .append(last == null ? ":" : "printf '%s' " + home(last))
+                .append(" ;;\n");
         out.append("  esac\n}\n");
     }
 
@@ -446,10 +452,17 @@ public final class PackFile {
                         out.append(emit.replace("    ", "  "));
                     }
                 } else if (firstMatchWins) {
-                    out.append(chained ? "  elif " : "  if ").append(test).append("; then\n").append(emit);
+                    out.append(chained ? "  elif " : "  if ")
+                            .append(test)
+                            .append("; then\n")
+                            .append(emit);
                     chained = true;
                 } else {
-                    out.append("  if ").append(test).append("; then\n").append(emit).append("  fi\n");
+                    out.append("  if ")
+                            .append(test)
+                            .append("; then\n")
+                            .append(emit)
+                            .append("  fi\n");
                 }
             }
         }
@@ -464,7 +477,9 @@ public final class PackFile {
                 String test = conditions(rule, args);
                 StringBuilder emit = new StringBuilder();
                 for (String flag : texts(rule.path("args"))) {
-                    emit.append("    printf '%s\\n' ").append(splice(flag, args)).append('\n');
+                    emit.append("    printf '%s\\n' ")
+                            .append(splice(flag, args))
+                            .append('\n');
                 }
                 if (emit.length() == 0) {
                     continue;
@@ -472,7 +487,11 @@ public final class PackFile {
                 if (test == null) {
                     out.append(emit.toString().replace("    ", "  "));
                 } else {
-                    out.append("  if ").append(test).append("; then\n").append(emit).append("  fi\n");
+                    out.append("  if ")
+                            .append(test)
+                            .append("; then\n")
+                            .append(emit)
+                            .append("  fi\n");
                 }
             }
         }
@@ -490,7 +509,9 @@ public final class PackFile {
             String key = keys.next();
             out.append("    ").append(glob(key)).append(")\n");
             for (String flag : texts(node.path(key))) {
-                out.append("      printf '%s\\n' ").append(splice(flag, ARGS_NONE)).append('\n');
+                out.append("      printf '%s\\n' ")
+                        .append(splice(flag, ARGS_NONE))
+                        .append('\n');
             }
             out.append("      ;;\n");
         }
@@ -507,8 +528,7 @@ public final class PackFile {
             // quoted, because quoting it is what stops it being an expansion at all.
             String env = node.path("env").asText("");
             if (!env.isEmpty() && !ENV_NAME.matcher(env).matches()) {
-                throw new IllegalArgumentException(
-                        fn + ": \"" + env + "\" is not a usable environment variable name");
+                throw new IllegalArgumentException(fn + ": \"" + env + "\" is not a usable environment variable name");
             }
             String fallbackValue = node.path("default").asText("");
             if (env.isEmpty()) {
@@ -540,15 +560,18 @@ public final class PackFile {
         for (java.util.Map.Entry<String, String> token : new java.util.TreeMap<>(args).entrySet()) {
             String field = token.getKey().substring(1, token.getKey().length() - 1);
             if (rule.hasNonNull(field)) {
-                tests.add("[[ \"" + token.getValue() + "\" == " + glob(rule.path(field).asText()) + " ]]");
+                tests.add("[[ \"" + token.getValue() + "\" == "
+                        + glob(rule.path(field).asText()) + " ]]");
             }
             String not = field + "Not";
             if (rule.hasNonNull(not)) {
-                tests.add("[[ \"" + token.getValue() + "\" != " + glob(rule.path(not).asText()) + " ]]");
+                tests.add("[[ \"" + token.getValue() + "\" != "
+                        + glob(rule.path(not).asText()) + " ]]");
             }
         }
         if (rule.hasNonNull("javaBelow") && args.containsKey("{java}")) {
-            tests.add("[[ \"" + args.get("{java}") + "\" -lt " + rule.path("javaBelow").asInt() + " ]]");
+            tests.add("[[ \"" + args.get("{java}") + "\" -lt "
+                    + rule.path("javaBelow").asInt() + " ]]");
         }
         // The one list a rule may ask about by name. Written out as a loop rather than as a
         // second copy of the list, so a pack that edits APPS_2X_ONLY does not have to
