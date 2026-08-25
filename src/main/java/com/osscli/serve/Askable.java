@@ -54,6 +54,14 @@ public final class Askable {
      *
      * <p>Named rather than inferred: a list of verbs is something a reader can check, where "does
      * this write" inferred from a name is a guess that gets one wrong eventually.
+     *
+     * <p>Naming them costs something, though, and for a while it was being paid in the wrong
+     * direction: a verb left off this list was silently treated as harmless, so the guard's
+     * strength depended on someone remembering. {@code bug} posts a GitHub issue and was not here.
+     * Nothing on the page asked it, so nothing was wrong yet -- but a button that did would have
+     * passed the test written to forbid exactly that. {@link #READS} closes it: between the two
+     * lists every verb the program has must be classified, and a new one fails the build until
+     * somebody says which it is.
      */
     public static final List<String> WRITES = List.of(
             "sync",
@@ -73,7 +81,48 @@ public final class Askable {
             // directory. Writing locally is still writing, and a button that writes must not look
             // like one that only reads.
             "report",
-            "backlog");
+            "backlog",
+            // Found by the classification check rather than by reading, which is the point of it.
+            "bug", // posts a GitHub issue -- the one outward write on this list
+            "chat", // opens and keeps a conversation session
+            "model", // --fetch downloads the local model and stores it
+            "prompt", // records prompt history, and --out writes a file
+            "skill"); // writes skill files into the skills directory
+
+    /**
+     * Commands that only read. Everything the program has is on this list or on {@link #WRITES}.
+     *
+     * <p>This exists so that adding a command forces the question to be answered. It is not
+     * consulted at runtime and grants nothing: a verb here is still only askable if it appears in
+     * the table above, which remains the allow-list.
+     */
+    public static final List<String> READS = List.of(
+            "analyze",
+            "ask",
+            "claude",
+            "codex",
+            "critical",
+            "doctor",
+            "duplicates",
+            "followup",
+            "gemini",
+            "guide",
+            "hidden-critical",
+            "history",
+            "hub",
+            "inspect",
+            "issue",
+            "junie",
+            "llm",
+            "onboard",
+            "pick",
+            "pr",
+            "profile",
+            "prs",
+            "review",
+            "search",
+            "trend",
+            "triage");
 
     private static final Map<String, Question> TABLE = table();
 
