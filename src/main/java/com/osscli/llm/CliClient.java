@@ -215,11 +215,70 @@ public final class CliClient {
             // "claude" when the file is "claude.cmd".
             cmd.set(0, binary == null ? spec.binary() : binary.toString());
             Process p = new ProcessBuilder(cmd).redirectErrorStream(false).start();
-            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-            String err = new String(p.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
-            if (!p.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
-                p.destroyForcibly();
-                throw new ApiFailure.Permanent(0, spec.binary() + " did not answer within " + timeoutSeconds + "s");
+
+            // Both pipes drained at once, on their own threads.
+            //
+            // This read stdout to the end and only then started on stderr, which is a deadlock
+            // waiting for a talkative tool: the child blocks writing to a full stderr buffer, the
+            // parent blocks reading a stdout that will never close, and neither moves again. It
+            // survived because the tools here are quiet on stderr, which is not a guarantee.
+            java.util.concurrent.ExecutorService pipes = java.util.concurrent.Executors.newFixedThreadPool(2);
+            // stdout is read in chunks rather than in one call, so the bytes arriving can be
+            // counted while they arrive. A spinner says "something is happening"; a byte count
+            // that climbs says "the answer is being written", which is the difference between
+            // waiting and wondering.
+            java.util.concurrent.atomic.AtomicLong received = new java.util.concurrent.atomic.AtomicLong();
+            java.util.concurrent.Future<String> stdout = pipes.submit(() -> {
+                StringBuilder sb = new StringBuilder();
+                byte[] buf = new byte[8192];
+                try (java.io.InputStream in = p.getInputStream()) {
+                    int n;
+                    while ((n = in.read(buf)) != -1) {
+                        sb.append(new String(buf, 0, n, StandardCharsets.UTF_8));
+                        received.addAndGet(n);
+                    }
+                }
+                return sb.toString();
+            });
+            java.util.concurrent.Future<String> stderr =
+                    pipes.submit(() -> new String(p.getErrorStream().readAllBytes(), StandardCharsets.UTF_8));
+            pipes.shutdown();
+
+            // And something on screen while it thinks.
+            //
+            // The command printed every fact it had, said it was handing the diff to `claude`, and
+            // then showed nothing at all for as long as the model took -- minutes, on a
+            // twenty-two file change. A terminal that has printed a promise and gone quiet is
+            // indistinguishable from one that has hung, and the reader has no way to tell whether
+            // to wait or to press ctrl-c.
+            String out;
+            String err;
+            try (com.osscli.ui.Live live =
+                    com.osscli.ui.Live.start("asking " + spec.binary() + " — " + prompt.length() + " characters")) {
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
+                boolean finished = false;
+                while (System.nanoTime() < deadline) {
+                    if (p.waitFor(500, TimeUnit.MILLISECONDS)) {
+                        finished = true;
+                        break;
+                    }
+                    // Live carries the elapsed time and its own quip; this is what it is doing.
+                    long got = received.get();
+                    live.step(
+                            got == 0
+                                    ? spec.binary() + " is reading the diff"
+                                    : spec.binary() + " is answering — " + (got / 1024) + " KB so far");
+                }
+                if (!finished) {
+                    p.destroyForcibly();
+                    live.fail("no answer within " + timeoutSeconds + "s");
+                    throw new ApiFailure.Permanent(0, spec.binary() + " did not answer within " + timeoutSeconds + "s");
+                }
+                out = stdout.get();
+                err = stderr.get();
+                live.done(spec.binary() + " answered");
+            } catch (java.util.concurrent.ExecutionException e) {
+                throw new IOException(spec.binary() + " could not be read: " + e.getMessage(), e);
             }
             if (p.exitValue() != 0) {
                 throw new ApiFailure.Permanent(
@@ -239,7 +298,30 @@ public final class CliClient {
     /** The answer out of whatever envelope the tool wraps it in. */
     String extract(String stdout, Path lastMessage) throws IOException {
         if (spec.engine() == Ai.Engine.CLAUDE) {
-            JsonNode node = MAPPER.readTree(stdout);
+            // Not readTree straight onto whatever came back.
+            //
+            // The tool is asked for JSON and normally sends it, but "normally" is doing real work
+            // there: a version that changes its envelope, a wrapper script on PATH, a login prompt
+            // written to stdout, or a shell that echoed something first, all arrive here as text
+            // that is not JSON. Jackson's own message for that is
+            //
+            //     Unrecognized token 'This': was expecting (JSON String, Number, Array, ...)
+            //     at [Source: REDACTED ...]
+            //
+            // printed with a stack trace, which tells the person nothing they can act on and looks
+            // like oss crashed rather than like the tool answered oddly. Found by pointing this at
+            // a stand-in binary that emitted plain text -- which is exactly what a wrapper does.
+            JsonNode node;
+            try {
+                node = MAPPER.readTree(stdout);
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                throw new ApiFailure.Permanent(
+                        0,
+                        spec.binary() + " did not answer in the JSON it was asked for. It began: \""
+                                + shorten(firstMeaningfulLine(stdout))
+                                + "\" — if something on your PATH wraps "
+                                + spec.binary() + ", oss cannot read through it; drop --cli to use the API.");
+            }
             // is_error is the tool reporting a failure in a process that exited 0, which is exactly
             // the shape that gets mistaken for an answer.
             if (node.path("is_error").asBoolean(false)) {
@@ -255,6 +337,19 @@ public final class CliClient {
             }
         }
         return stdout;
+    }
+
+    /**
+     * Enough of a line to recognise it by.
+     *
+     * <p>The whole line was printed first, and a tool that answers with two thousand characters of
+     * prose put two thousand characters into an error message — burying the sentence that says
+     * what to do underneath the thing that went wrong. The first eighty are what somebody needs to
+     * tell "a login prompt" from "a wrapper script" from "a different JSON shape".
+     */
+    private static String shorten(String line) {
+        String flat = line.strip();
+        return flat.length() <= 80 ? flat : flat.substring(0, 77) + "...";
     }
 
     private static String firstMeaningfulLine(String text) {

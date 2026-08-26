@@ -99,6 +99,38 @@ class OutputIsDesignedTest {
     }
 
     @Test
+    @DisplayName("no model is asked without saying so on screen")
+    void waitingOnAModelIsNeverSilent() throws IOException {
+        // The worst silence in the tool, because it is the longest. `oss claude review` printed
+        // every fact it had, said it was handing the diff over, and then showed nothing for as
+        // long as the model took -- measured at four and a half minutes on a twenty-two file
+        // change, with the child process alive and working the whole time. A terminal that has
+        // printed a promise and gone quiet cannot be told apart from one that has hung, and the
+        // reader has no way to know whether to wait or press ctrl-c.
+        List<String> silent = new ArrayList<>();
+        for (Path file : javaFiles()) {
+            String name = file.getFileName().toString();
+            // Only the model clients. GitHubClient also blocks on the network, and is deliberately
+            // exempt: it makes hundreds of short requests where one call is milliseconds, so a
+            // status line per request would flicker rather than inform -- and every command that
+            // uses it already opens its own Live around the whole fetch. The rule here is about a
+            // SINGLE call that blocks for minutes, which is only ever a model.
+            if (!name.endsWith("Client.java") || !file.toString().contains("/llm/")) {
+                continue;
+            }
+            String text = Files.readString(file);
+            boolean waits = text.contains("httpClient.send(") || text.contains("waitFor(");
+            if (waits && !text.contains("Live.start")) {
+                silent.add(name);
+            }
+        }
+        assertTrue(
+                silent.isEmpty(),
+                "these wait on a model with nothing on screen, which is indistinguishable from a "
+                        + "hang -- wrap the call in Live.start: " + silent);
+    }
+
+    @Test
     @DisplayName("the status line still carries what it is doing, and a quip")
     void progressSaysSomething() throws IOException {
         String live = Files.readString(SOURCE.resolve("ui/Live.java"));

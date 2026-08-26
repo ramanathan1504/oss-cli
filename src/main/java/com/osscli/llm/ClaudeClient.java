@@ -73,12 +73,15 @@ public class ClaudeClient {
         IOException lastException = null;
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
-                LOGGER.info(
-                        "Sending request to Anthropic Claude (Model: {}, attempt {}/{})...",
-                        model,
-                        attempt,
-                        MAX_RETRIES);
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                HttpResponse<String> response;
+                try (com.osscli.ui.Live live = com.osscli.ui.Live.start("asking Anthropic Claude (" + model + ")"
+                        + (attempt > 1 ? " — attempt " + attempt + " of " + MAX_RETRIES : ""))) {
+                    // The wait is the whole command as far as the reader is concerned: a log line
+                    // saying "sending" and then silence for a minute is indistinguishable from a
+                    // hang. Live carries elapsed time, so it can be judged rather than guessed at.
+                    response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                    live.done("answered");
+                }
 
                 // 429 = rate limit, 529 = API overloaded — both are retryable
                 if (response.statusCode() == 429 || response.statusCode() == 529) {

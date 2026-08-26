@@ -254,8 +254,12 @@ retrieval/   Corpus, ContextRetriever, TextIndex, the in-process embedder
 model/       records, plus References and Tier (pure, tested)
 storage/     SQLite and the migration chain
 llm/         Ollama and cloud clients — generation only, never embedding
-ui/          Live: the status line for anything slower than a second
+ui/          Out: the ONE way this program says anything. Before it there were
+             1,019 print sites and twenty-three separator strings
+             Live: the status line for anything slower than a second
              Picker: the keyboard list, with a numbered fallback that always works
+             Prompt: a typed line, via JLine — editing, history, completion
+             CommandGroups: the fifteen, by what you are trying to do
 bug/         `oss bug`: the only outward write there is, and the redaction before it
 ext/         extensions, attached by path
 runner/      the matrix engine; a pack supplies what to run
@@ -264,9 +268,34 @@ runner/      the matrix engine; a pack supplies what to run
 Embedding runs **in this process** via ONNX. It is not one of the providers in
 `llm/`.
 
+### Printing
+
+Everything a command shows goes through `Out`. Not `System.out.println`, not
+`LOGGER.info` — those are for logs, and using a logger as a display layer is how
+one program came to have equals-sign rules at five different widths.
+
+Two rules the tests enforce rather than trust:
+
+- **No command draws its own rule.** `Out.title` and `Out.section` are the only
+  headings. `OutputIsDesignedTest` fails on a fresh one.
+- **Nothing that takes seconds is silent.** Reading the corpus, or asking any
+  model, opens a `Live`. Eleven commands read every issue in the store with
+  nothing on screen, which is indistinguishable from a hang — and `oss claude
+  review` sat for four and a half minutes with the child process alive and
+  working the whole time.
+
+Colour is an offer: withheld when stdout is not a terminal, under `NO_COLOR`,
+and when `TERM` is `dumb`. **Set-but-empty is not set** — reading
+`CLICOLOR_FORCE=` as "force" put fifty-eight escape sequences into a pipe for
+the one person careful enough to type `NO_COLOR=1 CLICOLOR_FORCE=`.
+
+And pad before painting. An escape code has width zero on screen and plenty of
+width to `printf`, so `%-9s` on a coloured string pads to nine characters of
+which five are invisible.
+
 ## Database
 
-`CURRENT_SCHEMA_VERSION` in `DatabaseManager` (15). A fresh database runs the real
+`CURRENT_SCHEMA_VERSION` in `DatabaseManager` (17). A fresh database runs the real
 migrations rather than being stamped at the current version — it used to be
 stamped, drifted, and shipped new installs missing three tables. `SchemaTest`
 names every expected table in a list so adding one without updating it fails.

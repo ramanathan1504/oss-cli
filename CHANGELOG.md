@@ -1,5 +1,41 @@
 # Changelog
 
+## 4.8.0
+
+_2026-08-26_
+
+- Nothing waits in silence any more (#213, and the four commits after it)
+
+  Every command that reads the whole store, and every call to a model, now says
+  what it is doing and how long it has been. `oss claude review` on a large pull
+  request used to print its facts and then show nothing for minutes while the
+  model worked -- measured at four and a half with the process alive throughout,
+  which cannot be told apart from a hang. The CLI path counts the answer as it
+  arrives, because "10 KB so far" is worth watching and a spinner is not.
+
+- The prompt at `oss ask` is a real one
+
+  Arrow keys, ctrl-a, history across sessions, and tab completion that offers
+  the choices when more than one matches. It was a raw read before, where the up
+  arrow printed an escape sequence into the middle of the question being typed.
+
+- Output is designed rather than accumulated
+
+  One layer for everything a command prints, in the site's palette: brass for
+  what you type, teal for a good outcome, rust for a bad one. A review's file
+  churn, CI results and APPROVED/CHANGES_REQUESTED are coloured, because a
+  column of forty identical grey lines is read rather than scanned. `NO_COLOR`
+  turns it off, and it is off automatically when the output is not a terminal.
+
+- A model that answers oddly no longer looks like a crash
+
+  `oss claude --cli` printed a Jackson stack trace when the tool returned
+  anything that was not the JSON it asks for -- a wrapper script on PATH, a
+  login prompt, a changed envelope. It now says what came back and what to do.
+  Reading the two pipes one after the other, which could deadlock against a tool
+  that says much on stderr, is fixed at the same time.
+
+
 ## 4.7.0
 
 _2026-08-25_
