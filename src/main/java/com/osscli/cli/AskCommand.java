@@ -194,25 +194,30 @@ public class AskCommand implements Callable<Integer> {
             // One rung, one workspace, one session, many questions. Everything below the prompt is
             // the same code the single-shot path runs -- a second implementation of "ask, look,
             // answer" is exactly the kind of drift this repository keeps paying for.
-            System.out.println("  Ask anything about this project. Blank line or ctrl-d to leave.");
-            System.out.println();
-            while (true) {
-                String line = System.console().readLine("  › ");
-                if (line == null || line.isBlank() || line.strip().matches("exit|quit|:q")) {
-                    System.out.println();
-                    System.out.println("  kept — oss ask --resume picks this up.");
-                    return 0;
+            Out.none("Ask anything about this project. Blank line or ctrl-d to leave.");
+            Out.gap();
+            // Through Prompt, so the arrow keys, ctrl-a and the history somebody expects all work.
+            // This was System.console().readLine(), where the up arrow printed ^[[A into the middle
+            // of the question being typed.
+            try (com.osscli.ui.Prompt prompt = com.osscli.ui.Prompt.open(com.osscli.ui.CommandGroups.all())) {
+                while (true) {
+                    String line = prompt.line("  › ");
+                    if (line == null || line.isBlank() || line.strip().matches("exit|quit|:q")) {
+                        System.out.println();
+                        System.out.println("  kept — oss ask --resume picks this up.");
+                        return 0;
+                    }
+                    Loop.Transcript turn = turn(loop, chosen, line.strip(), carried.toString());
+                    if (turn == null) {
+                        continue;
+                    }
+                    remember(session, line.strip(), turn.answer());
+                    carried.append("\n> you asked earlier:\n")
+                            .append(line.strip())
+                            .append("\n> you answered:\n")
+                            .append(turn.answer())
+                            .append('\n');
                 }
-                Loop.Transcript turn = turn(loop, chosen, line.strip(), carried.toString());
-                if (turn == null) {
-                    continue;
-                }
-                remember(session, line.strip(), turn.answer());
-                carried.append("\n> you asked earlier:\n")
-                        .append(line.strip())
-                        .append("\n> you answered:\n")
-                        .append(turn.answer())
-                        .append('\n');
             }
         }
 

@@ -215,11 +215,70 @@ public final class CliClient {
             // "claude" when the file is "claude.cmd".
             cmd.set(0, binary == null ? spec.binary() : binary.toString());
             Process p = new ProcessBuilder(cmd).redirectErrorStream(false).start();
-            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-            String err = new String(p.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
-            if (!p.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
-                p.destroyForcibly();
-                throw new ApiFailure.Permanent(0, spec.binary() + " did not answer within " + timeoutSeconds + "s");
+
+            // Both pipes drained at once, on their own threads.
+            //
+            // This read stdout to the end and only then started on stderr, which is a deadlock
+            // waiting for a talkative tool: the child blocks writing to a full stderr buffer, the
+            // parent blocks reading a stdout that will never close, and neither moves again. It
+            // survived because the tools here are quiet on stderr, which is not a guarantee.
+            java.util.concurrent.ExecutorService pipes = java.util.concurrent.Executors.newFixedThreadPool(2);
+            // stdout is read in chunks rather than in one call, so the bytes arriving can be
+            // counted while they arrive. A spinner says "something is happening"; a byte count
+            // that climbs says "the answer is being written", which is the difference between
+            // waiting and wondering.
+            java.util.concurrent.atomic.AtomicLong received = new java.util.concurrent.atomic.AtomicLong();
+            java.util.concurrent.Future<String> stdout = pipes.submit(() -> {
+                StringBuilder sb = new StringBuilder();
+                byte[] buf = new byte[8192];
+                try (java.io.InputStream in = p.getInputStream()) {
+                    int n;
+                    while ((n = in.read(buf)) != -1) {
+                        sb.append(new String(buf, 0, n, StandardCharsets.UTF_8));
+                        received.addAndGet(n);
+                    }
+                }
+                return sb.toString();
+            });
+            java.util.concurrent.Future<String> stderr =
+                    pipes.submit(() -> new String(p.getErrorStream().readAllBytes(), StandardCharsets.UTF_8));
+            pipes.shutdown();
+
+            // And something on screen while it thinks.
+            //
+            // The command printed every fact it had, said it was handing the diff to `claude`, and
+            // then showed nothing at all for as long as the model took -- minutes, on a
+            // twenty-two file change. A terminal that has printed a promise and gone quiet is
+            // indistinguishable from one that has hung, and the reader has no way to tell whether
+            // to wait or to press ctrl-c.
+            String out;
+            String err;
+            try (com.osscli.ui.Live live =
+                    com.osscli.ui.Live.start("asking " + spec.binary() + " — " + prompt.length() + " characters")) {
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
+                boolean finished = false;
+                while (System.nanoTime() < deadline) {
+                    if (p.waitFor(500, TimeUnit.MILLISECONDS)) {
+                        finished = true;
+                        break;
+                    }
+                    // Live carries the elapsed time and its own quip; this is what it is doing.
+                    long got = received.get();
+                    live.step(
+                            got == 0
+                                    ? spec.binary() + " is reading the diff"
+                                    : spec.binary() + " is answering — " + (got / 1024) + " KB so far");
+                }
+                if (!finished) {
+                    p.destroyForcibly();
+                    live.fail("no answer within " + timeoutSeconds + "s");
+                    throw new ApiFailure.Permanent(0, spec.binary() + " did not answer within " + timeoutSeconds + "s");
+                }
+                out = stdout.get();
+                err = stderr.get();
+                live.done(spec.binary() + " answered");
+            } catch (java.util.concurrent.ExecutionException e) {
+                throw new IOException(spec.binary() + " could not be read: " + e.getMessage(), e);
             }
             if (p.exitValue() != 0) {
                 throw new ApiFailure.Permanent(

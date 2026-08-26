@@ -72,8 +72,12 @@ public class OpenAiClient {
         IOException lastException = null;
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
-                LOGGER.info("Sending request to OpenAI (Model: {}, attempt {}/{})...", model, attempt, MAX_RETRIES);
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                HttpResponse<String> response;
+                try (com.osscli.ui.Live live = com.osscli.ui.Live.start("asking OpenAI (" + model + ")"
+                        + (attempt > 1 ? " — attempt " + attempt + " of " + MAX_RETRIES : ""))) {
+                    response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                    live.done("answered");
+                }
 
                 if (response.statusCode() == 429) {
                     long waitSeconds = retryAfterSeconds(response, attempt);

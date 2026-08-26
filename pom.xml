@@ -27,6 +27,25 @@
     </properties>
 
     <dependencies>
+        <!--
+          Line editing, history and completion for the prompts this tool actually stops at.
+
+          `oss ask` read its line with System.console().readLine(), which is a raw read: no arrow
+          keys, no history, no ctrl-a, no completion. Typing a long question and spotting a typo in
+          the third word meant retyping the whole question. JLine solves exactly that and little
+          else, which is why it is here and Lanterna is not: a windowing toolkit would be a second
+          user interface competing with the page on localhost:1504, and this repository has already
+          been bitten three times by two implementations of one thing.
+
+          JLine also carries its own terminal handling, including turning on virtual terminal
+          processing on Windows, so it covers what Jansi would have been added for.
+        -->
+        <dependency>
+            <groupId>org.jline</groupId>
+            <artifactId>jline</artifactId>
+            <version>3.30.4</version>
+        </dependency>
+
         <dependency>
             <groupId>info.picocli</groupId>
             <artifactId>picocli</artifactId>

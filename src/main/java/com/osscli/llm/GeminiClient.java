@@ -91,7 +91,12 @@ public class GeminiClient {
                         model,
                         attempt,
                         MAX_RETRIES);
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                HttpResponse<String> response;
+                try (com.osscli.ui.Live live = com.osscli.ui.Live.start("asking Google Gemini (" + model + ")"
+                        + (attempt > 1 ? " — attempt " + attempt + " of " + MAX_RETRIES : ""))) {
+                    response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                    live.done("answered");
+                }
 
                 if (response.statusCode() == 429) {
                     long retryAfterSeconds = parseRetryAfter(response.body());

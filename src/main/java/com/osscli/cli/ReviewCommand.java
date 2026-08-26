@@ -484,14 +484,14 @@ public class ReviewCommand implements Callable<Integer> {
             JsonNode node = MAPPER.readTree(extractJson(raw));
             String answeredBy = useCloud ? provider : model;
 
-            LOGGER.info("");
             // "confidence 80%" is the model scoring itself, and a small one scores itself high on
-            // an answer that found nothing. Printed bare it reads as a measurement somebody took.
-            LOGGER.info(
-                    "── Verdict ({}, {} confidence claimed) ──",
-                    answeredBy,
-                    String.format("%.0f%%", node.path("confidence").asDouble(0.5) * 100));
-            LOGGER.info("  {}", node.path("summary").asText(""));
+            // an answer that found nothing. Dimmed and labelled "claimed" so it reads as the model's
+            // own opinion of itself rather than a measurement somebody took.
+            // section() already dims the whole heading, so painting part of it again just nests
+            // two escape codes to the same effect.
+            Out.section("verdict — " + answeredBy + " · "
+                    + String.format("%.0f%%", node.path("confidence").asDouble(0.5) * 100) + " confidence claimed");
+            Out.item(node.path("summary").asText(""));
 
             List<String> rawConcerns = new ArrayList<>();
             for (JsonNode c : node.path("concerns")) {
@@ -636,10 +636,9 @@ public class ReviewCommand implements Callable<Integer> {
         if (items.isEmpty()) {
             return;
         }
-        LOGGER.info("");
-        LOGGER.info("  {}:", heading);
+        Out.section(heading);
         for (String item : items) {
-            LOGGER.info("    • {}", item);
+            finding(item);
         }
     }
 
@@ -647,10 +646,30 @@ public class ReviewCommand implements Callable<Integer> {
         if (!array.isArray() || array.isEmpty()) {
             return;
         }
-        LOGGER.info("");
-        LOGGER.info("  {}:", heading);
+        Out.section(heading);
         for (JsonNode item : array) {
-            LOGGER.info("    • {}", item.asText(""));
+            finding(item.asText(""));
+        }
+    }
+
+    /**
+     * One finding, with the file it is about made findable.
+     *
+     * <p>Every concern opens with the path it concerns and then an em-dash, and printed in one
+     * weight the whole block is a wall: seven paragraphs of equal grey, where the first job of the
+     * reader is to work out which file each one is even talking about. The path is what they scan
+     * for, so the path is what carries the colour.
+     *
+     * <p>Only the leading path. A path mentioned mid-sentence is prose, and colouring those turns
+     * the paragraph into a christmas tree -- which is the same wall by another route.
+     */
+    private void finding(String text) {
+        int dash = text.indexOf(" — ");
+        if (dash > 0 && dash < 160 && text.substring(0, dash).matches("[^ ]+(\\.[a-z]+)?( and [^ ]+)*")) {
+            Out.item(Out.cmd(text.substring(0, dash)));
+            Out.item("  " + text.substring(dash + 3));
+        } else {
+            Out.item(text);
         }
     }
 

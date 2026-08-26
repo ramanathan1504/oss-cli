@@ -169,7 +169,13 @@ public class OllamaClient {
 
         try {
             LOGGER.debug("Sending JSON payload to Ollama: {}", jsonPayload);
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            // The local model is the slowest rung on a laptop, not the fastest: it is the one
+            // that runs on your own CPU rather than somebody's datacentre.
+            HttpResponse<String> response;
+            try (com.osscli.ui.Live live = com.osscli.ui.Live.start("asking the local model")) {
+                response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                live.done("answered");
+            }
 
             if (response.statusCode() != 200) {
                 LOGGER.error("Ollama API failed with status code {}: {}", response.statusCode(), response.body());
