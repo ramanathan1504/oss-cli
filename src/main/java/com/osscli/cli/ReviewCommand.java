@@ -723,8 +723,14 @@ public class ReviewCommand implements Callable<Integer> {
                 ev.author(),
                 ev.state(),
                 ev.baseRef(),
-                PrEvidenceFetcher.shortSha(ev.headSha()));
-        LOGGER.info("  {} file(s), +{} −{}", ev.changedFiles(), ev.additions(), ev.deletions());
+                Out.cmd(PrEvidenceFetcher.shortSha(ev.headSha())));
+        // Additions green, deletions rust. It is the one line that says how big this is, and a
+        // reader takes the size in before anything else on the page.
+        LOGGER.info(
+                "  {} file(s), {} {}",
+                ev.changedFiles(),
+                Out.good("+" + ev.additions()),
+                Out.bad("−" + ev.deletions()));
 
         printCommits(ev);
         printFiles(ev);
@@ -743,7 +749,10 @@ public class ReviewCommand implements Callable<Integer> {
             JsonNode node = MAPPER.valueToTree(c);
             String message = node.path("commit").path("message").asText("");
             String subject = message.contains("\n") ? message.substring(0, message.indexOf('\n')) : message;
-            LOGGER.info("  {}  {}", PrEvidenceFetcher.shortSha(node.path("sha").asText(null)), subject);
+            LOGGER.info(
+                    "  {}  {}",
+                    Out.cmd(PrEvidenceFetcher.shortSha(node.path("sha").asText(null))),
+                    subject);
         }
     }
 
@@ -764,14 +773,11 @@ public class ReviewCommand implements Callable<Integer> {
             int slash = path.indexOf('/');
             String area = slash > 0 ? path.substring(0, slash) : "(root)";
             byArea.computeIfAbsent(area, k -> new ArrayList<>())
-                    .add(String.format(
-                            "%s (+%d −%d)",
-                            path,
-                            node.path("additions").asInt(0),
-                            node.path("deletions").asInt(0)));
+                    .add(path + "  " + Out.good("+" + node.path("additions").asInt(0)) + " "
+                            + Out.bad("−" + node.path("deletions").asInt(0)));
         }
         byArea.forEach((area, paths) -> {
-            LOGGER.info("  {}/", area);
+            LOGGER.info("  {}", Out.faint(area + "/"));
             paths.forEach(p -> LOGGER.info("    {}", p));
         });
     }
@@ -780,7 +786,7 @@ public class ReviewCommand implements Callable<Integer> {
         if (ev.checksJson() == null || ev.checksJson().isBlank()) {
             LOGGER.info("");
             Out.section("ci");
-            LOGGER.info("  no check runs reported for this commit");
+            Out.none("no check runs reported for this commit");
             return;
         }
         JsonNode root = MAPPER.readTree(ev.checksJson());
@@ -788,7 +794,7 @@ public class ReviewCommand implements Callable<Integer> {
         if (!runs.isArray() || runs.isEmpty()) {
             LOGGER.info("");
             Out.section("ci");
-            LOGGER.info("  no check runs reported for this commit");
+            Out.none("no check runs reported for this commit");
             return;
         }
 
@@ -796,14 +802,17 @@ public class ReviewCommand implements Callable<Integer> {
         Out.section("ci (" + runs.size() + ")");
         for (JsonNode run : runs) {
             String conclusion = run.path("conclusion").asText("pending");
+            // Green passed, rust failed, dim neither. A column of CI results is read by scanning
+            // for the one that is not green, and in a single weight that is reading rather than
+            // scanning -- on a big pull request it is forty lines of identical grey.
             String marker =
                     switch (conclusion) {
-                        case "success" -> "✔";
-                        case "failure", "timed_out", "cancelled" -> "✖";
-                        case "neutral", "skipped" -> "–";
-                        default -> "…";
+                        case "success" -> Out.good("✔");
+                        case "failure", "timed_out", "cancelled" -> Out.bad("✖");
+                        case "neutral", "skipped" -> Out.faint("–");
+                        default -> Out.faint("…");
                     };
-            LOGGER.info("  {} {}  {}", marker, run.path("name").asText(""), conclusion);
+            LOGGER.info("  {} {}  {}", marker, run.path("name").asText(""), Out.faint(conclusion));
         }
     }
 
@@ -819,7 +828,15 @@ public class ReviewCommand implements Callable<Integer> {
             JsonNode node = MAPPER.valueToTree(r);
             String state = node.path("state").asText("");
             if (!state.isBlank()) {
-                LOGGER.info("    {} — {}", node.path("user").path("login").asText("?"), state);
+                // CHANGES_REQUESTED is the one that decides whether this pull request is waiting on
+                // its author or on you, and it was the same grey as everything around it.
+                String shown =
+                        switch (state) {
+                            case "APPROVED" -> Out.good(state);
+                            case "CHANGES_REQUESTED" -> Out.bad(state);
+                            default -> Out.faint(state);
+                        };
+                LOGGER.info("    {} — {}", node.path("user").path("login").asText("?"), shown);
             }
         }
     }

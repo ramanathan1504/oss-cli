@@ -298,7 +298,30 @@ public final class CliClient {
     /** The answer out of whatever envelope the tool wraps it in. */
     String extract(String stdout, Path lastMessage) throws IOException {
         if (spec.engine() == Ai.Engine.CLAUDE) {
-            JsonNode node = MAPPER.readTree(stdout);
+            // Not readTree straight onto whatever came back.
+            //
+            // The tool is asked for JSON and normally sends it, but "normally" is doing real work
+            // there: a version that changes its envelope, a wrapper script on PATH, a login prompt
+            // written to stdout, or a shell that echoed something first, all arrive here as text
+            // that is not JSON. Jackson's own message for that is
+            //
+            //     Unrecognized token 'This': was expecting (JSON String, Number, Array, ...)
+            //     at [Source: REDACTED ...]
+            //
+            // printed with a stack trace, which tells the person nothing they can act on and looks
+            // like oss crashed rather than like the tool answered oddly. Found by pointing this at
+            // a stand-in binary that emitted plain text -- which is exactly what a wrapper does.
+            JsonNode node;
+            try {
+                node = MAPPER.readTree(stdout);
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                throw new ApiFailure.Permanent(
+                        0,
+                        spec.binary() + " did not answer in the JSON it was asked for. It began: \""
+                                + shorten(firstMeaningfulLine(stdout))
+                                + "\" — if something on your PATH wraps "
+                                + spec.binary() + ", oss cannot read through it; drop --cli to use the API.");
+            }
             // is_error is the tool reporting a failure in a process that exited 0, which is exactly
             // the shape that gets mistaken for an answer.
             if (node.path("is_error").asBoolean(false)) {
@@ -314,6 +337,19 @@ public final class CliClient {
             }
         }
         return stdout;
+    }
+
+    /**
+     * Enough of a line to recognise it by.
+     *
+     * <p>The whole line was printed first, and a tool that answers with two thousand characters of
+     * prose put two thousand characters into an error message — burying the sentence that says
+     * what to do underneath the thing that went wrong. The first eighty are what somebody needs to
+     * tell "a login prompt" from "a wrapper script" from "a different JSON shape".
+     */
+    private static String shorten(String line) {
+        String flat = line.strip();
+        return flat.length() <= 80 ? flat : flat.substring(0, 77) + "...";
     }
 
     private static String firstMeaningfulLine(String text) {
