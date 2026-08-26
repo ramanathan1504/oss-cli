@@ -83,7 +83,11 @@ public final class Prompt implements AutoCloseable {
             // again, gets nothing again, and concludes completion is broken -- when it was working
             // and simply declining to guess between three.
             reader.setOpt(LineReader.Option.AUTO_LIST);
-            reader.setOpt(LineReader.Option.LIST_AMBIGUOUS);
+            // NOT LIST_AMBIGUOUS. It reads like "list the ambiguous ones" and means the opposite:
+            // hold the list back until a second tab. Setting it alongside AUTO_LIST cancelled the
+            // thing AUTO_LIST was set to do, so the first tab stayed silent -- the exact behaviour
+            // being fixed, reintroduced by the option named after it.
+            reader.setOpt(LineReader.Option.AUTO_MENU_LIST);
             // A completed command is a whole word, so the next thing typed is a new one.
             reader.unsetOpt(LineReader.Option.INSERT_TAB);
             return new Prompt(terminal, reader, null);
