@@ -75,6 +75,17 @@ public final class Prompt implements AutoCloseable {
                     .completer(new StringsCompleter(completions))
                     .variable(LineReader.HISTORY_FILE, HISTORY)
                     .build();
+            // Show the options on the FIRST tab, not the second.
+            //
+            // By default an ambiguous prefix does nothing visible: `se` with search, serve and
+            // setup behind it left the line exactly as typed and printed nothing, which is the
+            // same silence as a prompt that has stopped responding. A person then presses tab
+            // again, gets nothing again, and concludes completion is broken -- when it was working
+            // and simply declining to guess between three.
+            reader.setOpt(LineReader.Option.AUTO_LIST);
+            reader.setOpt(LineReader.Option.LIST_AMBIGUOUS);
+            // A completed command is a whole word, so the next thing typed is a new one.
+            reader.unsetOpt(LineReader.Option.INSERT_TAB);
             return new Prompt(terminal, reader, null);
         } catch (IOException | RuntimeException e) {
             // No terminal, or one JLine will not drive. Reading stdin still works, and a prompt
