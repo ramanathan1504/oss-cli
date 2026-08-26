@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.8.0
+
+_2026-08-26_
+
+- The option named after the bug was the bug
+- The arrow keys were fine; my test was sending the wrong bytes
+- The review was a page of one colour, and the wait was still unexplained
+- Nothing said what it was doing, and the wait was the whole command
+
+
 ## 4.7.0
 
 _2026-08-25_
