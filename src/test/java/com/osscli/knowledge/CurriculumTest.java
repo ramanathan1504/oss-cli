@@ -187,6 +187,19 @@ class CurriculumTest {
     }
 
     @Test
+    @DisplayName("a Windows path is matched the same as a Unix one")
+    void separatorsDoNotChangeTheAnswer() {
+        // CI caught this and a Mac never would: Windows reports Projects\\x\\contributions\\a.md, so
+        // every check written with forward slashes matched nothing there. Nothing threw -- evidence
+        // ranking quietly degraded to "whatever the walk reached first", and the curriculum cited
+        // itself.
+        assertTrue(Curriculum.isApplied("Projects/x/contributions/pr-1.md"));
+        assertTrue(Curriculum.isApplied("Projects\\x\\contributions\\pr-1.md"), "the same path on Windows");
+        assertTrue(Curriculum.isApplied("Projects\\x\\pr-reviews\\review.md"));
+        assertFalse(Curriculum.isApplied("Projects\\x\\a-digest.md"));
+    }
+
+    @Test
     @DisplayName("the curriculum never cites itself")
     void curriculumNotesAreNotEvidence(@TempDir Path archive) throws IOException {
         // Every one of these notes contains its own area name, so without this they would all cite

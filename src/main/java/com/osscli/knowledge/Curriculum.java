@@ -242,7 +242,10 @@ public final class Curriculum {
                 if (applied.size() >= limit) {
                     break;
                 }
-                String path = file.toString();
+                // Separators normalised first. Windows hands back Projects\\x\\contributions\\a.md,
+                // so a check for "/contributions/" matches nothing there -- which CI caught and a
+                // Mac never would.
+                String path = slashes(file.toString());
                 if (!path.endsWith(".md") || path.contains("/.git/") || path.contains("/coverage/")) {
                     continue;
                 }
@@ -276,8 +279,20 @@ public final class Curriculum {
 
     /** A note about code that shipped, rather than about a conversation. */
     static boolean isApplied(String path) {
-        String p = path.toLowerCase(Locale.ROOT);
+        String p = slashes(path).toLowerCase(Locale.ROOT);
         return p.contains("/contributions/") || p.contains("/pr-reviews/") || p.contains("/issues/");
+    }
+
+    /**
+     * One separator, so a path can be matched as text.
+     *
+     * <p>Windows reports {@code Projects\x\contributions\a.md}. Every check here is written with
+     * forward slashes because that is what the archive looks like on the machine it was written on,
+     * and on Windows they silently matched nothing: evidence ranking degraded to "whatever the walk
+     * reached first" and the curriculum cited itself. Nothing threw; the answers were just worse.
+     */
+    static String slashes(String path) {
+        return path == null ? "" : path.replace('\\', '/');
     }
 
     /** Write one area's note, unless a decision has already been made about it. */
