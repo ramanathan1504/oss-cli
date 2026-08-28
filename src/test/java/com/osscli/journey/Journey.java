@@ -69,6 +69,23 @@ public final class Journey {
     }
 
     /**
+     * The same, with the operating system's idea of "home" pointed somewhere a test made.
+     *
+     * <p>{@code OSS_CLI_HOME} redirects this tool's own store and nothing else. Anything that reads
+     * {@code user.home} -- and the transcript reader does, because that is where Claude Code, codex
+     * and gemini keep their sessions -- still finds the real one. A journey for that reader without
+     * this walked the developer's actual transcripts and filed their actual work into the test's
+     * archive: the assertions failed on somebody's real notes, which is the loudest possible way to
+     * learn that a test was not isolated and the quietest possible way to have corrupted something.
+     *
+     * <p>Java takes {@code user.home} from {@code HOME} at start-up on Unix, so the subprocess gets
+     * a different one rather than this JVM being asked to lie about its own.
+     */
+    public static Ran ossAtHome(Path store, Path cwd, Path fakeHome, String... argv) throws Exception {
+        return run(store, cwd, null, "http://127.0.0.1:1", false, fakeHome, argv);
+    }
+
+    /**
      * The same, with a GitHub token present.
      *
      * <p>Whether a token exists decides WHICH refusal an unreachable network produces, and both are
@@ -114,16 +131,32 @@ public final class Journey {
 
     private static Ran run(Path home, Path cwd, String token, String api, boolean noKeychain, String... argv)
             throws Exception {
+        return run(home, cwd, token, api, noKeychain, null, argv);
+    }
+
+    private static Ran run(
+            Path home, Path cwd, String token, String api, boolean noKeychain, Path fakeHome, String... argv)
+            throws Exception {
         String where = home.toAbsolutePath().toString();
         if (where.startsWith(System.getProperty("user.home") + "/.oss-cli")) {
             throw new IllegalStateException("refusing to run a journey against the real store: " + where);
         }
 
-        List<String> cmd = new ArrayList<>(List.of(
-                Path.of(System.getProperty("java.home"), "bin", "java").toString(),
-                "-cp",
-                System.getProperty("java.class.path"),
-                "com.osscli.Main"));
+        List<String> cmd = new ArrayList<>(
+                List.of(Path.of(System.getProperty("java.home"), "bin", "java").toString(), "-cp"));
+        cmd.add(System.getProperty("java.class.path"));
+        if (fakeHome != null) {
+            // -Duser.home, not HOME. On macOS the JVM takes user.home from the operating system
+            // rather than the environment, so setting HOME changed nothing and the journey walked
+            // the developer's real transcripts -- which is how this was found.
+            //
+            // Safe in a way that -Doss.cli.home is not: this only moves where the subprocess looks
+            // for other programs' files. The store is still redirected by OSS_CLI_HOME below,
+            // which is the variable that actually protects it.
+            Files.createDirectories(fakeHome);
+            cmd.add("-Duser.home=" + fakeHome.toAbsolutePath());
+        }
+        cmd.add("com.osscli.Main");
         cmd.addAll(List.of(argv));
 
         ProcessBuilder pb = new ProcessBuilder(cmd);
@@ -136,6 +169,9 @@ public final class Journey {
         // only command here that writes anywhere outward, so the destination is pointed somewhere
         // that does not exist for every journey rather than only the ones that thought to.
         pb.environment().put("OSS_BUG_REPO", "owner/name");
+        if (fakeHome != null) {
+            pb.environment().put("HOME", fakeHome.toAbsolutePath().toString());
+        }
         pb.environment().remove("GITHUB_TOKEN");
         pb.environment().remove("GH_TOKEN");
         if (token != null) {
