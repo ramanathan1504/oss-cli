@@ -322,6 +322,11 @@ public final class SessionNotes {
             if (line.startsWith("[Image:") || line.startsWith("[Screenshot") || line.startsWith("[Pasted")) {
                 continue;
             }
+            // The harness's own note that somebody pressed ctrl-c. It is the whole of a turn, it
+            // is not something anybody typed, and as a title it says only that a session stopped.
+            if (line.startsWith("[Request interrupted") || line.startsWith("[Response interrupted")) {
+                continue;
+            }
             // A skill's own preamble. Typing "/pr-review" expands into several thousand
             // words of instructions, and those words outscore the request that triggered them
             // every time -- seventeen notes came out of the first run called "Base directory for

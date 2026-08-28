@@ -60,9 +60,19 @@ class CliTimeoutTest {
 
         assertTrue(p.waitFor(10, TimeUnit.SECONDS), "the process itself did not die");
         for (ProcessHandle child : before) {
-            assertTrue(
-                    child.onExit().orTimeout(10, TimeUnit.SECONDS).isDone() || !child.isAlive(),
-                    "a child outlived the timeout that was supposed to end the work: " + child.pid());
+            // Waited for, not asked about.
+            //
+            // The first version called onExit().orTimeout(...).isDone(), which reports whether the
+            // future has completed *at that instant* rather than waiting for it -- so the test
+            // asked "is it dead yet" a microsecond after the signal and passed only on machines
+            // where the answer happened to be yes. It failed on one CI runner and nowhere else,
+            // which is the signature of a race in the test rather than a bug in the code.
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            while (child.isAlive() && System.nanoTime() < deadline) {
+                Thread.sleep(50);
+            }
+            assertFalse(
+                    child.isAlive(), "a child outlived the timeout that was supposed to end the work: " + child.pid());
         }
     }
 

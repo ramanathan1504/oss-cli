@@ -677,6 +677,15 @@ public final class BuiltinMemory {
                 continue;
             }
             String project = com.osscli.knowledge.SessionNotes.projectOf(file);
+            // A transcript from a temporary directory is this tool talking to itself: an ask, a
+            // subagent's scratchpad, a one-off script. Filed as knowledge they produced notes
+            // called "Reply with exactly: OK" -- a question asked of the tool, not work done with
+            // it.
+            if (com.osscli.knowledge.SessionNotes.ranInATempDirectory(project)) {
+                machine++;
+                ledger.mark(file);
+                continue;
+            }
             if (isExcluded(project, skipProjects)) {
                 excluded++;
                 // Marked anyway. An excluded transcript that stays unmarked is re-examined every

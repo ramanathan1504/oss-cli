@@ -207,6 +207,21 @@ class SessionFilingTest {
     }
 
     @Test
+    @DisplayName("the temp-directory rule is actually called, not merely written")
+    void theRuleIsWired() throws IOException {
+        // It was not. The function existed, had four passing tests, and nothing invoked it -- an
+        // edit was lost when the script writing it stopped on an assertion before saving, and the
+        // tests still passed because they tested the function rather than the wiring. A note
+        // called "Reply with exactly: OK" was filed by a build that contained the fix.
+        String source =
+                Files.readString(Path.of("src/main/java/com/osscli/memory/BuiltinMemory.java"), StandardCharsets.UTF_8);
+        int sessions = source.indexOf("private static int sessions(");
+        assertTrue(sessions > 0, "the session run moved; this guard needs rewriting");
+
+        assertTrue(source.indexOf("ranInATempDirectory(", sessions) > 0, "a rule nothing calls is not a rule");
+    }
+
+    @Test
     @DisplayName("the local half of harvest is not behind the check for a network")
     void offlineHarvestStillFilesSessions() throws IOException {
         // Measured, not imagined. The scheduled run of 2026-08-28 recorded:
