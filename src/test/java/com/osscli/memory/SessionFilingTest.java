@@ -142,6 +142,38 @@ class SessionFilingTest {
     }
 
     @Test
+    @DisplayName("a span too long to be a wrapper is left alone")
+    void strippingIsBounded() {
+        // Deleting from an opening tag to the next closing one is right until a transcript is
+        // clipped mid-block and that closing tag belongs to a different block far below. Doing
+        // exactly this across whole notes deleted one note's account of
+        // ClassLoaderContextSelector#locateContext along with the link to the line it was about,
+        // because the text sat between an unmatched opening tag and the next closing one. Caught
+        // by diffing the result, not by reading the regex.
+        //
+        // Every real wrapper is a few short lines. Past the cap it is not a wrapper.
+        String real = "The ClassLoaderContextSelector#locateContext currently implements this logic. "
+                .repeat(40);
+        assertTrue(real.length() > Sessions.MAX_WRAPPER_CHARS, "the fixture must exceed the cap to prove anything");
+
+        String cleaned = Sessions.withoutHarnessNoise("<system-reminder>\n" + real + "\n</system-reminder>");
+
+        assertTrue(
+                cleaned.contains("ClassLoaderContextSelector#locateContext"),
+                "a span this long is somebody's work, not a wrapper");
+        assertFalse(cleaned.contains("<system-reminder>"), "the tag itself still goes");
+    }
+
+    @Test
+    @DisplayName("a real wrapper is short, and still goes entirely")
+    void ordinaryWrappersStillGo() {
+        String cleaned = Sessions.withoutHarnessNoise(
+                "<system-reminder>this is a reminder about tone</system-reminder>keep this");
+
+        assertEquals("keep this", cleaned.strip());
+    }
+
+    @Test
     @DisplayName("the local half of harvest is not behind the check for a network")
     void offlineHarvestStillFilesSessions() throws IOException {
         // Measured, not imagined. The scheduled run of 2026-08-28 recorded:

@@ -60,6 +60,15 @@ public final class Sessions {
 
     private Sessions() {}
 
+    /**
+     * The longest a harness wrapper may be before it is treated as somebody's writing.
+     *
+     * <p>These blocks are a caveat, a notification, a reminder -- a few short lines each. The cap
+     * exists because an unmatched opening tag would otherwise pair with a closing tag far below it
+     * and take everything in between.
+     */
+    static final int MAX_WRAPPER_CHARS = 2_000;
+
     /** How many opened paths are remembered. Past this it is a build log, not a record of a session. */
     static final int MAX_TOUCHED = 40;
 
@@ -369,9 +378,19 @@ public final class Sessions {
                 "command-args",
                 "local-command-stdout",
                 "local-command-stderr")) {
-            // Both shapes: a paired block with content, and the stray closing tag left when a
-            // transcript was clipped mid-block.
-            out = out.replaceAll("(?s)<" + tag + ">.*?</" + tag + ">", "");
+            // Bounded, and this is the whole difference between a cleanup and a data loss.
+            //
+            // The obvious rule -- delete from the opening tag to the closing one -- is right until
+            // a transcript is clipped mid-block and the closing tag belongs to a different block
+            // hundreds of lines later. Run over the archive that way it deleted a Log4j note's
+            // account of ClassLoaderContextSelector#locateContext along with the link to the line
+            // it was about, because that text happened to sit between an unmatched opening tag and
+            // the next closing one. Caught by diffing the result rather than by reading the regex.
+            //
+            // So a block may span at most this many characters. Every one of these wrappers is a
+            // few short lines; anything longer is not a wrapper, it is somebody's work.
+            out = out.replaceAll("(?s)<" + tag + ">.{0," + MAX_WRAPPER_CHARS + "}?</" + tag + ">", "");
+            // Whatever is left is a lone tag from a clipped block. Take the tag, keep the text.
             out = out.replaceAll("</?" + tag + ">", "");
         }
         // The banner the harness adds when a message arrives mid-turn. It is about the mechanism,
