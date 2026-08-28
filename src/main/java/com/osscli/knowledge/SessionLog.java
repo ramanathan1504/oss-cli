@@ -71,6 +71,16 @@ public final class SessionLog {
      * file's content, not its name: only a file carrying this class's marker may be appended to.
      */
     public static Path pathFor(Path archive, String topic, String reference) {
+        // A pull request is its number, wherever it was mentioned and however it was spelled.
+        //
+        // Without this one pull request had four files: "PR 841" from somebody typing it and
+        // "ff-webapp-backend PR 841" from a pasted URL, each of those again under two topics
+        // because two sessions about the same change scored differently. Four fifths of the point
+        // of a running log, undone by the name it was filed under.
+        Path already = existingLogFor(archive, reference);
+        if (already != null) {
+            return already;
+        }
         Path preferred = archive.resolve("Projects").resolve(topic).resolve(SessionNotes.slug(reference) + ".md");
         if (!Files.exists(preferred) || isOurs(preferred)) {
             return preferred;
@@ -78,6 +88,53 @@ public final class SessionLog {
         // Somebody's own note is already at that name -- on a case-insensitive filesystem it may
         // not even look like the same name. Go beside it rather than through it.
         return archive.resolve("Projects").resolve(topic).resolve(SessionNotes.slug(reference) + "-sessions.md");
+    }
+
+    /**
+     * What identifies a reference regardless of how it was written.
+     *
+     * <p>{@code "PR 841"}, {@code "ff-webapp-backend PR 841"} and a repository-qualified spelling
+     * of the same thing all reduce to {@code pr-841}. The repository is not part of the identity
+     * on purpose: a session that names a bare number cannot supply one, and refusing to match it
+     * would recreate the split this exists to close.
+     */
+    static String identityOf(String reference) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?i)\\b(pr|issue)\\s+(\\d+)\\b")
+                .matcher(reference == null ? "" : reference);
+        return m.find() ? m.group(1).toLowerCase(Locale.ROOT) + "-" + m.group(2) : "";
+    }
+
+    /**
+     * An existing log for the same reference, in whatever topic it ended up under.
+     *
+     * <p>Searched across topics because the topic is scored per session and two sessions about one
+     * change can land in two subjects -- which is a filing detail, not a reason to split the record
+     * of one piece of work.
+     */
+    static Path existingLogFor(Path archive, String reference) {
+        String identity = identityOf(reference);
+        if (identity.isEmpty()) {
+            return null;
+        }
+        Path projects = archive.resolve("Projects");
+        if (!Files.isDirectory(projects)) {
+            return null;
+        }
+        try (java.util.stream.Stream<Path> walk = Files.walk(projects, 2)) {
+            for (Path file : walk.filter(Files::isRegularFile).toList()) {
+                String name = file.getFileName().toString();
+                if (!name.endsWith(".md") || !name.toLowerCase(Locale.ROOT).contains(identity)) {
+                    continue;
+                }
+                if (isOurs(file)) {
+                    return file;
+                }
+            }
+        } catch (IOException e) {
+            // Unreadable means "cannot find one", and a new log is the safe answer to that.
+            return null;
+        }
+        return null;
     }
 
     /** True when this file is a running log this code wrote, rather than a note somebody kept. */

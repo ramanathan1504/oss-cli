@@ -18,6 +18,7 @@ package com.osscli.knowledge;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -70,6 +71,47 @@ class SessionLogTest {
         assertTrue(text.contains("all of the work"), "the block was updated");
         assertFalse(text.contains("half the work"), "and the stale version is gone");
         assertTrue(text.contains("somebody else's session"), "the other block is untouched");
+    }
+
+    @Test
+    @DisplayName("one pull request is one log however it was written")
+    void spellingDoesNotSplitTheRecord(@TempDir Path archive) throws IOException {
+        // Without this, one pull request had four files: "PR 841" from somebody typing it and
+        // "some-repo PR 841" from a pasted URL, each again under two topics because two sessions
+        // scored differently. Four fifths of the point of a running log, undone by its name.
+        Path first = SessionLog.pathFor(archive, "kafka", "PR 841");
+        SessionLog.append(first, "PR 841", "kafka", "p", "s1", "## day one\n\ntyped by hand");
+
+        Path second = SessionLog.pathFor(archive, "databases", "some-repo PR 841");
+
+        assertEquals(first, second, "a pasted URL and a typed number are the same pull request");
+    }
+
+    @Test
+    @DisplayName("a different topic is a filing detail, not a second piece of work")
+    void topicDoesNotSplitTheRecord(@TempDir Path archive) throws IOException {
+        Path first = SessionLog.pathFor(archive, "kafka", "PR 841");
+        SessionLog.append(first, "PR 841", "kafka", "p", "s1", "## day one\n\nwork");
+
+        assertEquals(first, SessionLog.pathFor(archive, "java-concurrency", "PR 841"));
+    }
+
+    @Test
+    @DisplayName("two different pull requests stay two logs")
+    void differentNumbersStaySeparate(@TempDir Path archive) throws IOException {
+        Path first = SessionLog.pathFor(archive, "log4j", "PR 841");
+        SessionLog.append(first, "PR 841", "log4j", "p", "s1", "## a\n\nwork");
+
+        assertNotEquals(first, SessionLog.pathFor(archive, "log4j", "PR 842"));
+        assertNotEquals(first, SessionLog.pathFor(archive, "log4j", "issue 841"));
+    }
+
+    @Test
+    @DisplayName("a reference with no number keeps its own file")
+    void unnumberedReferencesAreNotMerged(@TempDir Path archive) {
+        assertEquals("", SessionLog.identityOf("a session about rollover"));
+        assertEquals("pr-841", SessionLog.identityOf("some-repo PR 841"));
+        assertEquals("issue-3704", SessionLog.identityOf("some-repo issue 3704"));
     }
 
     @Test
