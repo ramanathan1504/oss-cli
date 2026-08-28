@@ -54,6 +54,7 @@ public final class BuiltinMemory {
             "harvest",
             "sessions",
             "contributions",
+            "curriculum",
             "digest",
             "import",
             "schedule",
@@ -414,6 +415,85 @@ public final class BuiltinMemory {
         System.out.println("  indexed — chat, guide, pick and prompt can see them now");
     }
 
+    // -------------------------------------------------------------- curriculum ---
+
+    /**
+     * Place every area of every subject into gap, backlog or covered.
+     *
+     * <p>{@code coverage} grades an area by how much the notes say about it, which conflates two
+     * different situations. An area met forty times across three pull requests is not one you know
+     * -- it is one you have run into, usually while fixing something else, with the understanding
+     * spread across a transcript and a diff. An area with nothing at all is a different problem.
+     *
+     * <p><b>Nothing here ever marks anything covered.</b> That is a claim about having read
+     * something and no count of mentions can establish it, which is why the move is done by hand
+     * and why re-running this never moves a file back.
+     */
+    private static int curriculum(List<String> args) throws IOException {
+        boolean dryRun = args.contains("--dry-run");
+        KnowledgePack pack = KnowledgePack.load();
+        if (pack.yardsticks().isEmpty()) {
+            com.osscli.ui.Out.none("no yardstick declared, so there is nothing to be missing from");
+            com.osscli.ui.Out.hint("kb.json", "list what each subject's own manual documents");
+            return 0;
+        }
+
+        Path archive = pack.archive();
+        List<com.osscli.knowledge.Curriculum.Item> items;
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("measuring what you know")) {
+            live.step("scoring " + pack.yardsticks().size() + " subject(s) against the archive");
+            items = com.osscli.knowledge.Curriculum.place(archive, pack.yardsticks());
+        }
+
+        int written = 0;
+        int respected = 0;
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("filing")) {
+            for (com.osscli.knowledge.Curriculum.Item item : items) {
+                live.step(item.subject() + " · " + item.area());
+                if (dryRun) {
+                    continue;
+                }
+                List<String> evidence = "backlog".equals(item.state())
+                        ? com.osscli.knowledge.Curriculum.evidenceFor(archive, item.area(), 8)
+                        : List.of();
+                if (com.osscli.knowledge.Curriculum.write(archive, item, evidence)) {
+                    written++;
+                } else {
+                    respected++;
+                }
+            }
+        }
+
+        com.osscli.ui.Out.gap();
+        com.osscli.ui.Out.title("what you know, by subject");
+        for (com.osscli.knowledge.Curriculum.Tally t :
+                com.osscli.knowledge.Curriculum.tallies(archive, pack.yardsticks())) {
+            com.osscli.ui.Out.item(String.format(
+                    "%-18s %3d covered   %3d backlog   %3d gap   of %d",
+                    t.subject(), t.covered(), t.backlog(), t.gap(), t.total()));
+        }
+        com.osscli.ui.Out.gap();
+        if (dryRun) {
+            com.osscli.ui.Out.ok(items.size() + " area(s) placed (dry run, nothing written)");
+        } else {
+            com.osscli.ui.Out.ok(written + " area note(s) written under " + archive.resolve("Reference/coverage"));
+        }
+        if (respected > 0) {
+            com.osscli.ui.Out.note(respected + " already marked covered — left exactly where you put them");
+        }
+        // These are notes like any other and have to be findable like any other. A reading list
+        // you cannot search is a folder you open once. Embedding them means `oss ask` can answer
+        // "what have I not learned about rollover" from the same index that answers everything
+        // else, rather than from a folder somebody has to remember to look in.
+        if (!dryRun && written > 0) {
+            embedNotes(archive.toString());
+        }
+        com.osscli.ui.Out.hints(List.of(
+                new String[] {"read one, then move it to covered/", "the move is the record"},
+                new String[] {"oss memory curriculum", "re-run any time; it never moves your work back"}));
+        return 0;
+    }
+
     // ------------------------------------------------------------ contributions ---
 
     /**
@@ -638,6 +718,7 @@ public final class BuiltinMemory {
                     session.raw(), project.isBlank() ? "session " + session.id() : project + " session");
             Path note = com.osscli.knowledge.SessionNotes.fileInWithoutClobbering(
                     archive, topic.topic(), dayOf(session), title, session.id());
+            // Reassigned below when the session names a pull request or an issue.
 
             if (!dryRun) {
                 com.osscli.knowledge.Enrichment.Summary summary =
@@ -651,17 +732,46 @@ public final class BuiltinMemory {
                         summary = com.osscli.knowledge.Enrichment.summarise(title, topic.topic(), text, allowClaude);
                     }
                 }
-                Files.createDirectories(note.getParent());
-                Files.writeString(
-                        note,
-                        com.osscli.knowledge.SessionNotes.noteFor(
-                                session,
-                                topic,
-                                project,
-                                title,
-                                com.osscli.knowledge.SessionNotes.touched(session.touchedPaths()),
-                                summary),
-                        StandardCharsets.UTF_8);
+                // One subject, one note.
+                //
+                // A note per session fragmented the record: four days on one issue produced five
+                // files, each a fifth of the story and none of them the place to look. When a
+                // session names a pull request or an issue, that reference is the file and this
+                // session becomes a dated section in it.
+                String reference = com.osscli.knowledge.SessionNotes.referenceIn(session.raw());
+                if (reference != null) {
+                    note = com.osscli.knowledge.SessionLog.pathFor(archive, topic.topic(), reference);
+                    com.osscli.knowledge.SessionLog.append(
+                            note,
+                            reference,
+                            topic.topic(),
+                            project,
+                            session.id(),
+                            com.osscli.knowledge.SessionLog.sectionFor(
+                                    dayOf(session),
+                                    title,
+                                    summary,
+                                    com.osscli.knowledge.SessionNotes.noteFor(
+                                            session,
+                                            topic,
+                                            project,
+                                            title,
+                                            com.osscli.knowledge.SessionNotes.touched(session.touchedPaths()),
+                                            new com.osscli.knowledge.Enrichment.Summary(
+                                                    "", com.osscli.knowledge.Enrichment.By.NONE))));
+                } else {
+                    Files.createDirectories(note.getParent());
+                    Files.writeString(
+                            note,
+                            com.osscli.knowledge.SessionNotes.noteFor(
+                                    session,
+                                    topic,
+                                    project,
+                                    title,
+                                    com.osscli.knowledge.SessionNotes.touched(session.touchedPaths()),
+                                    summary),
+                            StandardCharsets.UTF_8);
+                }
                 ledger.mark(file);
                 written.add(note);
             }
@@ -708,7 +818,17 @@ public final class BuiltinMemory {
         }
 
         if (!written.isEmpty()) {
-            embedNotes(archive.resolve("Projects").toString());
+            // The one expensive thing on the hourly path, and the only place battery matters.
+            //
+            // A tick that finds nothing costs 0.89 CPU-seconds; embedding a folder of notes costs
+            // minutes of every core. Nobody is waiting for it, so on battery it waits for mains --
+            // which is different from a command somebody typed, where the cost was accepted by the
+            // act of typing it.
+            if (quiet && com.osscli.schedule.Power.onBattery()) {
+                com.osscli.ui.Out.note(com.osscli.schedule.Power.deferred("indexing"));
+            } else {
+                embedNotes(archive.resolve("Projects").toString());
+            }
         }
         return 0;
     }
@@ -781,6 +901,17 @@ public final class BuiltinMemory {
         com.osscli.ui.Out.note("indexing what was written…");
         com.osscli.retrieval.NoteIndexer.index(
                 java.util.List.of(folder), embedder, com.osscli.retrieval.Embeddings.MODEL);
+        // Adding is only half of keeping an index true.
+        //
+        // 89 notes were deleted from the archive and their rows stayed in the index, still
+        // scoring, still answering. Asked whether one issue was in the store, the honest answer
+        // came back with five hits that were files nobody could open -- and they were the junk
+        // notes that had just been removed for being junk. Nothing was wrong with the delete; the
+        // index simply had no idea it had happened, and would not until somebody ran another
+        // command and thought to look.
+        //
+        // A stat per indexed path is cheap. Not noticing is not.
+        pruneMovedNotes(false);
         com.osscli.ui.Out.ok("indexed — ask, chat, guide, pick and prompt can see them now");
     }
 
@@ -997,6 +1128,8 @@ public final class BuiltinMemory {
                     return sessions(args);
                 case "contributions":
                     return contributions(args);
+                case "curriculum":
+                    return curriculum(args);
                 case "digest":
                     return digest(args);
                 case "import":
@@ -1304,7 +1437,22 @@ public final class BuiltinMemory {
             System.out.printf("  %s%n", saidHourly);
             System.out.println("  it will run  oss memory sessions  every hour");
             System.out.println("  the first tick is an hour from now — run it once yourself to see it work");
-            System.out.println("  oss memory schedule --uninstall --hourly   removes it");
+            System.out.println();
+            // Offered, never installed. Another program's settings file is not this one's to edit,
+            // and the schedule is the floor that catches everything a hook cannot: the other tools,
+            // and any session that ended while the hook was wrong.
+            System.out.println("  to have a session filed the moment it ends rather than within the hour,");
+            System.out.println("  add this to ~/.claude/settings.json yourself:");
+            System.out.println();
+            for (String line : com.osscli.schedule.SessionJob.hookFor(
+                            com.osscli.schedule.Platforms.launcher() == null
+                                    ? "oss"
+                                    : com.osscli.schedule.Platforms.launcher().toString())
+                    .split("\n")) {
+                System.out.println("    " + line);
+            }
+            System.out.println();
+            System.out.println("  oss memory schedule --uninstall --hourly   removes the schedule");
             return 0;
         }
         String said = com.osscli.schedule.DailyJob.install(

@@ -92,6 +92,23 @@ class StaleNotesTest {
     }
 
     @Test
+    @DisplayName("every run that adds to the index also drops what is gone")
+    void embeddingPrunesToo() throws IOException {
+        // Adding is only half of keeping an index true. 89 deleted notes kept their rows and kept
+        // answering: asked whether one issue was in the store, five of the hits were files nobody
+        // could open. Nothing was wrong with the delete -- the index had no idea it had happened,
+        // and would not until somebody ran another command and thought to look.
+        String source = Files.readString(Path.of("src/main/java/com/osscli/memory/BuiltinMemory.java"));
+        int embed = source.indexOf("private static void embedNotes(");
+        assertTrue(embed > 0, "embedNotes moved; this guard needs rewriting");
+
+        int end = source.indexOf("\n    }", embed);
+        assertTrue(
+                source.substring(embed, end).contains("pruneMovedNotes("),
+                "a run that adds notes must also drop the ones that are gone");
+    }
+
+    @Test
     @DisplayName("blank and null paths are skipped rather than counted as deletions")
     void garbageRowsAreNotDeletions() {
         StaleNotes.Sweep sweep = StaleNotes.sweep(java.util.Arrays.asList(null, "", "   "), List.of());

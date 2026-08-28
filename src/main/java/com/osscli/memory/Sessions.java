@@ -46,11 +46,32 @@ import java.util.stream.Stream;
  */
 public final class Sessions {
 
-    /** Turns kept from one session. Past this, a transcript is a log, not a note. */
-    static final int MAX_TURNS = 30;
+    /**
+     * Turns kept from one session.
+     *
+     * <p>Thirty was a guess, and measuring it was uncomfortable: across the 90 transcripts that
+     * actually get filed -- 2.8 MB of prose, the oss-cli and subagent ones already excluded --
+     * thirty turns clipped at 1,200 characters kept <b>21%</b> of what was written. Four fifths of
+     * the record was being thrown away by a constant nobody had checked.
+     *
+     * <p>These numbers keep 82% for 2.3 MB on disk, which is nothing. The measurements:
+     *
+     * <pre>
+     *    turns  chars   kept   biggest note   on disk
+     *       30   1200    21%         18 KB     0.6 MB
+     *       60   3000    49%         55 KB     1.4 MB
+     *      120   6000    68%        130 KB     1.9 MB
+     *      250  12000    82%        142 KB     2.3 MB
+     * </pre>
+     *
+     * <p>The last 18% is a handful of enormous turns -- pasted logs and whole diffs -- and clipping
+     * those is the original comment's point standing: a 50 KB stack trace is not the thing anybody
+     * wants to read a year later, and the note names the transcript it came from.
+     */
+    static final int MAX_TURNS = 250;
 
-    /** Characters kept from one turn. A pasted stack trace is not the thing worth remembering. */
-    static final int MAX_TURN_CHARS = 1_200;
+    /** Characters kept from one turn. A pasted stack trace is still not the thing worth remembering. */
+    static final int MAX_TURN_CHARS = 12_000;
 
     /** Sessions read in one harvest, newest first, so a first run on a big machine still finishes. */
     static final int MAX_SESSIONS = 200;

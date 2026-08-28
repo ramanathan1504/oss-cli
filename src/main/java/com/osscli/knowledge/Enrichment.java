@@ -146,6 +146,21 @@ public final class Enrichment {
      * model was missing, slow, out of credit or wrong -- write the note without it.
      */
     public static Summary summarise(String title, String topic, String transcript, boolean allowCli) {
+        try {
+            return attempt(title, topic, transcript, allowCli);
+        } catch (RuntimeException e) {
+            // A summary is an enhancement and must never take the filing down with it.
+            //
+            // It did exactly that: a template gained a placeholder and its argument list did not,
+            // so the first session threw MissingFormatArgumentException and the run stopped there
+            // -- 88 sessions unfiled because of a paragraph none of them needed. The compiler
+            // cannot catch a format string, so the only defence is that failing here costs the
+            // paragraph and nothing else.
+            return ABSENT;
+        }
+    }
+
+    private static Summary attempt(String title, String topic, String transcript, boolean allowCli) {
         String prompt = promptFor(title, topic, clip(transcript));
         if (allowCli) {
             for (com.osscli.llm.CliClient.Spec spec : toolsHere()) {
@@ -188,7 +203,7 @@ public final class Enrichment {
 
                 --- TRANSCRIPT ---
                 %s
-                """.formatted(topic, title, transcript);
+                """.formatted(PREAMBLE, topic, title, transcript);
     }
 
     private static String clip(String s) {

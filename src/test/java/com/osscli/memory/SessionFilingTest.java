@@ -82,7 +82,7 @@ class SessionFilingTest {
         // report the first thirty turns' worth of files as everything the session touched.
         Path dir = Files.createTempDirectory("sessions");
         List<String> lines = new java.util.ArrayList<>();
-        for (int i = 0; i < 60; i++) {
+        for (int i = 0; i < Sessions.MAX_TURNS + 10; i++) {
             lines.add(user("turn number " + i + " about the rolling file appender"));
         }
         lines.add(toolUse("/src/Late.java"));
@@ -91,7 +91,9 @@ class SessionFilingTest {
         Sessions.Session s = Sessions.read(f);
 
         assertEquals(Sessions.MAX_TURNS, s.raw().size(), "turns are capped");
-        assertTrue(s.touchedPaths().contains("/src/Late.java"), "a file opened at turn 61 is still a file opened");
+        assertTrue(
+                s.touchedPaths().contains("/src/Late.java"),
+                "a file opened past the last kept turn is still a file opened");
     }
 
     @Test
@@ -172,6 +174,36 @@ class SessionFilingTest {
                 "<system-reminder>this is a reminder about tone</system-reminder>keep this");
 
         assertEquals("keep this", cleaned.strip());
+    }
+
+    @Test
+    @DisplayName("the turn budget keeps most of what was written, not a fifth of it")
+    void theBudgetIsMeasuredRatherThanGuessed() {
+        // Thirty turns clipped at 1,200 characters kept 21% of the prose across the 90 transcripts
+        // that actually get filed -- four fifths of the record thrown away by a constant nobody had
+        // checked. These numbers keep 82% for 2.3 MB on disk.
+        assertTrue(
+                Sessions.MAX_TURNS >= 200,
+                "a session note that stops at turn " + Sessions.MAX_TURNS + " loses most of a working day");
+        assertTrue(
+                Sessions.MAX_TURN_CHARS >= 10_000,
+                "clipping a turn at " + Sessions.MAX_TURN_CHARS + " characters cuts the reasoning out of it");
+    }
+
+    @Test
+    @DisplayName("a hook is offered as text and never written into another program's settings")
+    void hooksAreOfferedNotInstalled() throws IOException {
+        // Claude Code's settings file belongs to whoever uses Claude Code. A tool that edits
+        // another program's configuration because it would be convenient is the same class of
+        // thing as a download nobody asked for.
+        String hook = com.osscli.schedule.SessionJob.hookFor("/opt/homebrew/bin/oss");
+
+        assertTrue(hook.contains("SessionEnd"), hook);
+        assertTrue(hook.contains("memory sessions --quiet"), hook);
+
+        String source =
+                Files.readString(Path.of("src/main/java/com/osscli/schedule/SessionJob.java"), StandardCharsets.UTF_8);
+        assertFalse(source.contains(".claude/settings.json"), "nothing here may write that file");
     }
 
     @Test
