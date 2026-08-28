@@ -95,12 +95,75 @@ public final class SessionNotes {
      * removed, because a session where every turn is one of those still has to be called something.
      */
     public static String titleOf(List<Sessions.Turn> turns, String fallback) {
+        return titleOf(turns, fallback, null);
+    }
+
+    /**
+     * The same, allowed to borrow from a summary when the transcript has no good name in it.
+     *
+     * <p>A session that names no pull request is titled from what was typed, which is faithful and
+     * often unsearchable: "why chnaged scraping count is greter than 1" is exactly what was asked
+     * and not something anybody will find again. The summary was written for that session anyway
+     * and is prose about the subject, so its opening clause is a better name and costs nothing --
+     * no extra call, no second model.
+     *
+     * <p>Only when there is nothing better. A reference always wins, and a typed sentence that
+     * scores as substantial wins over a generated one: what somebody actually said is the truer
+     * title whenever it is usable at all.
+     */
+    public static String titleOf(List<Sessions.Turn> turns, String fallback, String summary) {
         String reference = referenceIn(turns);
         String phrase = bestPhrase(turns);
         if (reference != null) {
             return phrase == null ? reference : clip(reference + " — " + phrase);
         }
+        // A typed phrase wins when it names something, not when it is merely long.
+        //
+        // Score alone did not separate them: "why chnaged scraping count is greter than 1" reaches
+        // the same number as a good sentence purely on length and a question word. What actually
+        // distinguishes a findable title is that it contains a symbol somebody could search for.
+        if (phrase != null && namesSomething(phrase)) {
+            return clip(phrase);
+        }
+        String fromSummary = openingClause(summary);
+        if (fromSummary != null) {
+            return clip(fromSummary);
+        }
         return phrase == null ? fallback : clip(phrase);
+    }
+
+    /**
+     * Whether a phrase names a thing rather than describing a feeling about one.
+     *
+     * <p>{@code RollingFileAppender}, {@code SmtpManager.getHeaders(}, a backticked path -- these
+     * are what somebody types into a search box a year later. A sentence without one may be a
+     * perfectly accurate account of what was asked and still be unfindable, which is the whole
+     * problem with titling from a transcript.
+     */
+    static boolean namesSomething(String phrase) {
+        return phrase.matches(".*\\b[a-z]+[A-Z][A-Za-z0-9]+\\b.*")
+                || phrase.matches(".*\\b[A-Z][a-z]+[A-Z][A-Za-z0-9]*\\b.*")
+                || phrase.matches(".*\\b\\w+\\.\\w+\\(.*")
+                || phrase.contains("`");
+    }
+
+    /**
+     * The first clause of a summary, as a name.
+     *
+     * <p>Cut at the first sentence break rather than the first full stop: these summaries open with
+     * the conclusion, and the conclusion is usually one clause long before it starts qualifying
+     * itself.
+     */
+    static String openingClause(String summary) {
+        if (summary == null || summary.isBlank()) {
+            return null;
+        }
+        String flat = summary.strip().replaceAll("\\s+", " ");
+        int stop = flat.indexOf(". ");
+        String first = stop > 20 ? flat.substring(0, stop) : flat;
+        // A clause that is still enormous is a summary that did not open with a conclusion; take
+        // the readable front of it rather than a paragraph.
+        return first.length() < 12 ? null : first;
     }
 
     /** The GitHub pull request or issue a session is about, named the way a person would say it. */
@@ -407,6 +470,29 @@ public final class SessionNotes {
                     || lower.startsWith("read-only triage for");
         }
         return false;
+    }
+
+    /**
+     * Whether a session ran somewhere that is never a project.
+     *
+     * <p>A transcript from a temporary directory is a tool talking to itself: an {@code oss ask}
+     * run, a subagent given a scratchpad, a one-off script. Filed as knowledge they produced notes
+     * called "Reply with exactly: OK" and "What is my average sentence length in the GitHub
+     * comments I have" -- questions asked <em>of</em> this tool, not work done <em>with</em> it.
+     *
+     * <p>Deliberately not a check for the home folder. People do work there, and excluding it would
+     * drop real sessions to catch two.
+     */
+    public static boolean ranInATempDirectory(String project) {
+        if (project == null || project.isBlank()) {
+            return false;
+        }
+        String p = project.toLowerCase(Locale.ROOT);
+        return p.startsWith("private-tmp")
+                || p.startsWith("tmp-")
+                || p.equals("tmp")
+                || p.startsWith("var-folders")
+                || p.contains("scratchpad");
     }
 
     // ==========================================

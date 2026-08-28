@@ -714,24 +714,31 @@ public final class BuiltinMemory {
             final String text = String.join("\n", session.turns());
             final com.osscli.knowledge.SessionNotes.Scored topic =
                     com.osscli.knowledge.SessionNotes.topicOf(text + "\n" + project, project, pack.topics());
-            final String title = com.osscli.knowledge.SessionNotes.titleOf(
-                    session.raw(), project.isBlank() ? "session " + session.id() : project + " session");
+            final String fallbackName = project.isBlank() ? "session " + session.id() : project + " session";
+            String title = com.osscli.knowledge.SessionNotes.titleOf(session.raw(), fallbackName);
+
+            com.osscli.knowledge.Enrichment.Summary summary =
+                    new com.osscli.knowledge.Enrichment.Summary("", com.osscli.knowledge.Enrichment.By.NONE);
+            if (!dryRun && enrich && filed < limit) {
+                // Wrapped in the same progress line every other model call in this tool uses.
+                // A summariser working through forty sessions in silence is indistinguishable
+                // from one that has hung, which is the complaint that put Live in here at all.
+                try (com.osscli.ui.Live live = com.osscli.ui.Live.start("summarising")) {
+                    live.step(title);
+                    summary = com.osscli.knowledge.Enrichment.summarise(title, topic.topic(), text, allowClaude);
+                }
+                // Re-titled now the summary exists, and only when the transcript held no good name
+                // of its own. "why chnaged scraping count is greter than 1" is exactly what was
+                // asked and is not something anybody will ever find again.
+                title = com.osscli.knowledge.SessionNotes.titleOf(
+                        session.raw(), fallbackName, summary.present() ? summary.text() : null);
+            }
+            final String finalTitle = title;
             Path note = com.osscli.knowledge.SessionNotes.fileInWithoutClobbering(
-                    archive, topic.topic(), dayOf(session), title, session.id());
+                    archive, topic.topic(), dayOf(session), finalTitle, session.id());
             // Reassigned below when the session names a pull request or an issue.
 
             if (!dryRun) {
-                com.osscli.knowledge.Enrichment.Summary summary =
-                        new com.osscli.knowledge.Enrichment.Summary("", com.osscli.knowledge.Enrichment.By.NONE);
-                if (enrich && filed < limit) {
-                    // Wrapped in the same progress line every other model call in this tool uses.
-                    // A summariser working through forty sessions in silence is indistinguishable
-                    // from one that has hung, which is the complaint that put Live in here at all.
-                    try (com.osscli.ui.Live live = com.osscli.ui.Live.start("summarising")) {
-                        live.step(title);
-                        summary = com.osscli.knowledge.Enrichment.summarise(title, topic.topic(), text, allowClaude);
-                    }
-                }
                 // One subject, one note.
                 //
                 // A note per session fragmented the record: four days on one issue produced five
@@ -749,13 +756,13 @@ public final class BuiltinMemory {
                             session.id(),
                             com.osscli.knowledge.SessionLog.sectionFor(
                                     dayOf(session),
-                                    title,
+                                    finalTitle,
                                     summary,
                                     com.osscli.knowledge.SessionNotes.bodyOf(com.osscli.knowledge.SessionNotes.noteFor(
                                             session,
                                             topic,
                                             project,
-                                            title,
+                                            finalTitle,
                                             com.osscli.knowledge.SessionNotes.touched(session.touchedPaths()),
                                             new com.osscli.knowledge.Enrichment.Summary(
                                                     "", com.osscli.knowledge.Enrichment.By.NONE)))));
@@ -767,7 +774,7 @@ public final class BuiltinMemory {
                                     session,
                                     topic,
                                     project,
-                                    title,
+                                    finalTitle,
                                     com.osscli.knowledge.SessionNotes.touched(session.touchedPaths()),
                                     summary),
                             StandardCharsets.UTF_8);
