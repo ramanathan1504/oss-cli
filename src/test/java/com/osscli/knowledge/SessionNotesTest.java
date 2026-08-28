@@ -127,6 +127,73 @@ class SessionNotesTest {
         assertTrue(long_.startsWith(title), "a title ending mid-word reads as corruption: " + title);
     }
 
+    @Test
+    @DisplayName("a summary names a session the transcript could not name")
+    void aWeakTitleDefersToTheSummary() {
+        // "why chnaged scraping count is greter than 1" is exactly what was asked and is not
+        // something anybody will find again. The summary was written for this session anyway, so
+        // its opening clause costs nothing.
+        List<Sessions.Turn> turns = List.of(you("why chnaged scraping count is greter than 1 is correct"));
+        String summary = "The cron treated a scraping count above one as success. "
+                + "It should have compared the status field instead.";
+
+        String title = SessionNotes.titleOf(turns, "fallback", summary);
+
+        assertTrue(title.startsWith("The cron treated a scraping count"), title);
+    }
+
+    @Test
+    @DisplayName("a summary that declines to summarise does not name the note")
+    void nonAnswersAreNotTitles() {
+        // The prompt permits "if nothing was concluded, say exactly that" -- the right answer for a
+        // session that went nowhere and the worst possible title, because every such session gets
+        // the same one. Five notes came back called "Nothing was concluded."
+        List<Sessions.Turn> turns = List.of(you("ok"));
+
+        assertEquals("fallback", SessionNotes.titleOf(turns, "fallback", "Nothing was concluded."));
+        assertEquals(
+                "fallback",
+                SessionNotes.titleOf(turns, "fallback", "The transcript contains only the opening message."));
+        // A real summary still names it.
+        assertTrue(SessionNotes.titleOf(turns, "fallback", "The cron compared the wrong field.")
+                .startsWith("The cron compared"));
+    }
+
+    @Test
+    @DisplayName("a sentence that names its own session beats a generated one")
+    void whatYouSaidWinsWhenItIsUsable() {
+        // What somebody actually said is the truer title whenever it is usable at all.
+        List<Sessions.Turn> turns =
+                List.of(you("the RollingFileAppender skips a file when rollover happens on the hour"));
+
+        String title = SessionNotes.titleOf(turns, "fallback", "Something the model wrote instead.");
+
+        assertTrue(title.contains("RollingFileAppender"), title);
+    }
+
+    @Test
+    @DisplayName("a reference still wins over both")
+    void referencesOutrankEverything() {
+        List<Sessions.Turn> turns = List.of(you("check pr 4156 for me"));
+
+        assertTrue(SessionNotes.titleOf(turns, "f", "A summary that would have been used.")
+                .startsWith("PR 4156"));
+    }
+
+    @Test
+    @DisplayName("a temporary directory is never a project")
+    void tempDirectoriesAreNotWork() {
+        // Filed as knowledge these produced notes called "Reply with exactly: OK" -- questions
+        // asked of this tool, not work done with it.
+        assertTrue(SessionNotes.ranInATempDirectory("private-tmp-claude-501-scratchpad"));
+        assertTrue(SessionNotes.ranInATempDirectory("var-folders-xy"));
+        assertTrue(SessionNotes.ranInATempDirectory("tmp"));
+        // But the home folder is where people do work, and excluding it would drop real sessions.
+        assertFalse(SessionNotes.ranInATempDirectory("ramanathan"));
+        assertFalse(SessionNotes.ranInATempDirectory("apache-logging-log4j2"));
+        assertFalse(SessionNotes.ranInATempDirectory(""));
+    }
+
     // ==========================================
     // Filing
     // ==========================================
