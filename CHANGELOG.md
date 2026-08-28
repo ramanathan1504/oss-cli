@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.9.4
+
+_2026-08-28_
+
+- A rule nothing calls is not a rule (#227)
+
+
 ## 4.9.3
 
 _2026-08-28_
