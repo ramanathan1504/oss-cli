@@ -79,6 +79,26 @@ public final class NoteIndexer {
 
             try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.walk(localPath)) {
                 List<java.nio.file.Path> files = stream.filter(java.nio.file.Files::isRegularFile)
+                        // Nothing inside a dot-directory is a note.
+                        //
+                        // Putting an archive under git turns its own history into 603 "notes" and
+                        // 40,910 "passages": every object under .git is a zlib blob, and read as
+                        // text it embeds as plausible-looking nonsense that outnumbers the real
+                        // notes and competes with them at every query. .obsidian, .DS_Store's
+                        // neighbours and every editor's state folder are the same kind of thing.
+                        //
+                        // Latent until now only because nobody had version-controlled their notes.
+                        // The extension list below could never have caught it: these files have no
+                        // extension at all.
+                        .filter(p -> {
+                            for (java.nio.file.Path part : p) {
+                                String name = part.toString();
+                                if (name.length() > 1 && name.charAt(0) == '.') {
+                                    return false;
+                                }
+                            }
+                            return true;
+                        })
                         .filter(p -> {
                             String name = p.toString().toLowerCase();
                             return !name.endsWith(".png")
