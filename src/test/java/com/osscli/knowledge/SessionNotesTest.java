@@ -143,6 +143,23 @@ class SessionNotesTest {
     }
 
     @Test
+    @DisplayName("a summary that declines to summarise does not name the note")
+    void nonAnswersAreNotTitles() {
+        // The prompt permits "if nothing was concluded, say exactly that" -- the right answer for a
+        // session that went nowhere and the worst possible title, because every such session gets
+        // the same one. Five notes came back called "Nothing was concluded."
+        List<Sessions.Turn> turns = List.of(you("ok"));
+
+        assertEquals("fallback", SessionNotes.titleOf(turns, "fallback", "Nothing was concluded."));
+        assertEquals(
+                "fallback",
+                SessionNotes.titleOf(turns, "fallback", "The transcript contains only the opening message."));
+        // A real summary still names it.
+        assertTrue(SessionNotes.titleOf(turns, "fallback", "The cron compared the wrong field.")
+                .startsWith("The cron compared"));
+    }
+
+    @Test
     @DisplayName("a sentence that names its own session beats a generated one")
     void whatYouSaidWinsWhenItIsUsable() {
         // What somebody actually said is the truer title whenever it is usable at all.

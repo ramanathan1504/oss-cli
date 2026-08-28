@@ -158,6 +158,26 @@ public final class SessionNotes {
         if (summary == null || summary.isBlank()) {
             return null;
         }
+        // A summary that declines to summarise must not name the note.
+        //
+        // The prompt permits "if nothing was concluded, say exactly that" -- which is the right
+        // answer for a session that went nowhere and the worst possible title, because every such
+        // session gets the same one. Five notes came back called "Nothing was concluded." and
+        // "The transcript contains only the opening message", which describe the transcript rather
+        // than the work and are indistinguishable from each other.
+        String opening = summary.strip().toLowerCase(Locale.ROOT);
+        for (String nonAnswer : List.of(
+                "nothing was concluded",
+                "no conclusion",
+                "nothing was settled",
+                "nothing was resolved",
+                "the transcript contains only",
+                "the transcript holds only",
+                "this session did not")) {
+            if (opening.startsWith(nonAnswer)) {
+                return null;
+            }
+        }
         String flat = summary.strip().replaceAll("\\s+", " ");
         int stop = flat.indexOf(". ");
         String first = stop > 20 ? flat.substring(0, stop) : flat;
