@@ -109,7 +109,7 @@ class ContributionsTest {
     @DisplayName("one change that reached two branches is one piece of work")
     void forwardMergesAreNotCountedTwice(@TempDir Path dir) throws IOException {
         repo(dir);
-        commit(dir, "a.txt", "Fix the thing (#4171)");
+        commit(dir, "a.txt", "Fix the thing (#812)");
         run(dir, "git", "branch", "-f", "origin/2.x");
         run(dir, "git", "branch", "-f", "origin/main");
 
@@ -125,8 +125,8 @@ class ContributionsTest {
     void theMergeNumberWins() {
         // The squash convention puts the merge last. Earlier numbers are the issues it fixed --
         // worth reading, and not this commit's pull request.
-        assertEquals(4134, Contributions.prNumberIn("Fix changelog issue of PR references (#2250, #4124, #4134)"));
-        assertEquals(4171, Contributions.prNumberIn("Add native tracing fields (#4171)"));
+        assertEquals(303, Contributions.prNumberIn("Fix changelog issue of PR references (#101, #202, #303)"));
+        assertEquals(812, Contributions.prNumberIn("Add native tracing fields (#812)"));
         assertEquals(0, Contributions.prNumberIn("A commit with no pull request"));
         assertEquals(0, Contributions.prNumberIn(null));
     }
@@ -157,7 +157,7 @@ class ContributionsTest {
         commit(
                 dir,
                 "a.txt",
-                "[main] Fix `RegexFilter` NPE when useRawMsg is null (#3265 port) (#4152)\n\nBody: with | pipes\nand newlines");
+                "[main] Fix `RegexFilter` NPE when useRawMsg is null (#404 port) (#505)\n\nBody: with | pipes\nand newlines");
         run(dir, "git", "branch", "-f", "origin/main");
 
         List<Contributions.Landing> landed = Contributions.landed(dir, List.of("Ramanathan"));
@@ -166,7 +166,7 @@ class ContributionsTest {
         assertTrue(
                 landed.get(0).subject().startsWith("[main] Fix `RegexFilter` NPE"),
                 landed.get(0).subject());
-        assertEquals(4152, landed.get(0).pr());
+        assertEquals(505, landed.get(0).pr());
         assertTrue(landed.get(0).message().contains("pipes"), landed.get(0).message());
     }
 
@@ -193,8 +193,8 @@ class ContributionsTest {
                 "b6ba7d0af60783e98fbe52aee4f9ea3e70deed25",
                 "2.x",
                 "2026-07-06",
-                "Fixes #1976 by introducing a TraceContextProvider SPI.",
-                List.of("log4j-core/src/main/java/A.java"),
+                "Fixes #606 by introducing a TraceContextProvider SPI.",
+                List.of("core/src/main/java/A.java"),
                 1376,
                 26,
                 "* Add tracing fields to RingBufferLogEvent",

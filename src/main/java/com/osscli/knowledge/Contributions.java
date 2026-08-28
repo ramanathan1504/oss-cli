@@ -191,7 +191,7 @@ public final class Contributions {
     /**
      * The pull request a commit came from, out of its subject line.
      *
-     * <p>The squash-merge convention puts it there -- {@code "Fix the thing (#4171)"} -- and the last
+     * <p>The squash-merge convention puts it there -- {@code "Fix the thing (#812)"} -- and the last
      * number on the line is the merge itself. Earlier numbers are references to the issues it fixed,
      * which are worth reading and are not this commit's pull request.
      */

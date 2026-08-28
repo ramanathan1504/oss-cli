@@ -63,7 +63,7 @@ class SessionFilingTest {
         // are the bulk of a transcript and none of it reads well later. Which files is the one
         // line that answers "where was I".
         Path f = transcript(
-                home.resolve(".claude/projects/-Users-x-apache-logging-log4j2"),
+                home.resolve(".claude/projects/-Users-x-apache-name"),
                 "s.jsonl",
                 user("why does rollover skip a file"),
                 toolUse("/src/RollingFileAppender.java"),
@@ -205,7 +205,7 @@ class SessionFilingTest {
         // The directory check alone missed twelve of these: a session started from the home folder
         // edits this repository all afternoon under a path that names neither.
         assertTrue(BuiltinMemory.isExcluded("/Users/x/own-repo-oss-cli/src/Main.java", excluded));
-        assertFalse(BuiltinMemory.isExcluded("apache-logging-log4j2", excluded));
+        assertFalse(BuiltinMemory.isExcluded("apache-name", excluded));
         assertFalse(BuiltinMemory.isExcluded("", excluded));
     }
 

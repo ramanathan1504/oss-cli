@@ -53,21 +53,20 @@ class SessionNotesTest {
     void referenceWins() {
         // Real transcript, real opening line. The sentence is unusable and the URL is the subject.
         List<Sessions.Turn> turns = List.of(
-                you("https://github.com/apache/logging-log4j2/pull/4222 this my pr @vy made some comment"),
+                you("https://github.com/owner/name/pull/812 this my pr @vy made some comment"),
                 back("Looking at the review comments now."));
 
         String title = SessionNotes.titleOf(turns, "fallback");
 
-        assertTrue(title.startsWith("logging-log4j2 PR 4222"), title);
+        assertTrue(title.startsWith("name PR 812"), title);
     }
 
     @Test
     @DisplayName("an issue is called an issue, not a pull request")
     void issuesAreNotPulls() {
-        List<Sessions.Turn> turns =
-                List.of(you("https://github.com/apache/logging-log4j2/issues/4248 what we found is real"));
+        List<Sessions.Turn> turns = List.of(you("https://github.com/owner/name/issues/377 what we found is real"));
 
-        assertTrue(SessionNotes.titleOf(turns, "fallback").startsWith("logging-log4j2 issue 4248"));
+        assertTrue(SessionNotes.titleOf(turns, "fallback").startsWith("name issue 377"));
     }
 
     @Test
@@ -173,29 +172,29 @@ class SessionNotesTest {
     @Test
     @DisplayName("a skill's preamble never becomes the title of the session that ran it")
     void skillPreamblesAreNotTitles() {
-        // Typing "/log4j2-pr-review" expands into thousands of words of instructions that outscore
+        // Typing "/pr-review" expands into thousands of words of instructions that outscore
         // the request underneath. Seventeen notes came out of the first run named "Base directory
-        // for this skill:" over sessions that were "review pr 4156" and its neighbours. The session
+        // for this skill:" over sessions that were "review pr 606" and its neighbours. The session
         // is real; only the title belonged to the machine.
         List<Sessions.Turn> turns = List.of(
-                you("review pr 4156"),
-                you("Base directory for this skill: /x/.claude/skills/log4j2-pr-review\n\n"
-                        + "# Log4j2 PR review\n\nProduce one review file per PR: an explanation the "
+                you("review pr 606"),
+                you("Base directory for this skill: /x/.claude/skills/pr-review\n\n"
+                        + "# PR review\n\nProduce one review file per PR: an explanation the "
                         + "reviewer can follow, checks he can run by hand, and a draft comment."));
 
         String title = SessionNotes.titleOf(turns, "fallback");
 
         assertFalse(title.toLowerCase(java.util.Locale.ROOT).contains("base directory"), title);
-        assertTrue(title.startsWith("PR 4156"), title);
+        assertTrue(title.startsWith("PR 606"), title);
     }
 
     @Test
     @DisplayName("a pull request named in prose counts, not only one named in a link")
     void barePullRequestNumbers() {
         assertTrue(
-                SessionNotes.titleOf(List.of(you("review pr 4156 for me")), "f").startsWith("PR 4156"));
-        assertTrue(SessionNotes.titleOf(List.of(you("look at issue #3704 today")), "f")
-                .startsWith("issue 3704"));
+                SessionNotes.titleOf(List.of(you("review pr 606 for me")), "f").startsWith("PR 606"));
+        assertTrue(SessionNotes.titleOf(List.of(you("look at issue #707 today")), "f")
+                .startsWith("issue 707"));
     }
 
     @Test
@@ -217,7 +216,7 @@ class SessionNotesTest {
         assertTrue(SessionNotes.isAgentPrompt(
                 List.of(you("You are answering a question about this project, on the user's own machine."))));
         assertTrue(SessionNotes.isAgentPrompt(List.of(you("Base directory for this skill: /x/y"))));
-        assertTrue(SessionNotes.isAgentPrompt(List.of(you("READ-ONLY triage for apache/logging-log4j2."))));
+        assertTrue(SessionNotes.isAgentPrompt(List.of(you("READ-ONLY triage for owner/name."))));
     }
 
     @Test
@@ -234,11 +233,11 @@ class SessionNotesTest {
     void collisionsDoNotEatNotes(@org.junit.jupiter.api.io.TempDir Path archive) throws java.io.IOException {
         // 134 transcripts filed, 90 files on disk, and nothing said about the difference. A note
         // that vanishes silently is worse than one never written, because the count says it worked.
-        Path first = SessionNotes.fileInWithoutClobbering(archive, "log4j", "2026-08-28", "PR 4222", "session-a");
+        Path first = SessionNotes.fileInWithoutClobbering(archive, "log4j", "2026-08-28", "PR 812", "session-a");
         java.nio.file.Files.createDirectories(first.getParent());
-        java.nio.file.Files.writeString(first, "---\nsession: session-a\n---\n# PR 4222\n");
+        java.nio.file.Files.writeString(first, "---\nsession: session-a\n---\n# PR 812\n");
 
-        Path second = SessionNotes.fileInWithoutClobbering(archive, "log4j", "2026-08-28", "PR 4222", "session-b");
+        Path second = SessionNotes.fileInWithoutClobbering(archive, "log4j", "2026-08-28", "PR 812", "session-b");
 
         assertFalse(first.equals(second), "the second session would have overwritten the first");
     }
@@ -248,12 +247,12 @@ class SessionNotesTest {
     void refilingIsAnUpdate(@org.junit.jupiter.api.io.TempDir Path archive) throws java.io.IOException {
         // This is what keeps an hourly job from leaving a copy per run -- the failure that put six
         // copies of one review in a real archive, each embedded, each answering the same question.
-        Path first = SessionNotes.fileInWithoutClobbering(archive, "log4j", "2026-08-28", "PR 4222", "session-a");
+        Path first = SessionNotes.fileInWithoutClobbering(archive, "log4j", "2026-08-28", "PR 812", "session-a");
         java.nio.file.Files.createDirectories(first.getParent());
-        java.nio.file.Files.writeString(first, "---\nsession: session-a\n---\n# PR 4222\n");
+        java.nio.file.Files.writeString(first, "---\nsession: session-a\n---\n# PR 812\n");
 
         assertEquals(
-                first, SessionNotes.fileInWithoutClobbering(archive, "log4j", "2026-08-28", "PR 4222", "session-a"));
+                first, SessionNotes.fileInWithoutClobbering(archive, "log4j", "2026-08-28", "PR 812", "session-a"));
     }
 
     // ==========================================
@@ -309,7 +308,7 @@ class SessionNotesTest {
     @Test
     @DisplayName("the directory decides when the words do not")
     void directoryBreaksTheTie() {
-        SessionNotes.Scored scored = SessionNotes.topicOf("fix this please", "apache-logging-log4j2", TOPICS);
+        SessionNotes.Scored scored = SessionNotes.topicOf("fix this please", "owner-appender-tools", TOPICS);
 
         assertEquals("log4j", scored.topic());
         assertTrue(scored.why().contains("ran in"), scored.why());
@@ -332,21 +331,21 @@ class SessionNotesTest {
     @Test
     @DisplayName("the checkout is recovered from the folder Claude Code named after it")
     void projectFromTranscriptPath() {
-        Path t = Path.of(System.getProperty("user.home"), ".claude/projects/-Users-x-apache-logging-log4j2/a.jsonl");
+        Path t = Path.of(System.getProperty("user.home"), ".claude/projects/-Users-x-apache-name/a.jsonl");
 
         // The home prefix is on every one of them and identifies nothing.
         assertFalse(SessionNotes.projectOf(t).startsWith("-"), SessionNotes.projectOf(t));
-        assertTrue(SessionNotes.projectOf(t).endsWith("logging-log4j2"), SessionNotes.projectOf(t));
+        assertTrue(SessionNotes.projectOf(t).endsWith("name"), SessionNotes.projectOf(t));
     }
 
     @Test
     @DisplayName("a scratchpad session reports the checkout, not the temporary folder")
     void scratchpadsReportTheirRealProject() {
-        Path t = Path.of("/x/-private-tmp-claude-501--Users-ramanathan-apache-logging-log4j2-abc-scratchpad/s.jsonl");
+        Path t = Path.of("/x/-private-tmp-claude-501--Users-ramanathan-apache-name-abc-scratchpad/s.jsonl");
 
         String project = SessionNotes.projectOf(t);
 
-        assertTrue(project.contains("logging-log4j2"), project);
+        assertTrue(project.contains("name"), project);
         assertFalse(project.contains("scratchpad"), project);
     }
 
@@ -369,7 +368,7 @@ class SessionNotesTest {
         String note = SessionNotes.noteFor(
                 session,
                 new SessionNotes.Scored("log4j", 9, "matched log4j"),
-                "apache-logging-log4j2",
+                "apache-name",
                 "rollover",
                 List.of("/src/A.java"));
 

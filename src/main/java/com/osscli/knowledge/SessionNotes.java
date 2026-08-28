@@ -29,8 +29,8 @@ import java.util.Set;
  * A CLI transcript, filed under what it was about.
  *
  * <p>The archive on this machine had 541 of 837 notes sitting under a folder named after the
- * program that produced them -- {@code Projects/log4j/claude-code}, {@code Projects/log4j/claude-web},
- * {@code Projects/log4j/ai-studio}. Which is a real fact about each note and a useless one to file
+ * program that produced them -- {@code Projects/rollover/claude-code}, {@code Projects/rollover/claude-web},
+ * {@code Projects/rollover/ai-studio}. Which is a real fact about each note and a useless one to file
  * by: nobody has ever wanted "everything I discussed in a browser tab". They want everything about
  * rollover, and the browser tab, the terminal and the pull request all have a piece of it, split
  * three ways by an accident of where it was typed.
@@ -86,7 +86,7 @@ public final class SessionNotes {
      *
      * <p><b>A pull request or issue number wins.</b> When a session names one, that is the subject:
      * it is a fact, it is unique, it is what you would search for a year later, and it survives the
-     * fact that the sentence around it was "check this". {@code logging-log4j2 PR 4222} beats any
+     * fact that the sentence around it was "check this". {@code some-project PR 812} beats any
      * phrasing of "check this" that could be extracted from the same transcript.
      *
      * <p><b>Otherwise the turn with the most in it wins, not the first.</b> Scored on length and on
@@ -239,7 +239,7 @@ public final class SessionNotes {
             if (line.startsWith("[Image:") || line.startsWith("[Screenshot") || line.startsWith("[Pasted")) {
                 continue;
             }
-            // A skill's own preamble. Typing "/log4j2-pr-review" expands into several thousand
+            // A skill's own preamble. Typing "/pr-review" expands into several thousand
             // words of instructions, and those words outscore the request that triggered them
             // every time -- seventeen notes came out of the first run called "Base directory for
             // this skill:" when the sessions underneath were "review pr 4156" and its neighbours.
@@ -426,7 +426,7 @@ public final class SessionNotes {
         }
         if (best != null) {
             // One term, and no directory to check it against. Better than the junk drawer -- a
-            // note about a build that mentions log4j once is still findable under log4j and is
+            // note about a build that mentions a topic once is still findable under it and is
             // findable under nothing at all in "general" -- but said out loud, because this is the
             // filing most likely to be wrong and the only way to notice is to read why.
             return new Scored(best, bestScore, "only " + String.join(", ", bestTerms) + " matched, so this is a guess");
@@ -475,8 +475,8 @@ public final class SessionNotes {
      * Which checkout a session ran in, recovered from the folder Claude Code named after it.
      *
      * <p>The encoding is lossy on purpose by the tool that wrote it: every {@code /} becomes
-     * {@code -}, and so does every {@code -} already in a path, so {@code apache/logging-log4j2} and
-     * {@code apache-logging/log4j2} arrive identical. That is fine for this. The string is a label
+     * {@code -}, and so does every {@code -} already in a path, so {@code owner/some-name} and
+     * {@code owner-some/name} arrive identical. That is fine for this. The string is a label
      * and a set of terms to match on, not a path to open.
      */
     public static String projectOf(Path transcript) {

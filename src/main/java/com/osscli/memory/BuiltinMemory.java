@@ -440,7 +440,7 @@ public final class BuiltinMemory {
 
         if (!Files.isDirectory(checkout.resolve(".git"))) {
             System.err.println("error  " + checkout + " is not a git checkout");
-            System.err.println("       oss memory contributions ~/apache/logging-log4j2");
+            System.err.println("       oss memory contributions ~/src/owner-name");
             return 2;
         }
 
