@@ -255,7 +255,12 @@ public final class SessionNotes {
     /** Text a program put in front of a request, rather than anything a person typed. */
     static boolean isMachinePreamble(String line) {
         String lower = line.toLowerCase(Locale.ROOT);
-        return lower.startsWith("base directory for this skill")
+        // This tool's own summarising prompt. Asking a command-line tool to summarise a transcript
+        // creates a session of its own, which the next hourly run reads and files -- so the tool's
+        // prompts came back as knowledge, 89 notes of it, every one titled "below is a transcript
+        // of one working session on...". A machine writing notes about its own notes.
+        return lower.startsWith(Enrichment.PREAMBLE.toLowerCase(Locale.ROOT))
+                || lower.startsWith("base directory for this skill")
                 || lower.startsWith("you are ")
                 || lower.startsWith("read-only triage for")
                 || lower.startsWith("caveat:")
@@ -371,6 +376,7 @@ public final class SessionNotes {
             // Only the first thing said counts. A person quoting a prompt mid-conversation is
             // having a conversation about prompts, which is a real note.
             return lower.startsWith("you are ")
+                    || lower.startsWith(Enrichment.PREAMBLE.toLowerCase(Locale.ROOT))
                     || lower.startsWith("base directory for this skill:")
                     || lower.startsWith("read-only triage for");
         }

@@ -65,6 +65,51 @@ public final class LocalEmbedder implements AutoCloseable {
      *
      * @param onProgress told what is happening, because a silent 22 MB download looks like a hang
      */
+    /**
+     * How many threads the model may use.
+     *
+     * <p>Two, and the reason is not the obvious one. ONNX Runtime takes every core by default, and
+     * an indexing run sat at 393% CPU on an eight-core laptop with the fan up -- so the first fix
+     * was to cap the threads. Measured, that made it <em>worse on both axes</em>: the same work
+     * took 22.9s instead of 8.9s and burned 33.2 CPU-seconds instead of 9.1.
+     *
+     * <p>The cost was spin-waiting, not parallelism. ONNX's pool spins before sleeping, so fewer
+     * threads meant more waiting and the waiting was busy. Turning spinning off (below) costs
+     * nothing and the numbers converge: 9.2 CPU-seconds on two threads, 9.1 on eight. Same energy,
+     * a quarter of the cores, and a machine that stays usable while it runs.
+     *
+     * <p>So two is chosen for headroom rather than for power. Raise it with
+     * {@code OSS_EMBED_THREADS} when indexing a large archive on mains power and the wait matters.
+     */
+    static int embedThreads() {
+        String configured = System.getenv("OSS_EMBED_THREADS");
+        if (configured != null && !configured.isBlank()) {
+            try {
+                return Math.max(1, Integer.parseInt(configured.strip()));
+            } catch (NumberFormatException e) {
+                // A number that will not parse must not silently become "all of them".
+            }
+        }
+        return Math.min(2, Math.max(1, Runtime.getRuntime().availableProcessors()));
+    }
+
+    /**
+     * Session options that leave the machine usable while this runs.
+     *
+     * <p>The spinning entry is the one that matters. With it on and the thread count reduced, this
+     * burned 3.6x the CPU to do the same work -- the shape that empties a battery while looking
+     * like a small job. {@code OSS_EMBED_SPIN=1} restores the library default.
+     */
+    static OrtSession.SessionOptions sessionOptions() throws ai.onnxruntime.OrtException {
+        OrtSession.SessionOptions options = new OrtSession.SessionOptions();
+        options.setIntraOpNumThreads(embedThreads());
+        options.setInterOpNumThreads(1);
+        if (!"1".equals(System.getenv("OSS_EMBED_SPIN"))) {
+            options.addConfigEntry("session.intra_op.allow_spinning", "0");
+        }
+        return options;
+    }
+
     public static LocalEmbedder load(java.util.function.Consumer<String> onProgress) throws IOException {
         if (!isDownloaded()) {
             onProgress.accept("first use: fetching the embedding model (~22 MB), once");
@@ -75,7 +120,7 @@ public final class LocalEmbedder implements AutoCloseable {
         }
         try {
             OrtEnvironment env = OrtEnvironment.getEnvironment();
-            OrtSession session = env.createSession(MODEL.toString(), new OrtSession.SessionOptions());
+            OrtSession session = env.createSession(MODEL.toString(), sessionOptions());
             return new LocalEmbedder(env, session, new WordPiece(VOCAB));
         } catch (Exception e) {
             throw new IOException(
