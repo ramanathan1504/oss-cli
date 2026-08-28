@@ -54,6 +54,20 @@ public final class Enrichment {
     /** How long to wait on the CLI before falling back. A summary is not worth a stalled job. */
     private static final long CLI_TIMEOUT_SECONDS = 120;
 
+    /**
+     * The first words of the prompt this class sends.
+     *
+     * <p>Public because {@link SessionNotes} has to recognise it. Asking a command-line tool to
+     * summarise a transcript creates a session of its own, which the next hourly run reads and
+     * files -- so the tool's own prompts came back as knowledge. Eighty-nine notes, every one
+     * titled "below is a transcript of one working session on...", written by the machine about
+     * the machine.
+     *
+     * <p>Shared as a constant rather than copied into the detector, because two spellings of the
+     * same sentence would silently reopen the loop the first time this prompt was reworded.
+     */
+    public static final String PREAMBLE = "Below is a transcript of one working session on";
+
     private Enrichment() {}
 
     /**
@@ -158,7 +172,7 @@ public final class Enrichment {
      */
     static String promptFor(String title, String topic, String transcript) {
         return """
-                Below is a transcript of one working session on %s.
+                %s %s.
 
                 Write at most four sentences saying what was actually worked out: the conclusion \
                 reached, and why. Prefer the technical substance -- the cause of a bug, the reason \

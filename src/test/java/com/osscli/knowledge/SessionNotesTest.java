@@ -220,6 +220,35 @@ class SessionNotesTest {
     }
 
     @Test
+    @DisplayName("the tool's own summarising prompt is not a session worth filing")
+    void theToolDoesNotEatItsOwnOutput() {
+        // Asking a command-line tool to summarise a transcript creates a session of its own, which
+        // the next hourly run reads and files. 89 notes came back that way, every one titled
+        // "below is a transcript of one working session on..." -- a machine writing notes about
+        // its own notes, once an hour, for ever.
+        List<Sessions.Turn> turns = List.of(you(Enrichment.PREAMBLE + " log4j.\n\nWrite at most four sentences."));
+
+        assertTrue(SessionNotes.isAgentPrompt(turns), "the loop reopens the moment this stops matching");
+        assertFalse(
+                SessionNotes.titleOf(turns, "fallback")
+                        .toLowerCase(java.util.Locale.ROOT)
+                        .contains("below is a"),
+                "and it must never become a title either");
+    }
+
+    @Test
+    @DisplayName("the detector reads the prompt from the class that sends it")
+    void theTwoCannotDriftApart() throws java.io.IOException {
+        // Two spellings of the same sentence would silently reopen the loop the first time the
+        // prompt was reworded, and the symptom -- notes titled after a prompt -- takes an hour to
+        // appear and looks like a filing bug rather than a shared-constant bug.
+        String source = java.nio.file.Files.readString(
+                java.nio.file.Path.of("src/main/java/com/osscli/knowledge/SessionNotes.java"));
+
+        assertTrue(source.contains("Enrichment.PREAMBLE"), "the detector must key off the prompt, not a copy of it");
+    }
+
+    @Test
     @DisplayName("a person quoting a prompt is still having a conversation")
     void onlyTheOpeningTurnCounts() {
         assertFalse(SessionNotes.isAgentPrompt(
