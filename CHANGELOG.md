@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.9.3
+
+_2026-08-28_
+
+- A title should name something, and a temp directory is not a project (#225)
+
+
 ## 4.9.2
 
 _2026-08-28_
