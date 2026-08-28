@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.9.1
+
+_2026-08-28_
+
+- A curriculum in three states that respects your decisions (#219)
+- The tool must not file its own prompts as knowledge (#218)
+
+
 ## 4.9.0
 
 _2026-08-28_
