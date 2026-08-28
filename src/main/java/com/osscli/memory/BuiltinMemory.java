@@ -751,14 +751,14 @@ public final class BuiltinMemory {
                                     dayOf(session),
                                     title,
                                     summary,
-                                    com.osscli.knowledge.SessionNotes.noteFor(
+                                    com.osscli.knowledge.SessionNotes.bodyOf(com.osscli.knowledge.SessionNotes.noteFor(
                                             session,
                                             topic,
                                             project,
                                             title,
                                             com.osscli.knowledge.SessionNotes.touched(session.touchedPaths()),
                                             new com.osscli.knowledge.Enrichment.Summary(
-                                                    "", com.osscli.knowledge.Enrichment.By.NONE))));
+                                                    "", com.osscli.knowledge.Enrichment.By.NONE)))));
                 } else {
                     Files.createDirectories(note.getParent());
                     Files.writeString(
