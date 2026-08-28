@@ -68,16 +68,26 @@ class SessionJourneyTest {
     private static void configure(Path home, Path archive, Path transcripts) throws IOException {
         Files.createDirectories(home);
         Files.writeString(
-                home.resolve("kb.json"),
-                """
+                home.resolve("kb.json"), """
                 {
                   "archive": "%s",
                   "transcripts": ["%s"],
                   "topics": { "log4j": ["log4j", "appender", "rollover"] },
                   "exclude": ["some-tool-repo"]
                 }
-                """.formatted(archive.toAbsolutePath(), transcripts.toAbsolutePath()),
-                StandardCharsets.UTF_8);
+                """.formatted(json(archive), json(transcripts)), StandardCharsets.UTF_8);
+    }
+
+    /**
+     * A path as a JSON string value.
+     *
+     * <p>Windows hands back {@code D:\a\oss-cli\...}, and a backslash is an escape character in
+     * JSON -- so the configuration this test wrote was not valid JSON there, the tool fell back to
+     * its defaults, and four journeys failed on a machine nobody had run them on. They passed on
+     * macOS and Linux for the only reason that those separators need no escaping.
+     */
+    private static String json(Path path) {
+        return path.toAbsolutePath().toString().replace("\\", "\\\\");
     }
 
     private static List<Path> notesIn(Path archive) throws IOException {
