@@ -99,6 +99,17 @@ class SessionNotesTest {
     }
 
     @Test
+    @DisplayName("an interruption is not a subject")
+    void interruptionsAreNotTitles() {
+        // The harness's own note that somebody pressed ctrl-c. As a title it says only that a
+        // session stopped, which is true of the session and nothing about the work.
+        List<Sessions.Turn> turns =
+                List.of(you("[Request interrupted by user]"), you("the RollingFileAppender skips a file"));
+
+        assertTrue(SessionNotes.titleOf(turns, "fallback").contains("RollingFileAppender"));
+    }
+
+    @Test
     @DisplayName("a resumed session is not titled after the summary it was handed")
     void resumedSessionsAreNotTitledFromTheirPreamble() {
         List<Sessions.Turn> turns = List.of(
