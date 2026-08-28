@@ -818,7 +818,17 @@ public final class BuiltinMemory {
         }
 
         if (!written.isEmpty()) {
-            embedNotes(archive.resolve("Projects").toString());
+            // The one expensive thing on the hourly path, and the only place battery matters.
+            //
+            // A tick that finds nothing costs 0.89 CPU-seconds; embedding a folder of notes costs
+            // minutes of every core. Nobody is waiting for it, so on battery it waits for mains --
+            // which is different from a command somebody typed, where the cost was accepted by the
+            // act of typing it.
+            if (quiet && com.osscli.schedule.Power.onBattery()) {
+                com.osscli.ui.Out.note(com.osscli.schedule.Power.deferred("indexing"));
+            } else {
+                embedNotes(archive.resolve("Projects").toString());
+            }
         }
         return 0;
     }
