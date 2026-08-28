@@ -1749,7 +1749,47 @@ public final class BuiltinMemory {
         // path for ever -- and a folder rename produces two copies of every note in it, identical
         // text, both answering. Nothing had ever removed anything from it.
         pruneMovedNotes(args.contains("--forget-missing"));
+        indexTheArchive();
         return 0;
+    }
+
+    /**
+     * Embed every note in every configured folder.
+     *
+     * <p>This command used to count notes and say the index needed no maintenance, which was true
+     * of the term index and false of the vector one. Measured on a real store afterwards: 965 notes
+     * in the archive and 269 of them in no index at all -- every digest at the root, everything
+     * under {@code Blog} and {@code Reference}. Searchable by term, invisible to anything that
+     * answers by meaning, and nothing said so.
+     *
+     * <p>The gap existed because each writer indexed only what it had just written. Nothing ever
+     * swept the whole archive except {@code sync --me}, which is a different command that people
+     * run for a different reason.
+     *
+     * <p>Cheap on a second run: {@code NoteIndexer} skips a file whose content and embedding model
+     * are already stored, so this costs a walk and a hash for everything that has not changed.
+     */
+    private static void indexTheArchive() {
+        List<String> folders = new ArrayList<>();
+        for (Path root : com.osscli.retrieval.StaleNotes.configuredRoots()) {
+            if (Files.isDirectory(root) && !folders.contains(root.toString())) {
+                folders.add(root.toString());
+            }
+        }
+        if (folders.isEmpty()) {
+            return;
+        }
+        com.osscli.retrieval.LocalEmbedder embedder = com.osscli.retrieval.Embeddings.ifPresent(m -> {});
+        if (embedder == null) {
+            com.osscli.ui.Out.note("no embedding model, so these are searchable by term and not by meaning");
+            com.osscli.ui.Out.hint("oss model --fetch", "22 MB, once");
+            return;
+        }
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("indexing your notes")) {
+            live.step(String.join(", ", folders));
+            com.osscli.retrieval.NoteIndexer.index(folders, embedder, com.osscli.retrieval.Embeddings.MODEL);
+        }
+        com.osscli.ui.Out.ok("every configured folder is embedded — ask, chat, guide, pick and prompt can see them");
     }
 
     /**
