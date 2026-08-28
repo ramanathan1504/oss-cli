@@ -718,6 +718,7 @@ public final class BuiltinMemory {
                     session.raw(), project.isBlank() ? "session " + session.id() : project + " session");
             Path note = com.osscli.knowledge.SessionNotes.fileInWithoutClobbering(
                     archive, topic.topic(), dayOf(session), title, session.id());
+            // Reassigned below when the session names a pull request or an issue.
 
             if (!dryRun) {
                 com.osscli.knowledge.Enrichment.Summary summary =
@@ -731,17 +732,46 @@ public final class BuiltinMemory {
                         summary = com.osscli.knowledge.Enrichment.summarise(title, topic.topic(), text, allowClaude);
                     }
                 }
-                Files.createDirectories(note.getParent());
-                Files.writeString(
-                        note,
-                        com.osscli.knowledge.SessionNotes.noteFor(
-                                session,
-                                topic,
-                                project,
-                                title,
-                                com.osscli.knowledge.SessionNotes.touched(session.touchedPaths()),
-                                summary),
-                        StandardCharsets.UTF_8);
+                // One subject, one note.
+                //
+                // A note per session fragmented the record: four days on one issue produced five
+                // files, each a fifth of the story and none of them the place to look. When a
+                // session names a pull request or an issue, that reference is the file and this
+                // session becomes a dated section in it.
+                String reference = com.osscli.knowledge.SessionNotes.referenceIn(session.raw());
+                if (reference != null) {
+                    note = com.osscli.knowledge.SessionLog.pathFor(archive, topic.topic(), reference);
+                    com.osscli.knowledge.SessionLog.append(
+                            note,
+                            reference,
+                            topic.topic(),
+                            project,
+                            session.id(),
+                            com.osscli.knowledge.SessionLog.sectionFor(
+                                    dayOf(session),
+                                    title,
+                                    summary,
+                                    com.osscli.knowledge.SessionNotes.noteFor(
+                                            session,
+                                            topic,
+                                            project,
+                                            title,
+                                            com.osscli.knowledge.SessionNotes.touched(session.touchedPaths()),
+                                            new com.osscli.knowledge.Enrichment.Summary(
+                                                    "", com.osscli.knowledge.Enrichment.By.NONE))));
+                } else {
+                    Files.createDirectories(note.getParent());
+                    Files.writeString(
+                            note,
+                            com.osscli.knowledge.SessionNotes.noteFor(
+                                    session,
+                                    topic,
+                                    project,
+                                    title,
+                                    com.osscli.knowledge.SessionNotes.touched(session.touchedPaths()),
+                                    summary),
+                            StandardCharsets.UTF_8);
+                }
                 ledger.mark(file);
                 written.add(note);
             }
@@ -1397,7 +1427,22 @@ public final class BuiltinMemory {
             System.out.printf("  %s%n", saidHourly);
             System.out.println("  it will run  oss memory sessions  every hour");
             System.out.println("  the first tick is an hour from now — run it once yourself to see it work");
-            System.out.println("  oss memory schedule --uninstall --hourly   removes it");
+            System.out.println();
+            // Offered, never installed. Another program's settings file is not this one's to edit,
+            // and the schedule is the floor that catches everything a hook cannot: the other tools,
+            // and any session that ended while the hook was wrong.
+            System.out.println("  to have a session filed the moment it ends rather than within the hour,");
+            System.out.println("  add this to ~/.claude/settings.json yourself:");
+            System.out.println();
+            for (String line : com.osscli.schedule.SessionJob.hookFor(
+                            com.osscli.schedule.Platforms.launcher() == null
+                                    ? "oss"
+                                    : com.osscli.schedule.Platforms.launcher().toString())
+                    .split("\n")) {
+                System.out.println("    " + line);
+            }
+            System.out.println();
+            System.out.println("  oss memory schedule --uninstall --hourly   removes the schedule");
             return 0;
         }
         String said = com.osscli.schedule.DailyJob.install(

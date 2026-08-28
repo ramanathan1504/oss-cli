@@ -104,7 +104,7 @@ public final class SessionNotes {
     }
 
     /** The GitHub pull request or issue a session is about, named the way a person would say it. */
-    static String referenceIn(List<Sessions.Turn> turns) {
+    public static String referenceIn(List<Sessions.Turn> turns) {
         java.util.regex.Pattern url =
                 java.util.regex.Pattern.compile("github\\.com/([\\w.-]+)/([\\w.-]+)/(pull|issues)/(\\d+)");
         // "review pr 4156" is how somebody who has the repository open actually refers to one, and
@@ -615,7 +615,7 @@ public final class SessionNotes {
     }
 
     /** Quoted only where it has to be, so the common case reads as prose rather than as data. */
-    static String yaml(String value) {
+    public static String yaml(String value) {
         String v = value.replace("\"", "'").replaceAll("\\s+", " ").strip();
         return v.contains(":") || v.contains("#") || v.startsWith("-") ? "\"" + v + "\"" : v;
     }

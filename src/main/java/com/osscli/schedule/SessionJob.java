@@ -221,6 +221,29 @@ public final class SessionJob {
         return had;
     }
 
+    /**
+     * The hook line that files a session the moment it ends, rather than within the hour.
+     *
+     * <p>Offered as a value rather than installed. Claude Code's settings file belongs to the
+     * person using Claude Code, and a tool that edits another program's configuration because it
+     * would be convenient is the same class of thing as a background download nobody asked for.
+     *
+     * <p>The hourly job stays the floor either way: a hook only fires for the tool that has one,
+     * and only while that tool is installed. Between them the hook makes a session appear at once
+     * and the schedule guarantees nothing is ever missed -- including sessions from every other
+     * tool, and any that ended while the hook was misconfigured.
+     */
+    public static String hookFor(String command) {
+        return """
+                {
+                  "hooks": {
+                    "SessionEnd": [
+                      { "hooks": [ { "type": "command", "command": "%s memory sessions --quiet" } ] }
+                    ]
+                  }
+                }""".formatted(command);
+    }
+
     /** Whether the operating system is holding it, not merely whether a file exists. */
     public static boolean running() {
         return Platforms.loaded(Platforms.Platform.detect() == Platforms.Platform.LINUX ? UNIT : LABEL);
