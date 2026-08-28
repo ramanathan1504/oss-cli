@@ -354,6 +354,32 @@ public final class SessionNotes {
     }
 
     /**
+     * A note with its frontmatter and title removed, for embedding inside another note.
+     *
+     * <p>A running log is one document, and a document does not have a second YAML block in the
+     * middle of it. Embedded whole, every session section opened with {@code ---} followed by
+     * {@code title:} and {@code source:} lines -- which markdown renders as a horizontal rule and
+     * then as prose, so the log read as though the file had been concatenated by accident. It had.
+     */
+    public static String bodyOf(String note) {
+        String text = note == null ? "" : note;
+        if (text.startsWith("---")) {
+            int end = text.indexOf("\n---", 3);
+            if (end >= 0) {
+                text = text.substring(text.indexOf('\n', end + 1) + 1);
+            }
+        }
+        // The heading too: the log already carries one, and a second at the same level reads as a
+        // second document rather than a section of this one.
+        String trimmed = text.stripLeading();
+        if (trimmed.startsWith("# ")) {
+            int nl = trimmed.indexOf('\n');
+            trimmed = nl < 0 ? "" : trimmed.substring(nl + 1);
+        }
+        return trimmed.strip();
+    }
+
+    /**
      * Whether a transcript is a program talking to itself.
      *
      * <p>Sixteen sessions on this machine opened with "You are answering a question about this

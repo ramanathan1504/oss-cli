@@ -109,6 +109,23 @@ class StaleNotesTest {
     }
 
     @Test
+    @DisplayName("a run that files nothing still drops what is gone")
+    void pruningIsNotInsideTheWriteBranch() throws IOException {
+        // It was, and a deletion is exactly the case that writes nothing. 229 junk notes were
+        // removed from an archive, the next tick found no new transcripts, and 294 rows for files
+        // nobody could open stayed in the index answering searches.
+        String source = Files.readString(Path.of("src/main/java/com/osscli/memory/BuiltinMemory.java"));
+        int sessions = source.indexOf("private static int sessions(");
+        int prune = source.indexOf("pruneMovedNotes(", sessions);
+        int writeBranch = source.indexOf("if (!written.isEmpty())", sessions);
+
+        assertTrue(prune > 0 && writeBranch > 0, "the session run changed shape; this guard needs rewriting");
+        assertTrue(
+                prune < writeBranch,
+                "pruning must happen whether or not anything was filed, or a deletion is never noticed");
+    }
+
+    @Test
     @DisplayName("blank and null paths are skipped rather than counted as deletions")
     void garbageRowsAreNotDeletions() {
         StaleNotes.Sweep sweep = StaleNotes.sweep(java.util.Arrays.asList(null, "", "   "), List.of());

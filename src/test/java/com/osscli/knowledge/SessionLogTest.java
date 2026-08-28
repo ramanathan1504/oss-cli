@@ -115,6 +115,32 @@ class SessionLogTest {
     }
 
     @Test
+    @DisplayName("a section carries no frontmatter of its own")
+    void embeddedSectionsAreBodiesNotDocuments() {
+        // A running log is one document and does not have a second YAML block in the middle of it.
+        // Embedded whole, each section opened with --- followed by title: and source: lines, which
+        // markdown renders as a rule and then as prose: the log read as though the file had been
+        // concatenated by accident. It had.
+        String note = "---\ntitle: a session\nsource: session\n---\n\n# a session\n\n## The Problem\n\nreal content";
+
+        String body = SessionNotes.bodyOf(note);
+
+        assertFalse(body.contains("---"), body);
+        assertFalse(body.contains("source: session"), body);
+        assertFalse(body.startsWith("# "), "the log already has a heading: " + body);
+        assertTrue(body.startsWith("## The Problem"), body);
+        assertTrue(body.contains("real content"));
+    }
+
+    @Test
+    @DisplayName("a body with no frontmatter is left as it is")
+    void bodyOfIsSafeOnPlainText() {
+        assertEquals("## Just a section\n\nwords", SessionNotes.bodyOf("## Just a section\n\nwords"));
+        assertEquals("", SessionNotes.bodyOf(null));
+        assertEquals("", SessionNotes.bodyOf(""));
+    }
+
+    @Test
     @DisplayName("a note you wrote by hand is never written over")
     void handWrittenNotesAreSafe(@TempDir Path archive) throws IOException {
         // On macOS "Issue-3704.md" and "issue-3704.md" are the same file, so the generated log
