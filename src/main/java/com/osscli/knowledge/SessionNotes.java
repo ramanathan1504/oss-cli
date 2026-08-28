@@ -17,13 +17,13 @@
 package com.osscli.knowledge;
 
 import com.osscli.memory.Sessions;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.nio.file.Path;
 
 /**
  * A CLI transcript, filed under what it was about.
@@ -105,8 +105,8 @@ public final class SessionNotes {
 
     /** The GitHub pull request or issue a session is about, named the way a person would say it. */
     static String referenceIn(List<Sessions.Turn> turns) {
-        java.util.regex.Pattern url = java.util.regex.Pattern.compile(
-                "github\\.com/([\\w.-]+)/([\\w.-]+)/(pull|issues)/(\\d+)");
+        java.util.regex.Pattern url =
+                java.util.regex.Pattern.compile("github\\.com/([\\w.-]+)/([\\w.-]+)/(pull|issues)/(\\d+)");
         // "review pr 4156" is how somebody who has the repository open actually refers to one, and
         // it is the whole of what many of these sessions say before the work starts. A URL is
         // better evidence when there is one, so it is looked for first across every turn.
@@ -135,9 +135,28 @@ public final class SessionNotes {
 
     /** Phrases that are how a conversation is steered rather than what it is about. */
     private static final List<String> CHATTER = List.of(
-            "all set", "u know", "uknow", "ukow", "right?", "thanks", "ok ", "okay", "yes do", "do it",
-            "fix all", "fix this", "continue", "go ahead", "pls", "please", "check this", "what about",
-            "am taking", "i think", "can u", "can you");
+            "all set",
+            "u know",
+            "uknow",
+            "ukow",
+            "right?",
+            "thanks",
+            "ok ",
+            "okay",
+            "yes do",
+            "do it",
+            "fix all",
+            "fix this",
+            "continue",
+            "go ahead",
+            "pls",
+            "please",
+            "check this",
+            "what about",
+            "am taking",
+            "i think",
+            "can u",
+            "can you");
 
     /** The user turn that carries the most subject, rather than the one that came first. */
     static String bestPhrase(List<Sessions.Turn> turns) {
@@ -257,9 +276,7 @@ public final class SessionNotes {
 
     /** A file name that is stable across runs, so the second harvest rewrites rather than duplicates. */
     public static String slug(String title) {
-        String s = title.toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "-")
-                .replaceAll("^-+|-+$", "");
+        String s = title.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("^-+|-+$", "");
         if (s.isBlank()) {
             return "session";
         }
@@ -398,7 +415,10 @@ public final class SessionNotes {
             }
         }
         if (best != null && bestTerms.size() >= MIN_TOPIC_HITS) {
-            return new Scored(best, bestScore, "matched " + String.join(", ", bestTerms.subList(0, Math.min(4, bestTerms.size()))));
+            return new Scored(
+                    best,
+                    bestScore,
+                    "matched " + String.join(", ", bestTerms.subList(0, Math.min(4, bestTerms.size()))));
         }
         String fromDirectory = topicOfProject(project, topics);
         if (fromDirectory != null) {
@@ -542,7 +562,11 @@ public final class SessionNotes {
 
         sb.append("## The Problem (What & Where)\n\n");
         if (!project.isBlank()) {
-            sb.append("Worked on in `").append(project).append("`, through ").append(session.tool()).append(".\n\n");
+            sb.append("Worked on in `")
+                    .append(project)
+                    .append("`, through ")
+                    .append(session.tool())
+                    .append(".\n\n");
         }
         boolean askedAnything = false;
         for (Sessions.Turn t : session.raw()) {

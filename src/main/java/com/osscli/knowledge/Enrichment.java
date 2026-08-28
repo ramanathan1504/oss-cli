@@ -56,20 +56,21 @@ public final class Enrichment {
 
     private Enrichment() {}
 
-    /** Which tier answered, so the note can say so and a reader can weigh it. */
-    public enum By {
-        CLAUDE("claude"),
-        LOCAL("local model"),
-        NONE("");
+    /**
+     * Which tier answered.
+     *
+     * <p>Carries the provider's own name rather than a fixed set of constants, because the set is
+     * not fixed: this must work with whatever is on the machine -- any of the CLIs, any of the
+     * cloud engines, or the local model -- and a note that says "summarised by claude" when gemini
+     * wrote it is worse than one that says nothing.
+     */
+    public record By(String label, boolean any) {
 
-        private final String label;
+        /** Nothing wrote a summary. */
+        public static final By NONE = new By("", false);
 
-        By(String label) {
-            this.label = label;
-        }
-
-        public String label() {
-            return label;
+        public static By tool(String name) {
+            return new By(name, true);
         }
     }
 
@@ -77,34 +78,74 @@ public final class Enrichment {
     public record Summary(String text, By by) {
 
         public boolean present() {
-            return by != By.NONE && text != null && !text.isBlank();
+            return by != null && by.any() && text != null && !text.isBlank();
         }
     }
 
     private static final Summary ABSENT = new Summary("", By.NONE);
 
-    /** True when something on this machine could write a summary. */
-    public static boolean available(boolean allowClaude) {
-        return (allowClaude && claudeIsHere()) || localIsHere();
+    /** True when anything on this machine could write a summary. */
+    public static boolean available(boolean allowCli) {
+        return (allowCli && !toolsHere().isEmpty()) || localIsHere();
+    }
+
+    /**
+     * Which command-line tools are actually installed, in the order this install prefers them.
+     *
+     * <p>{@code CliClient.ALL} is the full set the tool speaks to -- claude, codex, gemini, junie --
+     * and any of them can write three sentences about a transcript. Naming one in the code would
+     * make the archive depend on a particular subscription, which is the whole thing this class
+     * exists not to do.
+     */
+    static List<com.osscli.llm.CliClient.Spec> toolsHere() {
+        List<com.osscli.llm.CliClient.Spec> out = new java.util.ArrayList<>();
+        // Whatever the user has selected comes first: if they said `oss gemini ...`, gemini is the
+        // one they meant, and reaching past it to another installed tool would be this tool
+        // choosing a provider on their behalf.
+        for (com.osscli.llm.Ai.Engine preferred : com.osscli.llm.Ai.engines()) {
+            com.osscli.llm.CliClient.Spec spec = com.osscli.llm.CliClient.specFor(preferred);
+            if (spec != null && isHere(spec)) {
+                out.add(spec);
+            }
+        }
+        for (com.osscli.llm.CliClient.Spec spec : com.osscli.llm.CliClient.ALL) {
+            if (!out.contains(spec) && isHere(spec)) {
+                out.add(spec);
+            }
+        }
+        return out;
+    }
+
+    private static boolean isHere(com.osscli.llm.CliClient.Spec spec) {
+        try {
+            return new com.osscli.llm.CliClient(spec, CLI_TIMEOUT_SECONDS).available();
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     /**
      * What this session worked out, in a few sentences.
      *
-     * <p>Never throws and never blocks past its timeout. Every failure returns {@link #ABSENT},
-     * because the caller's next move is identical whether the model was missing, slow, or wrong --
-     * write the note without it.
+     * <p>Never throws and never blocks past its timeout. Every failure falls through to the next
+     * tier and finally to {@link #ABSENT}, because the caller's next move is identical whether the
+     * model was missing, slow, out of credit or wrong -- write the note without it.
      */
-    public static Summary summarise(String title, String topic, String transcript, boolean allowClaude) {
+    public static Summary summarise(String title, String topic, String transcript, boolean allowCli) {
         String prompt = promptFor(title, topic, clip(transcript));
-        if (allowClaude && claudeIsHere()) {
-            String said = tryClaude(prompt);
-            if (said != null) {
-                return new Summary(said, By.CLAUDE);
+        if (allowCli) {
+            for (com.osscli.llm.CliClient.Spec spec : toolsHere()) {
+                String said = tryTool(spec, prompt);
+                if (said != null) {
+                    return new Summary(said, By.tool(spec.binary()));
+                }
+                // Out of credit, rate limited, logged out. Try the next tool rather than the
+                // local model: another subscription on the same machine is a better answer than
+                // a smaller model, and finding out costs one failed call.
             }
         }
         String said = tryLocal(prompt);
-        return said == null ? ABSENT : new Summary(said, By.LOCAL);
+        return said == null ? ABSENT : new Summary(said, By.tool("local model"));
     }
 
     /**
@@ -133,8 +174,7 @@ public final class Enrichment {
 
                 --- TRANSCRIPT ---
                 %s
-                """
-                .formatted(topic, title, transcript);
+                """.formatted(topic, title, transcript);
     }
 
     private static String clip(String s) {
@@ -148,21 +188,10 @@ public final class Enrichment {
     // The tiers
     // ==========================================
 
-    private static boolean claudeIsHere() {
+    private static String tryTool(com.osscli.llm.CliClient.Spec spec, String prompt) {
         try {
-            return new com.osscli.llm.CliClient(com.osscli.llm.CliClient.CLAUDE, CLI_TIMEOUT_SECONDS).available();
-        } catch (RuntimeException e) {
-            return false;
-        }
-    }
-
-    private static String tryClaude(String prompt) {
-        try {
-            return clean(new com.osscli.llm.CliClient(com.osscli.llm.CliClient.CLAUDE, CLI_TIMEOUT_SECONDS)
-                    .generateText(prompt));
+            return clean(new com.osscli.llm.CliClient(spec, CLI_TIMEOUT_SECONDS).generateText(prompt));
         } catch (Exception e) {
-            // Out of credit, not logged in, rate limited, or simply slow. All four have the same
-            // answer here, and it is the local model rather than a message about billing.
             return null;
         }
     }

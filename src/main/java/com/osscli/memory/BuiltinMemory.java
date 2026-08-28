@@ -53,6 +53,7 @@ public final class BuiltinMemory {
             "gaps",
             "harvest",
             "sessions",
+            "contributions",
             "digest",
             "import",
             "schedule",
@@ -413,6 +414,121 @@ public final class BuiltinMemory {
         System.out.println("  indexed — chat, guide, pick and prompt can see them now");
     }
 
+    // ------------------------------------------------------------ contributions ---
+
+    /**
+     * A note for every change of yours that reached a release branch.
+     *
+     * <p>The archive was full of what was discussed and held almost nothing about what landed.
+     * Forty commits across {@code 2.x} and {@code main} -- the work that survived review, the thing
+     * a PMC or an employer would actually look at -- existed only as lines in somebody else's git
+     * history, with the review that shaped each one scattered across three GitHub endpoints.
+     *
+     * <p>Each note carries the commit, the diffstat, the files, the description, the timeline, and
+     * every remark anybody made, including the ones pinned to lines of the diff -- which is where
+     * review actually happens and which "fetch the comments" misses entirely.
+     *
+     * <p><b>Read-only against the repository.</b> Every git command is a read and every GitHub call
+     * is a GET. Nothing is cloned, fetched into a working tree, pushed, commented on or opened, and
+     * nothing written here is ever sent anywhere.
+     */
+    private static int contributions(List<String> args) throws IOException {
+        List<String> rest = args.stream().filter(a -> !a.startsWith("--")).toList();
+        Path checkout = Path.of(rest.isEmpty() ? System.getProperty("user.dir", ".") : rest.get(0));
+        boolean offline = args.contains("--offline");
+        boolean dryRun = args.contains("--dry-run");
+
+        if (!Files.isDirectory(checkout.resolve(".git"))) {
+            System.err.println("error  " + checkout + " is not a git checkout");
+            System.err.println("       oss memory contributions ~/apache/logging-log4j2");
+            return 2;
+        }
+
+        String name = configuredUser();
+        if (name == null || name.isBlank()) {
+            System.err.println("error  whose commits? set one once: oss setup  (github.username)");
+            return 2;
+        }
+
+        String repo = com.osscli.knowledge.Contributions.remoteOf(checkout);
+        List<com.osscli.knowledge.Contributions.Landing> landed =
+                com.osscli.knowledge.Contributions.landed(checkout, name);
+        if (landed.isEmpty()) {
+            com.osscli.ui.Out.none(
+                    "no commits of yours on " + String.join(", ", com.osscli.knowledge.Contributions.RELEASE_BRANCHES));
+            com.osscli.ui.Out.hint("git fetch origin", "the release branches have to be here to be read");
+            return 0;
+        }
+        com.osscli.ui.Out.title(landed.size() + " landed change(s) in " + repo);
+
+        KnowledgePack pack = KnowledgePack.load();
+        Path into = pack.archive().resolve("Projects");
+        com.osscli.github.GitHubClient gh = offline ? null : new com.osscli.github.GitHubClient();
+
+        int written = 0;
+        int noConversation = 0;
+        java.util.Map<String, Integer> byTopic = new java.util.TreeMap<>();
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("reading your history")) {
+            for (com.osscli.knowledge.Contributions.Landing l : landed) {
+                live.step("PR " + l.pr() + " — " + l.subject());
+                com.osscli.knowledge.Contributions.Conversation talk = null;
+                if (gh != null && l.pr() > 0 && !repo.isBlank()) {
+                    talk = com.osscli.knowledge.Contributions.conversationOn(gh, repo, l.pr());
+                }
+                if (talk == null || talk.remarks().isEmpty()) {
+                    noConversation++;
+                }
+                com.osscli.knowledge.Contributions.Diffstat stat =
+                        com.osscli.knowledge.Contributions.diffstat(checkout, l.sha());
+
+                String title = talk != null && !talk.title().isBlank() ? talk.title() : l.subject();
+                com.osscli.knowledge.SessionNotes.Scored topic = com.osscli.knowledge.SessionNotes.topicOf(
+                        com.osscli.knowledge.Contributions.textOf(l, talk), repo, pack.topics());
+
+                com.osscli.knowledge.Contribution.Landed c = new com.osscli.knowledge.Contribution.Landed(
+                        repo,
+                        l.pr(),
+                        title,
+                        l.sha(),
+                        l.branch(),
+                        talk != null && !talk.mergedAt().isBlank() ? talk.mergedAt() : l.date(),
+                        talk == null ? "" : talk.body(),
+                        stat.files(),
+                        stat.insertions(),
+                        stat.deletions(),
+                        l.message(),
+                        talk == null ? List.of() : talk.remarks(),
+                        talk == null ? List.of() : talk.timeline(),
+                        l.coAuthored());
+
+                if (!dryRun) {
+                    Path folder = into.resolve(topic.topic()).resolve("contributions");
+                    Files.createDirectories(folder);
+                    Files.writeString(
+                            folder.resolve(com.osscli.knowledge.Contributions.nameFor(c)),
+                            com.osscli.knowledge.Contribution.noteFor(c, topic.topic()),
+                            StandardCharsets.UTF_8);
+                }
+                byTopic.merge(topic.topic(), 1, Integer::sum);
+                written++;
+            }
+        }
+
+        com.osscli.ui.Out.gap();
+        com.osscli.ui.Out.ok(written + " contribution note(s)" + (dryRun ? " (dry run, nothing written)" : ""));
+        byTopic.forEach((topic, n) -> com.osscli.ui.Out.kv(topic, String.valueOf(n)));
+        if (noConversation > 0) {
+            // Said out loud: a change that merged unopposed is a real fact about the change, and a
+            // silent section could equally mean the fetch failed.
+            com.osscli.ui.Out.note(noConversation + " merged with nothing said on them"
+                    + (offline ? " — --offline, so GitHub was never asked" : ""));
+        }
+        if (!dryRun) {
+            embedNotes(into.toString());
+        }
+        return 0;
+    }
+
     // ----------------------------------------------------------------- sessions ---
 
     /**
@@ -439,10 +555,12 @@ public final class BuiltinMemory {
         // subscription or this laptop's CPU, is how a background job becomes the reason somebody
         // uninstalls the tool.
         boolean enrich = args.contains("--enrich");
-        // Claude writes the better paragraph and it is the one that costs money, and this machine
-        // ran out of credit mid-afternoon once already. So the local model is the default even
-        // when Claude is installed, and reaching for Claude is a second, separate decision.
-        boolean allowClaude = args.contains("--claude");
+        // A command-line tool writes the better paragraph and it is the one that costs a
+        // subscription -- this machine ran out of credit mid-afternoon once already. So the local
+        // model is the default even when a tool is installed, and reaching for one is a second,
+        // separate decision. Which tool is not decided here: Enrichment takes whatever this
+        // install prefers and is actually present, so the archive never depends on one vendor.
+        boolean allowClaude = args.contains("--cli") || args.contains("--claude");
         int limit = limitIn(args);
 
         KnowledgePack pack = KnowledgePack.load();
@@ -530,8 +648,7 @@ public final class BuiltinMemory {
                     // from one that has hung, which is the complaint that put Live in here at all.
                     try (com.osscli.ui.Live live = com.osscli.ui.Live.start("summarising")) {
                         live.step(title);
-                        summary = com.osscli.knowledge.Enrichment.summarise(
-                                title, topic.topic(), text, allowClaude);
+                        summary = com.osscli.knowledge.Enrichment.summarise(title, topic.topic(), text, allowClaude);
                     }
                 }
                 Files.createDirectories(note.getParent());
@@ -563,7 +680,8 @@ public final class BuiltinMemory {
         if (filed == 0) {
             com.osscli.ui.Out.ok("nothing new — " + unchanged + " transcript(s) already filed");
         } else {
-            com.osscli.ui.Out.ok(filed + " session(s) filed by subject" + (dryRun ? " (dry run, nothing written)" : ""));
+            com.osscli.ui.Out.ok(
+                    filed + " session(s) filed by subject" + (dryRun ? " (dry run, nothing written)" : ""));
             byTopic.forEach((topic, n) -> com.osscli.ui.Out.kv(topic, String.valueOf(n)));
         }
         if (unchanged > 0 && filed > 0) {
@@ -576,12 +694,14 @@ public final class BuiltinMemory {
             com.osscli.ui.Out.note(silent + " held no prose worth keeping — tool calls only");
         }
         if (machine > 0) {
-            com.osscli.ui.Out.note(machine + " were subagent runs — a prompt this tool wrote, not a question you asked");
+            com.osscli.ui.Out.note(
+                    machine + " were subagent runs — a prompt this tool wrote, not a question you asked");
         }
 
         if (enrich && filed > limit) {
             com.osscli.ui.Out.note((filed - limit) + " past the --limit of " + limit + " were filed without a summary");
-            com.osscli.ui.Out.hint("oss memory sessions --all --enrich --limit 200", "do the rest when you are away from the machine");
+            com.osscli.ui.Out.hint(
+                    "oss memory sessions --all --enrich --limit 200", "do the rest when you are away from the machine");
         }
         if (!enrich && filed > 0) {
             com.osscli.ui.Out.hint("oss memory sessions --enrich", "add a paragraph saying what each one settled");
@@ -875,6 +995,8 @@ public final class BuiltinMemory {
                     return harvest(args);
                 case "sessions":
                     return sessions(args);
+                case "contributions":
+                    return contributions(args);
                 case "digest":
                     return digest(args);
                 case "import":
@@ -1641,12 +1763,11 @@ public final class BuiltinMemory {
     private static void pruneMovedNotes(boolean forgetMissing) {
         try {
             List<String> indexed = com.osscli.storage.SqliteStorage.indexedNotePaths();
-            com.osscli.retrieval.StaleNotes.Sweep sweep = com.osscli.retrieval.StaleNotes.sweep(
-                    indexed, com.osscli.retrieval.StaleNotes.configuredRoots());
+            com.osscli.retrieval.StaleNotes.Sweep sweep =
+                    com.osscli.retrieval.StaleNotes.sweep(indexed, com.osscli.retrieval.StaleNotes.configuredRoots());
             if (!sweep.gone().isEmpty()) {
                 int forgotten = com.osscli.retrieval.StaleNotes.forget(sweep.gone());
-                com.osscli.ui.Out.ok(
-                        forgotten + " note(s) that had moved or been deleted were dropped from the index");
+                com.osscli.ui.Out.ok(forgotten + " note(s) that had moved or been deleted were dropped from the index");
             }
 
             // Everything outside every configured folder. Normally untouchable, because "not under
@@ -1658,9 +1779,11 @@ public final class BuiltinMemory {
                 return;
             }
             if (!forgetMissing) {
-                com.osscli.ui.Out.note(outside.size()
-                        + " indexed note(s) are missing and sit outside every configured folder — an archive that moved");
-                com.osscli.ui.Out.hint("oss memory index --forget-missing", "drop them once you are sure the move was intended");
+                com.osscli.ui.Out.note(
+                        outside.size()
+                                + " indexed note(s) are missing and sit outside every configured folder — an archive that moved");
+                com.osscli.ui.Out.hint(
+                        "oss memory index --forget-missing", "drop them once you are sure the move was intended");
                 return;
             }
             int forgotten = com.osscli.retrieval.StaleNotes.forget(outside);

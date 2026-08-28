@@ -395,8 +395,7 @@ public final class Sessions {
         }
         // The banner the harness adds when a message arrives mid-turn. It is about the mechanism,
         // never about the work.
-        out = out.replaceAll(
-                "(?m)^This is how Claude Code surfaces messages the user sends mid-turn.*$", "");
+        out = out.replaceAll("(?m)^This is how Claude Code surfaces messages the user sends mid-turn.*$", "");
         return out.replaceAll("\n{3,}", "\n\n");
     }
 

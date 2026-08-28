@@ -61,8 +61,7 @@ class CliTimeoutTest {
         assertTrue(p.waitFor(10, TimeUnit.SECONDS), "the process itself did not die");
         for (ProcessHandle child : before) {
             assertTrue(
-                    child.onExit().orTimeout(10, TimeUnit.SECONDS).isDone()
-                            || !child.isAlive(),
+                    child.onExit().orTimeout(10, TimeUnit.SECONDS).isDone() || !child.isAlive(),
                     "a child outlived the timeout that was supposed to end the work: " + child.pid());
         }
     }
@@ -73,7 +72,8 @@ class CliTimeoutTest {
         // The default thread factory makes non-daemon threads. These two read pipes that a wedged
         // child may never close, so one stuck in read() keeps the JVM alive after main returns --
         // which is precisely what was observed, and is indistinguishable from a hung command.
-        String source = Files.readString(Path.of("src/main/java/com/osscli/llm/CliClient.java"), StandardCharsets.UTF_8);
+        String source =
+                Files.readString(Path.of("src/main/java/com/osscli/llm/CliClient.java"), StandardCharsets.UTF_8);
         int pool = source.indexOf("newFixedThreadPool");
         assertTrue(pool > 0, "the pipe pool moved; this guard needs rewriting");
 
@@ -89,7 +89,8 @@ class CliTimeoutTest {
         // The deadline undone one line below where it was enforced: the process exiting does not
         // mean the pipe closed, because a grandchild can inherit the write end. An unbounded get()
         // after a bounded waitFor() waits for an EOF that is never coming.
-        String source = Files.readString(Path.of("src/main/java/com/osscli/llm/CliClient.java"), StandardCharsets.UTF_8);
+        String source =
+                Files.readString(Path.of("src/main/java/com/osscli/llm/CliClient.java"), StandardCharsets.UTF_8);
 
         assertFalse(
                 source.contains("out = stdout.get();"),

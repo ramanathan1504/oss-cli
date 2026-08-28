@@ -123,8 +123,8 @@ public final class SessionJob {
                   <key>LowPriorityIO</key><true/>
                   <key>Nice</key><integer>10</integer>
                 </dict></plist>
-                """
-                .formatted(LABEL, args, INTERVAL_SECONDS, Platforms.xml(out.toString()), Platforms.xml(err.toString()));
+                """.formatted(
+                        LABEL, args, INTERVAL_SECONDS, Platforms.xml(out.toString()), Platforms.xml(err.toString()));
     }
 
     static String serviceFor(List<String> start) {
@@ -138,8 +138,7 @@ public final class SessionJob {
                 Nice=10
                 IOSchedulingClass=idle
                 ExecStart=%s memory sessions --quiet
-                """
-                .formatted(exec);
+                """.formatted(exec);
     }
 
     static String timerFor() {
@@ -189,8 +188,7 @@ public final class SessionJob {
             case WINDOWS -> {
                 String cmd = String.join(" ", start) + " memory sessions --quiet";
                 Platforms.exec("schtasks", "/delete", "/tn", TASK, "/f");
-                int rc = Platforms.exec(
-                        "schtasks", "/create", "/tn", TASK, "/tr", cmd, "/sc", "hourly", "/f");
+                int rc = Platforms.exec("schtasks", "/create", "/tn", TASK, "/tr", cmd, "/sc", "hourly", "/f");
                 if (rc != 0) {
                     return null;
                 }

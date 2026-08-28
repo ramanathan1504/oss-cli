@@ -43,8 +43,8 @@ class StaleNotesTest {
         Path present = dir.resolve("still-here.md");
         Files.writeString(present, "# here");
 
-        StaleNotes.Sweep sweep =
-                StaleNotes.sweep(List.of(present.toString(), dir.resolve("gone.md").toString()), List.of(dir));
+        StaleNotes.Sweep sweep = StaleNotes.sweep(
+                List.of(present.toString(), dir.resolve("gone.md").toString()), List.of(dir));
 
         assertEquals(List.of(dir.resolve("gone.md").toString()), sweep.gone());
         assertTrue(sweep.unreachableFolders().isEmpty());
@@ -59,7 +59,9 @@ class StaleNotesTest {
         Path unmounted = dir.resolve("not-mounted-yet");
 
         StaleNotes.Sweep sweep = StaleNotes.sweep(
-                List.of(unmounted.resolve("a.md").toString(), unmounted.resolve("b.md").toString()),
+                List.of(
+                        unmounted.resolve("a.md").toString(),
+                        unmounted.resolve("b.md").toString()),
                 List.of(unmounted));
 
         assertTrue(sweep.nothingToDo(), "an unmounted archive is not a deleted one: " + sweep.gone());

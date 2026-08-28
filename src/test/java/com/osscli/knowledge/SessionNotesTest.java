@@ -192,8 +192,10 @@ class SessionNotesTest {
     @Test
     @DisplayName("a pull request named in prose counts, not only one named in a link")
     void barePullRequestNumbers() {
-        assertTrue(SessionNotes.titleOf(List.of(you("review pr 4156 for me")), "f").startsWith("PR 4156"));
-        assertTrue(SessionNotes.titleOf(List.of(you("look at issue #3704 today")), "f").startsWith("issue 3704"));
+        assertTrue(
+                SessionNotes.titleOf(List.of(you("review pr 4156 for me")), "f").startsWith("PR 4156"));
+        assertTrue(SessionNotes.titleOf(List.of(you("look at issue #3704 today")), "f")
+                .startsWith("issue 3704"));
     }
 
     @Test
@@ -212,8 +214,8 @@ class SessionNotesTest {
         // Sixteen transcripts on this machine opened with the first of these and eight with the
         // second. Filed, they shared two names between twenty-four sessions and overwrote each
         // other down to two notes -- while the count reported twenty-four.
-        assertTrue(SessionNotes.isAgentPrompt(List.of(
-                you("You are answering a question about this project, on the user's own machine."))));
+        assertTrue(SessionNotes.isAgentPrompt(
+                List.of(you("You are answering a question about this project, on the user's own machine."))));
         assertTrue(SessionNotes.isAgentPrompt(List.of(you("Base directory for this skill: /x/y"))));
         assertTrue(SessionNotes.isAgentPrompt(List.of(you("READ-ONLY triage for apache/logging-log4j2."))));
     }
@@ -221,8 +223,8 @@ class SessionNotesTest {
     @Test
     @DisplayName("a person quoting a prompt is still having a conversation")
     void onlyTheOpeningTurnCounts() {
-        assertFalse(SessionNotes.isAgentPrompt(List.of(
-                you("why does rollover skip a file"), you("You are answering a question about this project"))));
+        assertFalse(SessionNotes.isAgentPrompt(
+                List.of(you("why does rollover skip a file"), you("You are answering a question about this project"))));
         assertFalse(SessionNotes.isAgentPrompt(List.of(you("why does rollover skip a file"))));
         assertFalse(SessionNotes.isAgentPrompt(List.of()));
     }
@@ -265,8 +267,7 @@ class SessionNotesTest {
     @Test
     @DisplayName("the subject is whatever the transcript is mostly about")
     void topicComesFromTheTerms() {
-        SessionNotes.Scored scored =
-                SessionNotes.topicOf("the log4j appender and its layout are wrong", "", TOPICS);
+        SessionNotes.Scored scored = SessionNotes.topicOf("the log4j appender and its layout are wrong", "", TOPICS);
 
         assertEquals("log4j", scored.topic());
         assertTrue(scored.why().contains("matched"), scored.why());
@@ -288,7 +289,10 @@ class SessionNotesTest {
     @Test
     @DisplayName("the junk drawer is only for a transcript that matched nothing")
     void generalIsTheLastResort() {
-        assertEquals("general", SessionNotes.topicOf("the build failed and printed it", "", TOPICS).topic());
+        assertEquals(
+                "general",
+                SessionNotes.topicOf("the build failed and printed it", "", TOPICS)
+                        .topic());
     }
 
     @Test
@@ -363,7 +367,11 @@ class SessionNotesTest {
                 List.of("/src/RollingFileAppender.java"));
 
         String note = SessionNotes.noteFor(
-                session, new SessionNotes.Scored("log4j", 9, "matched log4j"), "apache-logging-log4j2", "rollover", List.of("/src/A.java"));
+                session,
+                new SessionNotes.Scored("log4j", 9, "matched log4j"),
+                "apache-logging-log4j2",
+                "rollover",
+                List.of("/src/A.java"));
 
         assertTrue(note.contains("tool: claude-code"), note);
         assertTrue(note.contains("topic: log4j"), note);

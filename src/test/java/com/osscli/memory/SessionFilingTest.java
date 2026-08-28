@@ -128,7 +128,9 @@ class SessionFilingTest {
     void unpairedTagsAreRemoved() {
         // A transcript clipped mid-block leaves the closing half behind, and a regex that only
         // knows pairs leaves it in the note.
-        assertEquals("real words", Sessions.withoutHarnessNoise("real words</system-reminder>").strip());
+        assertEquals(
+                "real words",
+                Sessions.withoutHarnessNoise("real words</system-reminder>").strip());
     }
 
     @Test
@@ -152,8 +154,7 @@ class SessionFilingTest {
         // by diffing the result, not by reading the regex.
         //
         // Every real wrapper is a few short lines. Past the cap it is not a wrapper.
-        String real = "The ClassLoaderContextSelector#locateContext currently implements this logic. "
-                .repeat(40);
+        String real = "The ClassLoaderContextSelector#locateContext currently implements this logic. ".repeat(40);
         assertTrue(real.length() > Sessions.MAX_WRAPPER_CHARS, "the fixture must exceed the cap to prove anything");
 
         String cleaned = Sessions.withoutHarnessNoise("<system-reminder>\n" + real + "\n</system-reminder>");
@@ -181,8 +182,8 @@ class SessionFilingTest {
         // and ~/.oss-cli/memory/sessions was empty -- because the GitHub failure returned before
         // the only call that reads local transcripts, which need no network and no token. The
         // method's own documentation had claimed the opposite since it was written.
-        String body = Files.readString(
-                Path.of("src/main/java/com/osscli/memory/BuiltinMemory.java"), StandardCharsets.UTF_8);
+        String body =
+                Files.readString(Path.of("src/main/java/com/osscli/memory/BuiltinMemory.java"), StandardCharsets.UTF_8);
         int failure = body.indexOf("could not reach GitHub: ");
         assertTrue(failure > 0, "the GitHub failure branch moved; this guard needs rewriting");
         int returnOne = body.indexOf("return 1;", failure);
