@@ -4,6 +4,14 @@
 
 _2026-08-28_
 
+- Name the curriculum verb on the landing page (#223)
+- A running log is one document, not several concatenated (#221)
+
+
+## 4.9.2
+
+_2026-08-28_
+
 - A running log is one document, not several concatenated (#221)
 
 
