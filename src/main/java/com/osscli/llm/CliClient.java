@@ -73,6 +73,22 @@ public final class CliClient {
     private final Spec spec;
     private final long timeoutSeconds;
 
+    /** How long to wait for an exited process's pipes to drain before giving up on them. */
+    private static final long PIPE_DRAIN_SECONDS = 10;
+
+    /**
+     * Kill it, and everything it started.
+     *
+     * <p>{@code destroyForcibly} kills the process named and nothing else. These tools are
+     * launchers -- a shell script in front of a Node process in front of whatever that spawns --
+     * so killing the one this code started leaves the work running and the pipes held open by a
+     * child nobody is tracking. Descendants first, so nothing survives to re-parent itself.
+     */
+    static void kill(Process p) {
+        p.descendants().forEach(ProcessHandle::destroyForcibly);
+        p.destroyForcibly();
+    }
+
     public CliClient(Spec spec, long timeoutSeconds) {
         this.spec = spec;
         this.timeoutSeconds = timeoutSeconds;
@@ -222,7 +238,19 @@ public final class CliClient {
             // waiting for a talkative tool: the child blocks writing to a full stderr buffer, the
             // parent blocks reading a stdout that will never close, and neither moves again. It
             // survived because the tools here are quiet on stderr, which is not a guarantee.
-            java.util.concurrent.ExecutorService pipes = java.util.concurrent.Executors.newFixedThreadPool(2);
+            // Daemon threads, and the word is load bearing.
+            //
+            // These two read pipes that a wedged child may never close, and the default factory
+            // makes non-daemon threads -- so a reader stuck in read() holds the whole JVM open
+            // after main has returned. Measured: an `oss memory sessions --enrich --claude` run
+            // was still resident long after its 120-second budget, with nothing left to do,
+            // because one of these threads could not finish. A timeout that leaves the process
+            // alive is not a timeout.
+            java.util.concurrent.ExecutorService pipes = java.util.concurrent.Executors.newFixedThreadPool(2, r -> {
+                Thread t = new Thread(r, "cli-pipe");
+                t.setDaemon(true);
+                return t;
+            });
             // stdout is read in chunks rather than in one call, so the bytes arriving can be
             // counted while they arrive. A spinner says "something is happening"; a byte count
             // that climbs says "the answer is being written", which is the difference between
@@ -270,15 +298,28 @@ public final class CliClient {
                                     : spec.binary() + " is answering — " + (got / 1024) + " KB so far");
                 }
                 if (!finished) {
-                    p.destroyForcibly();
+                    kill(p);
                     live.fail("no answer within " + timeoutSeconds + "s");
                     throw new ApiFailure.Permanent(0, spec.binary() + " did not answer within " + timeoutSeconds + "s");
                 }
-                out = stdout.get();
-                err = stderr.get();
+                // Bounded, because the process exiting does not mean the pipe closed.
+                //
+                // These tools spawn helpers that inherit the write end of stdout. The parent can
+                // exit while a grandchild holds it open, and then read() waits for an EOF that is
+                // never coming -- an unbounded get() after a bounded wait, which is the deadline
+                // undone one line below where it was enforced. Ten seconds is generous for
+                // draining a buffer that already has everything in it.
+                out = stdout.get(PIPE_DRAIN_SECONDS, TimeUnit.SECONDS);
+                err = stderr.get(PIPE_DRAIN_SECONDS, TimeUnit.SECONDS);
                 live.done(spec.binary() + " answered");
             } catch (java.util.concurrent.ExecutionException e) {
                 throw new IOException(spec.binary() + " could not be read: " + e.getMessage(), e);
+            } catch (java.util.concurrent.TimeoutException e) {
+                kill(p);
+                throw new ApiFailure.Permanent(
+                        0,
+                        spec.binary() + " exited but left its output open — something it started is still"
+                                + " running. Nothing was read; try again, or drop --cli to use the API.");
             }
             if (p.exitValue() != 0) {
                 throw new ApiFailure.Permanent(

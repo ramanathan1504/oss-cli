@@ -186,7 +186,8 @@ class SessionsTest {
     void hostileNamesStayNames(@TempDir Path home) throws IOException {
         // The name comes from another program's file on disk; treating it as trusted is how a note
         // archive gets written outside itself.
-        Sessions.Session s = new Sessions.Session("claude-code", "../../etc/passwd", Path.of("/x"), "", List.of("t"));
+        Sessions.Session s = new Sessions.Session(
+                "claude-code", "../../etc/passwd", Path.of("/x"), "", List.of("t"), List.of(), List.of());
 
         String name = Sessions.nameFor(s);
 
