@@ -861,6 +861,17 @@ public final class BuiltinMemory {
         com.osscli.ui.Out.note("indexing what was written…");
         com.osscli.retrieval.NoteIndexer.index(
                 java.util.List.of(folder), embedder, com.osscli.retrieval.Embeddings.MODEL);
+        // Adding is only half of keeping an index true.
+        //
+        // 89 notes were deleted from the archive and their rows stayed in the index, still
+        // scoring, still answering. Asked whether one issue was in the store, the honest answer
+        // came back with five hits that were files nobody could open -- and they were the junk
+        // notes that had just been removed for being junk. Nothing was wrong with the delete; the
+        // index simply had no idea it had happened, and would not until somebody ran another
+        // command and thought to look.
+        //
+        // A stat per indexed path is cheap. Not noticing is not.
+        pruneMovedNotes(false);
         com.osscli.ui.Out.ok("indexed — ask, chat, guide, pick and prompt can see them now");
     }
 
