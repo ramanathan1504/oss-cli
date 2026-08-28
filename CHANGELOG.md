@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.9.0
+
+_2026-08-28_
+
+- A knowledge base from your own CLI sessions, and a note for every change that landed (#216)
+
+
 ## 4.8.0
 
 _2026-08-26_
