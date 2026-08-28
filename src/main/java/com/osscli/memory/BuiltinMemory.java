@@ -817,6 +817,15 @@ public final class BuiltinMemory {
             com.osscli.ui.Out.hint("oss memory sessions --enrich", "add a paragraph saying what each one settled");
         }
 
+        // Pruning runs whether or not anything was written, and that is the whole point.
+        //
+        // It was inside the write branch, so a run that filed nothing pruned nothing -- and a
+        // deletion is exactly the case that writes nothing. 229 junk notes were removed from the
+        // archive, the next tick found no new transcripts, and 294 rows for files nobody could
+        // open stayed in the index answering searches. A stat per path costs nothing; skipping it
+        // costs an index that is quietly wrong in the one situation it most needs to be right.
+        pruneMovedNotes(false);
+
         if (!written.isEmpty()) {
             // The one expensive thing on the hourly path, and the only place battery matters.
             //
