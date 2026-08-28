@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.9.2
+
+_2026-08-28_
+
+- A running log is one document, not several concatenated (#221)
+
+
 ## 4.9.1
 
 _2026-08-28_
