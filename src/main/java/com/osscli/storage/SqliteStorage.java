@@ -1192,6 +1192,42 @@ public class SqliteStorage {
         }
     }
 
+    /** Every note path the index holds, so a caller can check which of them still exist. */
+    public static List<String> indexedNotePaths() throws SQLException {
+        List<String> out = new ArrayList<>();
+        try (Connection conn = DatabaseManager.getConnection();
+                PreparedStatement ps = conn.prepareStatement("SELECT file_path FROM personal_chat_memory;");
+                ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                out.add(rs.getString(1));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Forget one note entirely -- its record and every passage of it.
+     *
+     * <p>Needed because a note that moves is a note indexed twice. Renaming a folder of 541 notes
+     * left 541 rows pointing at paths that no longer exist and 541 more at the new ones, all
+     * holding identical text, all competing to answer the same question. Nothing removed the first
+     * set, because nothing had ever removed anything.
+     */
+    public static void forgetNote(String filePath) throws SQLException {
+        try (Connection conn = DatabaseManager.getConnection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement a = conn.prepareStatement("DELETE FROM personal_chat_chunk WHERE file_path = ?;");
+                    PreparedStatement b =
+                            conn.prepareStatement("DELETE FROM personal_chat_memory WHERE file_path = ?;")) {
+                a.setString(1, filePath);
+                a.executeUpdate();
+                b.setString(1, filePath);
+                b.executeUpdate();
+            }
+            conn.commit();
+        }
+    }
+
     /** One embedded passage of a note: which note it came from, where in it, and whose work it is. */
     public record ChatChunk(String filePath, int chunkIndex, double[] vector, Tier tier) {}
 

@@ -45,7 +45,18 @@ public final class BuiltinMemory {
      * Stated once, so the switch, the error text and the listing cannot disagree.
      */
     public static final List<String> VERBS = List.of(
-            "file", "search", "index", "map", "coverage", "gaps", "harvest", "digest", "import", "schedule", "doctor");
+            "file",
+            "search",
+            "index",
+            "map",
+            "coverage",
+            "gaps",
+            "harvest",
+            "sessions",
+            "digest",
+            "import",
+            "schedule",
+            "doctor");
 
     private BuiltinMemory() {}
 
@@ -297,6 +308,16 @@ public final class BuiltinMemory {
             // Recorded, so that a scheduled run failing every morning is visible to a command
             // somebody types rather than only to a log nobody opens.
             com.osscli.schedule.DailyJob.record(false, "could not reach GitHub: " + e.getMessage());
+            // The local half still runs. It needs no network and no token, which the comment at
+            // the top of this method has claimed since it was written -- while this return sat
+            // above the only call that would have honoured it. Proven on this machine: the
+            // scheduled run of 2026-08-28 recorded "no network", exited here, and the sessions
+            // folder it should have written was empty. Every offline morning cost both halves
+            // when it only ever needed to cost one.
+            if (wantsSessions) {
+                System.err.println();
+                harvestSessions();
+            }
             return 1;
         }
 
@@ -390,6 +411,257 @@ public final class BuiltinMemory {
         com.osscli.retrieval.NoteIndexer.index(
                 java.util.List.of(DIR.toString()), embedder, com.osscli.retrieval.Embeddings.MODEL);
         System.out.println("  indexed — chat, guide, pick and prompt can see them now");
+    }
+
+    // ----------------------------------------------------------------- sessions ---
+
+    /**
+     * File every CLI transcript on this machine under what it was about.
+     *
+     * <p>Distinct from {@code harvest --sessions}, which writes a UUID-named dump into the built-in
+     * store and stops. That store had never received one: the scheduled job runs {@code harvest}
+     * with no flags, so the local half was gated behind a flag nobody passes and the folder was
+     * empty. Meanwhile the archive it should have been feeding had 541 of its 837 notes filed under
+     * the name of the program that produced them -- claude-code, claude-web, ai-studio -- which is
+     * three folders for one subject and the reason none of it reads as a knowledge base.
+     *
+     * <p>This writes into the subject tree instead, beside the pull-request notes on the same
+     * subject, with the tool recorded in the frontmatter where an attribute belongs.
+     *
+     * <p><b>Cheap on the hour.</b> A ledger of size-and-time means an ordinary run opens the two
+     * transcripts that changed and none of the other 237. {@code --all} forgets it.
+     */
+    private static int sessions(List<String> args) throws IOException {
+        boolean all = args.contains("--all");
+        boolean dryRun = args.contains("--dry-run");
+        boolean quiet = args.contains("--quiet");
+        // Off unless asked for. A model call per session, hourly, against either a metered
+        // subscription or this laptop's CPU, is how a background job becomes the reason somebody
+        // uninstalls the tool.
+        boolean enrich = args.contains("--enrich");
+        // Claude writes the better paragraph and it is the one that costs money, and this machine
+        // ran out of credit mid-afternoon once already. So the local model is the default even
+        // when Claude is installed, and reaching for Claude is a second, separate decision.
+        boolean allowClaude = args.contains("--claude");
+        int limit = limitIn(args);
+
+        KnowledgePack pack = KnowledgePack.load();
+        Path archive = pack.archive();
+        if (pack.topics().isEmpty()) {
+            com.osscli.ui.Out.warn("no topics in kb.json, so everything files under \"general\"");
+            com.osscli.ui.Out.hint("kb.json", "give each subject the terms that identify it");
+        }
+
+        Path home = Path.of(System.getProperty("user.home", "."));
+        List<Path> transcripts = Sessions.discover(home, pack.transcripts());
+        if (transcripts.isEmpty()) {
+            com.osscli.ui.Out.none("no CLI transcripts under ~/.claude, ~/.codex or ~/.gemini");
+            return 0;
+        }
+
+        if (all) {
+            SessionLedger.forget();
+        }
+        SessionLedger ledger = SessionLedger.load();
+        List<String> skipProjects = excludedProjects(pack);
+
+        int filed = 0;
+        int unchanged = 0;
+        int excluded = 0;
+        int silent = 0;
+        int machine = 0;
+        java.util.Map<String, Integer> byTopic = new java.util.TreeMap<>();
+        List<Path> written = new ArrayList<>();
+
+        for (Path file : transcripts) {
+            if (!ledger.changed(file)) {
+                unchanged++;
+                continue;
+            }
+            String project = com.osscli.knowledge.SessionNotes.projectOf(file);
+            if (isExcluded(project, skipProjects)) {
+                excluded++;
+                // Marked anyway. An excluded transcript that stays unmarked is re-examined every
+                // hour for ever, which is the cost the ledger exists to remove.
+                ledger.mark(file);
+                continue;
+            }
+            Sessions.Session session = Sessions.read(file);
+            // The directory is not the whole answer. A session started from the home folder, or
+            // handed to a subagent with its own scratchpad, edits this repository all afternoon
+            // while its transcript sits under a path that names neither. Twelve of them came
+            // through the directory check on the first run and filed themselves under "java" and
+            // "ai-ml" -- documentation work on the tool itself, indistinguishable in the archive
+            // from the Java notes it was supposed to be kept out of. The files it opened say what
+            // it was working on and cannot be wrong about it.
+            if (isExcluded(String.join(" ", session.touchedPaths()), skipProjects)) {
+                excluded++;
+                ledger.mark(file);
+                continue;
+            }
+            if (!session.worthKeeping()) {
+                silent++;
+                ledger.mark(file);
+                continue;
+            }
+            // A subagent's transcript is this tool prompting a model, not a person working
+            // something out. Twenty-four of them shared two first turns and therefore two file
+            // names, and quietly overwrote each other down to two notes.
+            if (com.osscli.knowledge.SessionNotes.isAgentPrompt(session.raw())) {
+                machine++;
+                ledger.mark(file);
+                continue;
+            }
+
+            final String text = String.join("\n", session.turns());
+            final com.osscli.knowledge.SessionNotes.Scored topic =
+                    com.osscli.knowledge.SessionNotes.topicOf(text + "\n" + project, project, pack.topics());
+            final String title = com.osscli.knowledge.SessionNotes.titleOf(
+                    session.raw(), project.isBlank() ? "session " + session.id() : project + " session");
+            Path note = com.osscli.knowledge.SessionNotes.fileInWithoutClobbering(
+                    archive, topic.topic(), dayOf(session), title, session.id());
+
+            if (!dryRun) {
+                com.osscli.knowledge.Enrichment.Summary summary =
+                        new com.osscli.knowledge.Enrichment.Summary("", com.osscli.knowledge.Enrichment.By.NONE);
+                if (enrich && filed < limit) {
+                    // Wrapped in the same progress line every other model call in this tool uses.
+                    // A summariser working through forty sessions in silence is indistinguishable
+                    // from one that has hung, which is the complaint that put Live in here at all.
+                    try (com.osscli.ui.Live live = com.osscli.ui.Live.start("summarising")) {
+                        live.step(title);
+                        summary = com.osscli.knowledge.Enrichment.summarise(
+                                title, topic.topic(), text, allowClaude);
+                    }
+                }
+                Files.createDirectories(note.getParent());
+                Files.writeString(
+                        note,
+                        com.osscli.knowledge.SessionNotes.noteFor(
+                                session,
+                                topic,
+                                project,
+                                title,
+                                com.osscli.knowledge.SessionNotes.touched(session.touchedPaths()),
+                                summary),
+                        StandardCharsets.UTF_8);
+                ledger.mark(file);
+                written.add(note);
+            }
+            byTopic.merge(topic.topic(), 1, Integer::sum);
+            filed++;
+            if (!quiet) {
+                com.osscli.ui.Out.item(topic.topic() + com.osscli.ui.Out.faint("  ·  " + title));
+            }
+        }
+
+        if (!dryRun) {
+            ledger.save();
+        }
+
+        com.osscli.ui.Out.gap();
+        if (filed == 0) {
+            com.osscli.ui.Out.ok("nothing new — " + unchanged + " transcript(s) already filed");
+        } else {
+            com.osscli.ui.Out.ok(filed + " session(s) filed by subject" + (dryRun ? " (dry run, nothing written)" : ""));
+            byTopic.forEach((topic, n) -> com.osscli.ui.Out.kv(topic, String.valueOf(n)));
+        }
+        if (unchanged > 0 && filed > 0) {
+            com.osscli.ui.Out.note(unchanged + " unchanged since the last run, not reopened");
+        }
+        if (excluded > 0) {
+            com.osscli.ui.Out.note(excluded + " skipped as tool-building rather than knowledge — kb.json \"exclude\"");
+        }
+        if (silent > 0) {
+            com.osscli.ui.Out.note(silent + " held no prose worth keeping — tool calls only");
+        }
+        if (machine > 0) {
+            com.osscli.ui.Out.note(machine + " were subagent runs — a prompt this tool wrote, not a question you asked");
+        }
+
+        if (enrich && filed > limit) {
+            com.osscli.ui.Out.note((filed - limit) + " past the --limit of " + limit + " were filed without a summary");
+            com.osscli.ui.Out.hint("oss memory sessions --all --enrich --limit 200", "do the rest when you are away from the machine");
+        }
+        if (!enrich && filed > 0) {
+            com.osscli.ui.Out.hint("oss memory sessions --enrich", "add a paragraph saying what each one settled");
+        }
+
+        if (!written.isEmpty()) {
+            embedNotes(archive.resolve("Projects").toString());
+        }
+        return 0;
+    }
+
+    /**
+     * How many sessions may be summarised in one run.
+     *
+     * <p>Small by default, because the first backfill on this machine had 134 sessions to file and
+     * a model call each. Left uncapped that is either a bill or an afternoon of fan noise, arrived
+     * at by typing one word.
+     */
+    static int limitIn(List<String> args) {
+        int at = args.indexOf("--limit");
+        if (at >= 0 && at + 1 < args.size()) {
+            try {
+                return Math.max(0, Integer.parseInt(args.get(at + 1)));
+            } catch (NumberFormatException e) {
+                // A limit that will not parse must not silently become "no limit".
+                System.err.println("error  --limit wants a number, got \"" + args.get(at + 1) + "\"");
+                return 0;
+            }
+        }
+        return 20;
+    }
+
+    /**
+     * Which checkouts produce sessions that are not knowledge.
+     *
+     * <p>Building the tool that files the notes generates transcripts about filing notes. They are
+     * real work and they are not the subject anybody wants their archive to be about, and left in
+     * they dominate it -- this repository alone accounts for the largest transcripts on the machine.
+     * Declared in {@code kb.json} rather than hard-coded, because whose work is incidental is a
+     * judgement about a person's life, not a property of the software.
+     */
+    static List<String> excludedProjects(KnowledgePack pack) {
+        List<String> configured = pack.excluded();
+        return configured.isEmpty() ? List.of() : configured;
+    }
+
+    static boolean isExcluded(String project, List<String> excluded) {
+        if (project == null || project.isBlank()) {
+            return false;
+        }
+        String p = project.toLowerCase(java.util.Locale.ROOT);
+        for (String skip : excluded) {
+            if (p.contains(skip.toLowerCase(java.util.Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The day a session belongs to, so notes sort by when the work happened. */
+    static String dayOf(Sessions.Session session) {
+        String when = session.when();
+        if (when != null && when.length() >= 10 && when.charAt(4) == '-') {
+            return when.substring(0, 10);
+        }
+        return java.time.LocalDate.now().toString();
+    }
+
+    /** Turn a folder of freshly written notes into vectors, in the run that wrote them. */
+    private static void embedNotes(String folder) {
+        com.osscli.retrieval.LocalEmbedder embedder = com.osscli.retrieval.Embeddings.ifPresent(m -> {});
+        if (embedder == null) {
+            com.osscli.ui.Out.note("no embedding model, so these are searchable by term and not by meaning");
+            com.osscli.ui.Out.hint("oss model --fetch", "22 MB, once");
+            return;
+        }
+        com.osscli.ui.Out.note("indexing what was written…");
+        com.osscli.retrieval.NoteIndexer.index(
+                java.util.List.of(folder), embedder, com.osscli.retrieval.Embeddings.MODEL);
+        com.osscli.ui.Out.ok("indexed — ask, chat, guide, pick and prompt can see them now");
     }
 
     /**
@@ -594,13 +866,15 @@ public final class BuiltinMemory {
                 case "search":
                     return search(args);
                 case "index":
-                    return index();
+                    return index(args);
                 case "map":
                     return map();
                 case "coverage":
                     return coverage();
                 case "harvest":
                     return harvest(args);
+                case "sessions":
+                    return sessions(args);
                 case "digest":
                     return digest(args);
                 case "import":
@@ -878,7 +1152,17 @@ public final class BuiltinMemory {
             minute = parsed[1];
         }
 
+        // Two schedules, because they are two jobs with two failure modes: the daily one talks to
+        // GitHub and the hourly one only reads files already on this disk. One flag picks which.
+        boolean hourly = args.contains("--hourly");
+
         if (uninstall) {
+            if (hourly) {
+                boolean hadHourly = com.osscli.schedule.SessionJob.uninstall();
+                System.out.println(
+                        hadHourly ? "  removed the hourly session filing" : "  there was no hourly filing installed");
+                return 0;
+            }
             boolean had = com.osscli.schedule.DailyJob.uninstall();
             System.out.println(had ? "  removed the daily harvest" : "  there was no daily harvest installed");
             return 0;
@@ -888,6 +1172,19 @@ public final class BuiltinMemory {
         }
 
         Path jar = ownJar();
+        if (hourly) {
+            String saidHourly = com.osscli.schedule.SessionJob.install(
+                    Path.of(System.getProperty("java.home"), "bin", "java"), jar);
+            if (saidHourly == null) {
+                System.err.println("  could not install it — " + com.osscli.schedule.DailyJob.unsupportedAdvice());
+                return 1;
+            }
+            System.out.printf("  %s%n", saidHourly);
+            System.out.println("  it will run  oss memory sessions  every hour");
+            System.out.println("  the first tick is an hour from now — run it once yourself to see it work");
+            System.out.println("  oss memory schedule --uninstall --hourly   removes it");
+            return 0;
+        }
         String said = com.osscli.schedule.DailyJob.install(
                 Path.of(System.getProperty("java.home"), "bin", "java"), jar, hour, minute);
         if (said == null) {
@@ -929,6 +1226,19 @@ public final class BuiltinMemory {
         } else {
             System.out.println("  oss memory schedule --install            every day at 09:15");
             System.out.println("  oss memory schedule --install --at 07:00 or whenever suits you");
+        }
+
+        boolean hourly = com.osscli.schedule.SessionJob.isInstalled();
+        System.out.printf("  hourly filing : %s%n", hourly ? "installed" : "not installed");
+        if (hourly) {
+            System.out.printf("  definition    : %s%n", com.osscli.schedule.SessionJob.descriptor());
+            System.out.printf(
+                    "  loaded        : %s%n",
+                    com.osscli.schedule.SessionJob.running()
+                            ? "yes"
+                            : "no — the file is there but the system is not holding it");
+        } else {
+            System.out.println("  oss memory schedule --install --hourly   files CLI transcripts by subject");
         }
         return 0;
     }
@@ -1301,17 +1611,64 @@ public final class BuiltinMemory {
 
     // -------------------------------------------------------------------- index ---
 
-    private static int index() throws IOException {
+    private static int index(List<String> args) throws IOException {
         List<Note> notes = load();
         int passages = 0;
         for (Note n : notes) {
             passages += PassageSplitter.split(n.body).size();
         }
         System.out.println("  " + notes.size() + " note(s), " + passages + " passage(s) in " + DIR);
-        // Stated rather than implied: the index is built per search, so there is nothing to rebuild
-        // and nothing that can go stale. Saying so stops anyone hunting for a refresh command.
+        // Stated rather than implied: the term index is built per search, so there is nothing to
+        // rebuild and nothing that can go stale. Saying so stops anyone hunting for a refresh
+        // command.
         System.out.println("  The index is built as you search, so there is nothing to keep current.");
+        // The vector index is the opposite, and that difference is the whole of this block. It is
+        // written once per note and never revisited, so a note that moves stays in it at its old
+        // path for ever -- and a folder rename produces two copies of every note in it, identical
+        // text, both answering. Nothing had ever removed anything from it.
+        pruneMovedNotes(args.contains("--forget-missing"));
         return 0;
+    }
+
+    /**
+     * Drop index entries for notes that are genuinely gone.
+     *
+     * <p>Never for notes that are merely unreachable. A missing file and an unmounted folder look
+     * identical from here, and this archive spent a year in iCloud where unreachable is an ordinary
+     * afternoon. Deleting hundreds of notes because a folder was slow to appear would be a
+     * permanent answer to a temporary problem, so an absent folder protects everything under it.
+     */
+    private static void pruneMovedNotes(boolean forgetMissing) {
+        try {
+            List<String> indexed = com.osscli.storage.SqliteStorage.indexedNotePaths();
+            com.osscli.retrieval.StaleNotes.Sweep sweep = com.osscli.retrieval.StaleNotes.sweep(
+                    indexed, com.osscli.retrieval.StaleNotes.configuredRoots());
+            if (!sweep.gone().isEmpty()) {
+                int forgotten = com.osscli.retrieval.StaleNotes.forget(sweep.gone());
+                com.osscli.ui.Out.ok(
+                        forgotten + " note(s) that had moved or been deleted were dropped from the index");
+            }
+
+            // Everything outside every configured folder. Normally untouchable, because "not under
+            // a folder I know about" is what an unmounted disk looks like. But an archive that has
+            // genuinely moved leaves its whole previous location behind, and those rows answer
+            // searches for ever with text from files nobody can open.
+            List<String> outside = com.osscli.retrieval.StaleNotes.outside(indexed, sweep);
+            if (outside.isEmpty()) {
+                return;
+            }
+            if (!forgetMissing) {
+                com.osscli.ui.Out.note(outside.size()
+                        + " indexed note(s) are missing and sit outside every configured folder — an archive that moved");
+                com.osscli.ui.Out.hint("oss memory index --forget-missing", "drop them once you are sure the move was intended");
+                return;
+            }
+            int forgotten = com.osscli.retrieval.StaleNotes.forget(outside);
+            com.osscli.ui.Out.ok(forgotten + " note(s) from a previous archive location were dropped from the index");
+        } catch (java.sql.SQLException e) {
+            // A tidy-up that fails is worth a line, not a failed command.
+            com.osscli.ui.Out.warn("could not check the index for moved notes: " + e.getMessage());
+        }
     }
 
     // --------------------------------------------------------------------- util ---

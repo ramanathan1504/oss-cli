@@ -68,11 +68,20 @@ public final class KnowledgePack {
     private final Path archive;
     private final Map<String, List<String>> topics;
     private final Map<String, List<String>> yardsticks;
+    private final List<String> excluded;
+    private final List<String> transcripts;
 
-    private KnowledgePack(Path archive, Map<String, List<String>> topics, Map<String, List<String>> yardsticks) {
+    private KnowledgePack(
+            Path archive,
+            Map<String, List<String>> topics,
+            Map<String, List<String>> yardsticks,
+            List<String> excluded,
+            List<String> transcripts) {
         this.archive = archive;
         this.topics = topics;
         this.yardsticks = yardsticks;
+        this.excluded = excluded;
+        this.transcripts = transcripts;
     }
 
     /**
@@ -84,7 +93,16 @@ public final class KnowledgePack {
      */
     public static KnowledgePack of(
             Path archive, Map<String, List<String>> topics, Map<String, List<String>> yardsticks) {
-        return new KnowledgePack(archive, topics, yardsticks);
+        return new KnowledgePack(archive, topics, yardsticks, List.of(), List.of());
+    }
+
+    /** The same, saying which projects produce sessions that are not knowledge. */
+    public static KnowledgePack of(
+            Path archive,
+            Map<String, List<String>> topics,
+            Map<String, List<String>> yardsticks,
+            List<String> excluded) {
+        return new KnowledgePack(archive, topics, yardsticks, excluded, List.of());
     }
 
     /**
@@ -105,13 +123,18 @@ public final class KnowledgePack {
                 }
             }
         }
-        return new KnowledgePack(DEFAULT_ARCHIVE, Map.of(), Map.of());
+        return new KnowledgePack(DEFAULT_ARCHIVE, Map.of(), Map.of(), List.of(), List.of());
     }
 
     private static KnowledgePack parse(JsonNode node) {
         String path = node.path("archive").asText("");
         Path archive = path.isBlank() ? DEFAULT_ARCHIVE : expand(path);
-        return new KnowledgePack(archive, listsOf(node.path("topics")), listsOf(node.path("yardsticks")));
+        List<String> excluded = new ArrayList<>();
+        node.path("exclude").forEach(v -> excluded.add(v.asText()));
+        List<String> transcripts = new ArrayList<>();
+        node.path("transcripts").forEach(v -> transcripts.add(v.asText()));
+        return new KnowledgePack(
+                archive, listsOf(node.path("topics")), listsOf(node.path("yardsticks")), excluded, transcripts);
     }
 
     /** {@code ~} is what a person writes, and Java is the only thing that does not know it. */
@@ -143,6 +166,26 @@ public final class KnowledgePack {
     /** Technology to the areas its manual documents — the outside opinion coverage is scored against. */
     public Map<String, List<String>> yardsticks() {
         return yardsticks;
+    }
+
+    /**
+     * Checkouts whose sessions are work about the tooling rather than about a subject.
+     *
+     * <p>Empty by default, and empty means file everything. Nothing is dropped because the software
+     * decided it was uninteresting -- only because somebody wrote it down here.
+     */
+    public List<String> excluded() {
+        return excluded;
+    }
+
+    /**
+     * Extra folders holding CLI transcripts, beyond the three that are built in.
+     *
+     * <p>So that a tool released next year, or an export downloaded from a web product, becomes a
+     * source by adding a line here rather than by waiting for a release of this one.
+     */
+    public List<String> transcripts() {
+        return transcripts;
     }
 
     /** True when this is the shipped default rather than something the user wrote. */

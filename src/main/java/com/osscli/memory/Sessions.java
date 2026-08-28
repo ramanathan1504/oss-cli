@@ -60,8 +60,28 @@ public final class Sessions {
 
     private Sessions() {}
 
+    /** How many opened paths are remembered. Past this it is a build log, not a record of a session. */
+    static final int MAX_TOUCHED = 40;
+
+    /**
+     * One entry of a transcript, before it is rendered into anything.
+     *
+     * <p>The rendered form -- {@code "**you:** ..."} with every newline turned into a quote -- was
+     * the only form for a while, and every later reader had to unpick markdown to get back to
+     * "who said what". Keeping both means a note can be laid out one way and a title extracted
+     * another way from the same read.
+     */
+    public record Turn(boolean user, String text) {}
+
     /** One transcript, reduced to the part worth keeping. */
-    public record Session(String tool, String id, Path file, String when, List<String> turns) {
+    public record Session(
+            String tool,
+            String id,
+            Path file,
+            String when,
+            List<String> turns,
+            List<Turn> raw,
+            List<String> touchedPaths) {
 
         public boolean worthKeeping() {
             return !turns.isEmpty();
@@ -75,10 +95,40 @@ public final class Sessions {
      * directory instead of asserting against whatever happens to be on the machine running it.
      */
     public static List<Path> roots(Path home) {
-        return List.of(
+        return roots(home, List.of());
+    }
+
+    /**
+     * The same, plus anywhere the owner says their transcripts also live.
+     *
+     * <p>The three built in are the three that exist today. They will not be the three that exist
+     * in a year, and a knowledge base whose sources can only change when somebody ships a new
+     * release of this tool is a knowledge base that quietly stops being complete. So {@code kb.json}
+     * can name more:
+     *
+     * <pre>{@code
+     * { "transcripts": ["~/.cursor/chats", "~/Downloads/aistudio-export"] }
+     * }</pre>
+     *
+     * <p>Anything holding {@code .jsonl}, or {@code .json} under a {@code chats/} folder, is read by
+     * the same code. Nothing about the filing downstream knows which program wrote what -- the tool
+     * is a field on the note, which is the entire argument of {@code SessionNotes}.
+     */
+    public static List<Path> roots(Path home, List<String> extra) {
+        List<Path> all = new ArrayList<>(List.of(
                 home.resolve(".claude").resolve("projects"),
                 home.resolve(".codex").resolve("sessions"),
-                home.resolve(".gemini").resolve("tmp"));
+                home.resolve(".gemini").resolve("tmp")));
+        for (String more : extra) {
+            if (more == null || more.isBlank()) {
+                continue;
+            }
+            String path = more.strip();
+            // "~" is what a person writes in a config file, and Java is the only thing that does
+            // not know it.
+            all.add(Path.of(path.startsWith("~/") ? home + path.substring(1) : path));
+        }
+        return all;
     }
 
     /** Which tool wrote a file, from where it sits. Unknown paths are not guessed at. */
@@ -93,6 +143,12 @@ public final class Sessions {
         if (p.contains("/.gemini/")) {
             return "gemini";
         }
+        if (p.contains("/.cursor/")) {
+            return "cursor";
+        }
+        if (p.contains("aistudio") || p.contains("ai-studio")) {
+            return "ai-studio";
+        }
         return "unknown";
     }
 
@@ -104,8 +160,13 @@ public final class Sessions {
      * a silent cap is the bug this repository just spent a day removing from the GitHub search.
      */
     public static List<Path> discover(Path home) throws IOException {
+        return discover(home, List.of());
+    }
+
+    /** The same, also looking wherever {@code kb.json} says transcripts live. */
+    public static List<Path> discover(Path home, List<String> extra) throws IOException {
         List<Path> found = new ArrayList<>();
-        for (Path root : roots(home)) {
+        for (Path root : roots(home, extra)) {
             if (!Files.isDirectory(root)) {
                 continue;
             }
@@ -154,47 +215,96 @@ public final class Sessions {
     public static Session read(Path file) {
         String tool = toolOf(file);
         String id = file.getFileName().toString().replaceAll("\\.jsonl?$", "");
-        List<String> turns = new ArrayList<>();
+        List<Turn> raw = new ArrayList<>();
+        List<String> touched = new ArrayList<>();
         String when = "";
         try {
             if (file.getFileName().toString().endsWith(".jsonl")) {
                 ObjectMapper mapper = new ObjectMapper();
-                for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
-                    if (line.isBlank() || turns.size() >= MAX_TURNS) {
-                        continue;
-                    }
-                    JsonNode node;
-                    try {
-                        node = mapper.readTree(line);
-                    } catch (IOException bad) {
-                        // A truncated last line is normal in a file still being written to.
-                        continue;
-                    }
-                    if (when.isEmpty()) {
-                        when = node.path("timestamp").asText("");
-                    }
-                    String turn = turnOf(node);
-                    if (turn != null) {
-                        turns.add(turn);
+                // Line by line rather than readAllLines: the biggest transcript on this machine is
+                // 51 MB, there are 239 of them, and this now runs every hour. Holding one whole
+                // file as a List<String> and then again as parsed nodes is the difference between
+                // a job you forget about and one that shows up in Activity Monitor.
+                try (java.io.BufferedReader in = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+                    String line;
+                    while ((line = in.readLine()) != null) {
+                        if (line.isBlank()) {
+                            continue;
+                        }
+                        JsonNode node;
+                        try {
+                            node = mapper.readTree(line);
+                        } catch (IOException bad) {
+                            // A truncated last line is normal in a file still being written to.
+                            continue;
+                        }
+                        if (when.isEmpty()) {
+                            when = node.path("timestamp").asText("");
+                        }
+                        // Paths keep being collected after the turn budget is spent: which files a
+                        // session touched is a fact about the whole session, and stopping at turn
+                        // thirty would report the first third of the work as all of it.
+                        collectTouched(node, touched);
+                        if (raw.size() >= MAX_TURNS) {
+                            continue;
+                        }
+                        Turn turn = parse(node);
+                        if (turn != null) {
+                            raw.add(turn);
+                        }
                     }
                 }
             } else {
                 JsonNode root = new ObjectMapper().readTree(Files.readString(file, StandardCharsets.UTF_8));
                 when = root.path("startTime").asText("");
                 for (JsonNode m : root.path("messages")) {
-                    if (turns.size() >= MAX_TURNS) {
-                        break;
+                    collectTouched(m, touched);
+                    if (raw.size() >= MAX_TURNS) {
+                        continue;
                     }
-                    String turn = turnOf(m);
+                    Turn turn = parse(m);
                     if (turn != null) {
-                        turns.add(turn);
+                        raw.add(turn);
                     }
                 }
             }
         } catch (IOException e) {
-            return new Session(tool, id, file, when, List.of());
+            return new Session(tool, id, file, when, List.of(), List.of(), List.of());
         }
-        return new Session(tool, id, file, when, turns);
+        List<String> turns = new ArrayList<>();
+        for (Turn t : raw) {
+            turns.add(render(t));
+        }
+        return new Session(tool, id, file, when, turns, raw, touched);
+    }
+
+    /**
+     * The files a session opened, from the tool calls the prose deliberately drops.
+     *
+     * <p>{@link #parse} throws tool calls away and is right to: they are the bulk of a transcript
+     * and none of it reads well a year later. But <em>which files</em> is not bulk, it is the one
+     * line of a session note that answers "where was I". So the paths are kept and everything
+     * around them -- the arguments, the output, the diffs -- is not.
+     */
+    static void collectTouched(JsonNode node, List<String> into) {
+        JsonNode content = node.has("message") ? node.path("message").path("content") : node.path("content");
+        if (!content.isArray()) {
+            return;
+        }
+        for (JsonNode block : content) {
+            if (!"tool_use".equals(block.path("type").asText(""))) {
+                continue;
+            }
+            String path = block.path("input").path("file_path").asText("");
+            if (!path.isBlank() && !into.contains(path) && into.size() < MAX_TOUCHED) {
+                into.add(path);
+            }
+        }
+    }
+
+    /** The rendered form the session note has always used. */
+    static String render(Turn t) {
+        return (t.user() ? "**you:** " : "**assistant:** ") + t.text().replace("\n", "\n> ");
     }
 
     /**
@@ -204,7 +314,7 @@ public final class Sessions {
      * bulk of a transcript by size and none of it is what anyone wants to read a year later — and
      * tool output is where the file contents, keys and command lines are.
      */
-    static String turnOf(JsonNode node) {
+    static Turn parse(JsonNode node) {
         String type = node.path("type").asText("");
         boolean fromUser = "user".equals(type);
         // Three tools, three names for the same speaker. gemini writes "gemini", the Gemini API
@@ -225,7 +335,13 @@ public final class Sessions {
         if (clipped.length() > MAX_TURN_CHARS) {
             clipped = clipped.substring(0, MAX_TURN_CHARS) + "…";
         }
-        return (fromUser ? "**you:** " : "**assistant:** ") + clipped.replace("\n", "\n> ");
+        return new Turn(fromUser, clipped);
+    }
+
+    /** The rendered turn, for callers that only ever wanted the line. */
+    static String turnOf(JsonNode node) {
+        Turn t = parse(node);
+        return t == null ? null : render(t);
     }
 
     /** Content is a string in one shape and an array of typed blocks in the other. Both happen. */
@@ -245,6 +361,51 @@ public final class Sessions {
             }
         }
         return sb.toString();
+    }
+
+    /**
+     * One of this tool's own conversations, in the same shape as somebody else's transcript.
+     *
+     * <p>Here because the archive must not depend on a subscription. Everything else this class
+     * reads was written by Claude Code, codex or gemini, and if any of those goes away so does the
+     * record. {@code oss chat} runs against a local model on this machine, needs no account and no
+     * network, and produces exactly the same thing: a person working a problem out in prose.
+     *
+     * <p>Converted rather than filed separately, so there is one filing implementation and two
+     * sources. A second path would mean the topic rule, the title rule, the redaction rule and the
+     * stable-name rule each got written twice and drifted once.
+     */
+    public static Session of(com.osscli.model.ChatSession session, List<com.osscli.model.ChatTurn> turns) {
+        List<Turn> raw = new ArrayList<>();
+        for (com.osscli.model.ChatTurn t : turns) {
+            if (raw.size() >= MAX_TURNS) {
+                break;
+            }
+            String text = t.content();
+            if (text == null || text.isBlank()) {
+                continue;
+            }
+            String clipped = text.strip();
+            if (clipped.length() > MAX_TURN_CHARS) {
+                clipped = clipped.substring(0, MAX_TURN_CHARS) + "\u2026";
+            }
+            raw.add(new Turn(t.role() == com.osscli.model.ChatTurn.Role.USER, clipped));
+        }
+        List<String> rendered = new ArrayList<>();
+        for (Turn t : raw) {
+            rendered.add(render(t));
+        }
+        return new Session(
+                "oss-chat",
+                "chat-" + session.id(),
+                // No file on disk: these live in SQLite. The store is named rather than a path
+                // invented, because a note pointing at a file that does not exist is worse than a
+                // note that says where the thing actually is.
+                Path.of(com.osscli.AppPaths.BASE_DIR.toString(), "data", "issue_intelligence.db"),
+                session.startedAt() == null ? "" : session.startedAt(),
+                rendered,
+                raw,
+                List.of());
     }
 
     /**
