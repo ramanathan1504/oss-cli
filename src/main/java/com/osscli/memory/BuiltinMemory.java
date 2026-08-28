@@ -54,6 +54,7 @@ public final class BuiltinMemory {
             "harvest",
             "sessions",
             "contributions",
+            "curriculum",
             "digest",
             "import",
             "schedule",
@@ -412,6 +413,85 @@ public final class BuiltinMemory {
         com.osscli.retrieval.NoteIndexer.index(
                 java.util.List.of(DIR.toString()), embedder, com.osscli.retrieval.Embeddings.MODEL);
         System.out.println("  indexed — chat, guide, pick and prompt can see them now");
+    }
+
+    // -------------------------------------------------------------- curriculum ---
+
+    /**
+     * Place every area of every subject into gap, backlog or covered.
+     *
+     * <p>{@code coverage} grades an area by how much the notes say about it, which conflates two
+     * different situations. An area met forty times across three pull requests is not one you know
+     * -- it is one you have run into, usually while fixing something else, with the understanding
+     * spread across a transcript and a diff. An area with nothing at all is a different problem.
+     *
+     * <p><b>Nothing here ever marks anything covered.</b> That is a claim about having read
+     * something and no count of mentions can establish it, which is why the move is done by hand
+     * and why re-running this never moves a file back.
+     */
+    private static int curriculum(List<String> args) throws IOException {
+        boolean dryRun = args.contains("--dry-run");
+        KnowledgePack pack = KnowledgePack.load();
+        if (pack.yardsticks().isEmpty()) {
+            com.osscli.ui.Out.none("no yardstick declared, so there is nothing to be missing from");
+            com.osscli.ui.Out.hint("kb.json", "list what each subject's own manual documents");
+            return 0;
+        }
+
+        Path archive = pack.archive();
+        List<com.osscli.knowledge.Curriculum.Item> items;
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("measuring what you know")) {
+            live.step("scoring " + pack.yardsticks().size() + " subject(s) against the archive");
+            items = com.osscli.knowledge.Curriculum.place(archive, pack.yardsticks());
+        }
+
+        int written = 0;
+        int respected = 0;
+        try (com.osscli.ui.Live live = com.osscli.ui.Live.start("filing")) {
+            for (com.osscli.knowledge.Curriculum.Item item : items) {
+                live.step(item.subject() + " · " + item.area());
+                if (dryRun) {
+                    continue;
+                }
+                List<String> evidence = "backlog".equals(item.state())
+                        ? com.osscli.knowledge.Curriculum.evidenceFor(archive, item.area(), 8)
+                        : List.of();
+                if (com.osscli.knowledge.Curriculum.write(archive, item, evidence)) {
+                    written++;
+                } else {
+                    respected++;
+                }
+            }
+        }
+
+        com.osscli.ui.Out.gap();
+        com.osscli.ui.Out.title("what you know, by subject");
+        for (com.osscli.knowledge.Curriculum.Tally t :
+                com.osscli.knowledge.Curriculum.tallies(archive, pack.yardsticks())) {
+            com.osscli.ui.Out.item(String.format(
+                    "%-18s %3d covered   %3d backlog   %3d gap   of %d",
+                    t.subject(), t.covered(), t.backlog(), t.gap(), t.total()));
+        }
+        com.osscli.ui.Out.gap();
+        if (dryRun) {
+            com.osscli.ui.Out.ok(items.size() + " area(s) placed (dry run, nothing written)");
+        } else {
+            com.osscli.ui.Out.ok(written + " area note(s) written under " + archive.resolve("Reference/coverage"));
+        }
+        if (respected > 0) {
+            com.osscli.ui.Out.note(respected + " already marked covered — left exactly where you put them");
+        }
+        // These are notes like any other and have to be findable like any other. A reading list
+        // you cannot search is a folder you open once. Embedding them means `oss ask` can answer
+        // "what have I not learned about rollover" from the same index that answers everything
+        // else, rather than from a folder somebody has to remember to look in.
+        if (!dryRun && written > 0) {
+            embedNotes(archive.toString());
+        }
+        com.osscli.ui.Out.hints(List.of(
+                new String[] {"read one, then move it to covered/", "the move is the record"},
+                new String[] {"oss memory curriculum", "re-run any time; it never moves your work back"}));
+        return 0;
     }
 
     // ------------------------------------------------------------ contributions ---
@@ -997,6 +1077,8 @@ public final class BuiltinMemory {
                     return sessions(args);
                 case "contributions":
                     return contributions(args);
+                case "curriculum":
+                    return curriculum(args);
                 case "digest":
                     return digest(args);
                 case "import":
