@@ -321,9 +321,31 @@ public final class Verifier {
                 .toList();
     }
 
-    /** Removes the isolated repository, which is ours and lives beside the worktree. */
+    /**
+     * Removes the isolated repository, which is ours and lives beside the worktree.
+     *
+     * <p><b>It refuses anything outside the system temp directory.</b> This walks a tree and
+     * deletes every entry in it, and the only thing standing between that and somebody's checkout
+     * is that the caller passes the right path. That was also true of a test in this repository
+     * which believed its own configuration and destroyed a real 496 MB database -- the rule
+     * afterwards was to assert where a destructive path points and refuse, rather than trust that
+     * it is correct.
+     *
+     * <p>The guard costs one comparison and removes the entire class of mistake: a bad argument
+     * now returns instead of recursing.
+     */
     private static void deleteTree(Path root) {
         if (!Files.isDirectory(root)) {
+            return;
+        }
+        Path where = root.toAbsolutePath().normalize();
+        Path temp = Path.of(System.getProperty("java.io.tmpdir", "/tmp"))
+                .toAbsolutePath()
+                .normalize();
+        if (!where.startsWith(temp)) {
+            // Loud, because a review that quietly leaves a directory behind is a nuisance and one
+            // that quietly deletes the wrong tree is not recoverable.
+            System.err.println("  refusing to delete a tree outside the temp directory: " + where);
             return;
         }
         try (Stream<Path> walk = Files.walk(root)) {
