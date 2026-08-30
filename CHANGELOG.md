@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.9.5
+
+_2026-08-30_
+
+- memory: counting notes says "touched", never "covered" (#229)
+
+
 ## 4.9.4
 
 _2026-08-28_
