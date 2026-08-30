@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.9.7
+
+_2026-08-30_
+
+- sweep: close both remaining instances of bugs already fixed elsewhere (#234)
+- site: coverage says touched (#233)
+
+
 ## 4.9.6
 
 _2026-08-30_
