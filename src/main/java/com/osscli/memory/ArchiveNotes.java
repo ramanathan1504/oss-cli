@@ -66,6 +66,22 @@ public final class ArchiveNotes {
 
     private ArchiveNotes() {}
 
+    /**
+     * Whether a path is somewhere a note could be.
+     *
+     * <p>The same rule the indexer applies. Two copies of it is the shape of the bug that put
+     * 40,910 passages of zlib into a corpus, so anything walking an archive by hand comes here.
+     */
+    static boolean notInsideADotDirectory(Path file) {
+        for (Path part : file) {
+            String name = part.toString();
+            if (name.length() > 1 && name.charAt(0) == '.') {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** What a walk of the archive found, including what it could not read and why. */
     public record Walk(List<Note> notes, int found, int unreadable, boolean ranOutOfTime) {
 
@@ -112,6 +128,13 @@ public final class ArchiveNotes {
         List<Path> files;
         try (java.util.stream.Stream<Path> walk = Files.walk(archive)) {
             files = walk.filter(Files::isRegularFile)
+                    // Nothing inside a dot-directory is a note, and here it is not merely wasted
+                    // work: this walk has a fifteen-second budget, and an archive kept under git
+                    // holds thousands of objects beneath .git that are reached before the notes
+                    // are. The budget would be spent on them and the shortfall reported as
+                    // "measured 200 of 900 notes -- the rest are still in the cloud", which is a
+                    // true sentence about the wrong cause.
+                    .filter(ArchiveNotes::notInsideADotDirectory)
                     .filter(p -> p.getFileName().toString().endsWith(".md"))
                     .toList();
         }
