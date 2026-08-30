@@ -53,6 +53,14 @@ public class BackupCommand implements Callable<Integer> {
     private static final int MAX_BACKUPS = 5;
 
     /**
+     * The one name an archive has.
+     *
+     * <p>Written here and matched by the rotation below. Two literals is how rotation came to be
+     * looking for a prefix the writer had stopped using.
+     */
+    private static final String PREFIX = "oss_backup_";
+
+    /**
      * What a backup must contain, and what it must not.
      *
      * <p>Everything here either cannot be re-derived or costs real work to rebuild. Left out: the
@@ -214,12 +222,12 @@ public class BackupCommand implements Callable<Integer> {
 
         // 2. Perform the backup archiving
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-        Path backupFile = targetBackupDir.resolve("oss_backup_" + timestamp + ".zip");
+        Path backupFile = targetBackupDir.resolve(PREFIX + timestamp + ".zip");
         // Written under a temporary name and renamed only on success. The failure mode this
         // prevents was observed, not imagined: an iCloud read timed out mid-walk, the exception
         // aborted everything, and a 277 MB partial zip stayed on disk looking exactly like a
         // backup. A partial backup that looks whole is worse than no backup at all.
-        Path partial = targetBackupDir.resolve("oss_backup_" + timestamp + ".zip.partial");
+        Path partial = targetBackupDir.resolve(PREFIX + timestamp + ".zip.partial");
 
         LOGGER.info("Backing up {} into '{}'...", INCLUDE, targetBackupDir.toAbsolutePath());
 
@@ -294,9 +302,21 @@ public class BackupCommand implements Callable<Integer> {
         return 0;
     }
 
+    /**
+     * Keep the newest few and delete the rest.
+     *
+     * <p>It had never deleted anything. The writer names archives {@code oss_backup_*.zip} and
+     * this looked for {@code sa_brain_backup_*.zip} -- a prefix from before the tool was renamed --
+     * so the filter matched nothing, the loop never ran, and "rotating the last five" was a claim
+     * the code could not keep. Found with two archives and 1.2 GB on disk, which is what a year of
+     * this would have looked like at fifty.
+     *
+     * <p>The prefix is a constant now, used by the writer and by this, so they cannot disagree
+     * again.
+     */
     private void enforceBackupLimit(Path backupDir) {
         try (java.util.stream.Stream<Path> stream = Files.list(backupDir)) {
-            List<Path> backups = stream.filter(p -> p.getFileName().toString().startsWith("sa_brain_backup_")
+            List<Path> backups = stream.filter(p -> p.getFileName().toString().startsWith(PREFIX)
                             && p.getFileName().toString().endsWith(".zip"))
                     .sorted(Comparator.comparingLong(p -> p.toFile().lastModified())) // Sort oldest first
                     .collect(Collectors.toList());
