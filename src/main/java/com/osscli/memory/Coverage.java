@@ -57,7 +57,20 @@ public final class Coverage {
     /** One documented area, and what the notes have to say about it. */
     public record Area(String name, int notes, int mentions, String strongest) {
 
-        /** Nothing at all, one or two notes, several, or several with real weight behind them. */
+        /**
+         * Nothing at all, one or two notes, or several.
+         *
+         * <p><b>"touched", not "covered", and the word matters.</b> This counts what your notes
+         * say about an area. It cannot know whether you understand it -- and for a while it said
+         * "covered" while {@code curriculum} used the same word for something else entirely: an
+         * area you had read and moved to {@code covered/} yourself. So one command reported log4j
+         * as "32 of 56 covered" and the other as "0 covered", both correct, about different
+         * things.
+         *
+         * <p>Having written about something forty times is having met it. Only a person can say
+         * they have learned it, which is why that verdict is a file they move and this one is a
+         * count.
+         */
         public String grade() {
             if (notes == 0) {
                 return "nothing";
@@ -65,12 +78,12 @@ public final class Coverage {
             if (notes < NOTE_FLOOR) {
                 return "thin";
             }
-            return "covered";
+            return "touched";
         }
 
         public String mark() {
             switch (grade()) {
-                case "covered":
+                case "touched":
                     return "●";
                 case "thin":
                     return "◐";
