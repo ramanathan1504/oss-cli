@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.9.6
+
+_2026-08-30_
+
+- backup: rotate the archives this actually writes (#231)
+- memory: counting notes says "touched", never "covered" (#229)
+
+
 ## 4.9.5
 
 _2026-08-30_
