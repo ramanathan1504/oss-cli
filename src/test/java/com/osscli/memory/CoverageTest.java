@@ -53,7 +53,7 @@ class CoverageTest {
         Map<String, Coverage.Area> byName = new java.util.HashMap<>();
         areas.forEach(a -> byName.put(a.name(), a));
 
-        assertEquals("covered", byName.get("Appenders").grade());
+        assertEquals("touched", byName.get("Appenders").grade());
         assertEquals("thin", byName.get("Layouts").grade());
         // The one that matters. Counting your own notes can only report what you wrote, so the
         // grade for something nobody touched has to come from the yardstick, not the archive.

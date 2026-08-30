@@ -44,7 +44,7 @@ class GapsTest {
         String note = BuiltinMemory.gapNote("log4j", AREAS);
 
         int nothing = note.indexOf("## Nothing at all");
-        int covered = note.indexOf("## Covered");
+        int covered = note.indexOf("## Touched");
         assertTrue(nothing > 0 && covered > nothing, "the point of the report is the gap, so it goes first");
 
         assertTrue(note.contains("## Nothing at all (2)"), note);
@@ -59,7 +59,7 @@ class GapsTest {
 
         assertTrue(note.contains("## Thin — one or two notes (1)"), note);
         assertTrue(note.contains("Filters — 2 note(s)"), note);
-        assertTrue(note.contains("## Covered (1)"), note);
+        assertTrue(note.contains("## Touched — your notes return to these (1)"), note);
         assertTrue(note.contains("Appenders — 9 notes, 140 mentions"), note);
     }
 
@@ -92,7 +92,7 @@ class GapsTest {
         // Zero of zero is not completeness; it is nothing to measure against. Reporting "0 missing"
         // for a yardstick nobody wrote would be the cheerful version of the silent-cap bug.
         assertTrue(note.contains("## Nothing at all (0)"), note);
-        assertTrue(note.contains("## Covered (0)"), note);
+        assertTrue(note.contains("## Touched — your notes return to these (0)"), note);
         assertTrue(note.contains("None yet."), note);
     }
 

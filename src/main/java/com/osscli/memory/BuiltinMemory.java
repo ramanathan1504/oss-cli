@@ -1280,14 +1280,16 @@ public final class BuiltinMemory {
         for (Map.Entry<String, List<String>> tech : pack.yardsticks().entrySet()) {
             List<Coverage.Area> areas = Coverage.score(pack.archive(), tech.getValue());
             say(Coverage.lastWarning());
-            long covered =
-                    areas.stream().filter(a -> a.grade().equals("covered")).count();
+            // "touched", never "covered". Writing about something forty times is meeting it;
+            // only you can say you have learned it, and `curriculum` is where that is recorded.
+            long touched =
+                    areas.stream().filter(a -> a.grade().equals("touched")).count();
             long thin = areas.stream().filter(a -> a.grade().equals("thin")).count();
             long nothing =
                     areas.stream().filter(a -> a.grade().equals("nothing")).count();
             System.out.printf(
-                    "%n  %s — %d of %d covered · %d thin · %d nothing%n",
-                    tech.getKey(), covered, areas.size(), thin, nothing);
+                    "%n  %s — %d of %d touched · %d thin · %d never mentioned%n",
+                    tech.getKey(), touched, areas.size(), thin, nothing);
             for (Coverage.Area a : areas) {
                 System.out.printf(
                         "    %s  %-28s %3d note(s) %5d mention(s)  %s%n",
@@ -1358,8 +1360,8 @@ public final class BuiltinMemory {
                 .toList();
         List<Coverage.Area> thin =
                 areas.stream().filter(a -> a.grade().equals("thin")).toList();
-        List<Coverage.Area> covered =
-                areas.stream().filter(a -> a.grade().equals("covered")).toList();
+        List<Coverage.Area> touched =
+                areas.stream().filter(a -> a.grade().equals("touched")).toList();
 
         sb.append("## Nothing at all (").append(nothing.size()).append(")\n\n");
         if (nothing.isEmpty()) {
@@ -1381,11 +1383,15 @@ public final class BuiltinMemory {
                     .append('\n'));
         }
 
-        sb.append("\n## Covered (").append(covered.size()).append(")\n\n");
-        if (covered.isEmpty()) {
+        // "Touched", not "Covered". This section lists what your notes talk about, which is not
+        // the same claim as having learned it -- that one is yours to make, in `curriculum`.
+        sb.append("\n## Touched — your notes return to these (")
+                .append(touched.size())
+                .append(")\n\n");
+        if (touched.isEmpty()) {
             sb.append("None yet.\n");
         } else {
-            covered.forEach(a -> sb.append("- ")
+            touched.forEach(a -> sb.append("- ")
                     .append(a.name())
                     .append(" — ")
                     .append(a.notes())

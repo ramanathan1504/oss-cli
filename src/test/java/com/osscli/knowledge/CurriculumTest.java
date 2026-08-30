@@ -107,6 +107,25 @@ class CurriculumTest {
                 "only a person can say they have learned something");
     }
 
+    @Test
+    @DisplayName("only a person marks something covered; counting never does")
+    void countingNeverSaysCovered() throws java.io.IOException {
+        // One word, two meanings, and both commands were right. `coverage` said log4j was "32 of
+        // 56 covered" -- meaning the notes return to those areas -- while `curriculum` said "0
+        // covered", meaning nothing had been read and moved. Having written about something forty
+        // times is having met it. Only you can say you have learned it.
+        String coverage =
+                java.nio.file.Files.readString(java.nio.file.Path.of("src/main/java/com/osscli/memory/Coverage.java"));
+
+        assertFalse(
+                coverage.contains("return \"covered\""),
+                "counting notes must not produce the word a person's decision produces");
+        assertTrue(coverage.contains("return \"touched\""), "it counts what your notes touch");
+
+        // And the curriculum keeps the word, because there it is earned.
+        assertTrue(Curriculum.STATES.contains("covered"));
+    }
+
     // ==========================================
     // Respecting a decision
     // ==========================================

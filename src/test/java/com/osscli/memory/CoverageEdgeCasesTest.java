@@ -81,7 +81,7 @@ class CoverageEdgeCasesTest {
         Coverage.Area area = Coverage.score(archive, List.of("Filters")).get(0);
 
         assertEquals(3, area.notes(), "the readable notes must still be counted");
-        assertEquals("covered", area.grade());
+        assertEquals("touched", area.grade());
     }
 
     @Test
@@ -165,7 +165,7 @@ class CoverageEdgeCasesTest {
         assertTrue(lookups.notes() >= planted, lookups.notes() + " < " + planted);
         assertTrue(lookups.notes() <= 1000);
         assertNotNull(lookups.strongest());
-        assertEquals("covered", lookups.grade());
+        assertEquals("touched", lookups.grade());
     }
 
     @Test
