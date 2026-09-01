@@ -1135,8 +1135,63 @@ public final class BuiltinMemory {
         }
     }
 
+    /**
+     * One line per verb, for when somebody asks what it does instead of doing it.
+     *
+     * <p>Stated as data rather than printed from each verb, because the bug this exists to fix was
+     * every verb answering {@code --help} by running.
+     */
+    private static final Map<String, String> USAGE = Map.ofEntries(
+            Map.entry("file", "oss memory file <path.md> […]      keep a copy of a note"),
+            Map.entry(
+                    "track",
+                    "oss memory track [<dir>] [--all] [--dry-run]   file every note a repository carries,"
+                            + " stamped with where it came from"),
+            Map.entry("search", "oss memory search \"<terms>\"          find a note again"),
+            Map.entry("index", "oss memory index [--forget-missing]   read the notes into the corpus"),
+            Map.entry("map", "oss memory map                       which notes touch which topic"),
+            Map.entry("coverage", "oss memory coverage                  what you have touched"),
+            Map.entry("gaps", "oss memory gaps                      what you have not"),
+            Map.entry(
+                    "harvest",
+                    "oss memory harvest [<user>] [--sessions]   pull your own public work"
+                            + " — NETWORK, and writes up to 1000 files"),
+            Map.entry("sessions", "oss memory sessions                  file the transcripts on this machine"),
+            Map.entry("contributions", "oss memory contributions             one note per change of yours that merged"),
+            Map.entry("curriculum", "oss memory curriculum <subject>      gap, backlog or covered, per area"),
+            Map.entry("digest", "oss memory digest                    what you actually worked out, per topic"),
+            Map.entry("import", "oss memory import <folder>           a chat product's export, redacted"),
+            Map.entry("schedule", "oss memory schedule --install        run the harvest daily"),
+            Map.entry("doctor", "oss memory doctor                    is any of this actually working"));
+
+    /**
+     * Answer {@code --help} rather than acting on it.
+     *
+     * <p>Every verb here used to treat {@code --help} as a stray argument and run. {@code oss
+     * memory harvest --help} fetched a thousand items over the network before printing anything,
+     * and there was no way to ask a verb what it did without doing it. Checked once, in front of
+     * the switch, so a verb added later cannot reintroduce it.
+     */
+    private static int help(String verb) {
+        String line = USAGE.get(verb);
+        System.out.println();
+        if (line != null) {
+            System.out.println("  " + line);
+        } else {
+            System.out.println("  oss memory <verb>");
+            System.out.println("  verbs: " + String.join(", ", VERBS));
+        }
+        System.out.println();
+        return 0;
+    }
+
     /** Dispatch a verb. Returns a process exit code. */
     public static int run(String verb, List<String> args) {
+        // Before the switch, not inside each verb: asking what something does must never be a way
+        // of doing it.
+        if (args != null && (args.contains("--help") || args.contains("-h"))) {
+            return help(verb);
+        }
         try {
             switch (verb == null ? "" : verb) {
                 case "file":
