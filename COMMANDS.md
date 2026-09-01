@@ -827,6 +827,7 @@ under a shorter name:
 
 ```bash
 oss memory file notes.md      # keep a note
+oss memory track              # keep every note a repository carries, and know when they drift
 oss memory index              # read it into the corpus
 oss memory search "…"         # find it again, by meaning
 oss memory map                # which notes touch which topic
@@ -839,6 +840,30 @@ oss memory import <folder>    # a chat product's data export, redacted
 oss memory schedule --install # run the harvest daily, at a time you pick
 oss memory doctor             # is any of this actually working
 ```
+
+`file` copies a note once. `track` is for a repository you keep working in: it walks a checkout,
+files what it finds under the note's own first heading rather than its filename, and stamps each
+copy with the path, commit and digest it came from.
+
+```bash
+oss memory track              # from a checkout — the folders that hold write-ups
+oss memory track --all        # any markdown outside the build folders
+oss memory track --dry-run    # what it would file, without writing
+```
+
+Two problems that is there to end. A filed copy used to be an orphan the moment its source changed,
+and nothing on either side knew — so a write-up filed in the morning and edited three commits later
+went on answering searches with the morning's text, looking healthy the whole time. `oss memory
+doctor` now reads those digests back and says which sources have moved ahead of their copies, or
+gone entirely. And naming the copy after the file gave every write-up the same name: eight repro
+notes, eight `README.md`, filed as `2026-09-01-readme.md` where a reader wanted
+`log4j-issue-4279-reproduction`.
+
+Discovery is deliberately narrow. A blind `**/*.md` sweep of a real pack returns fourteen files and
+hands back `CLAUDE.md`, `GAP-ANALYSIS.md` and a vendored sample — operating instructions and other
+people's text, none of it writing anyone would search for. The default looks in `repros/`, `docs/`,
+`findings/`, `notes/` and `reviews/`; `--all` widens it and still refuses the build directories and
+the root-level `README`. Running it twice is free: an unchanged note is skipped, not refiled.
 
 `harvest` is the one verb here that needs the network. It searches for everything you were
 *involved* in — the comment you left, the review you gave, the issue you triaged — not only what

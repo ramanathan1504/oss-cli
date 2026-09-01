@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 /**
@@ -46,6 +47,7 @@ public final class BuiltinMemory {
      */
     public static final List<String> VERBS = List.of(
             "file",
+            "track",
             "search",
             "index",
             "map",
@@ -1139,6 +1141,8 @@ public final class BuiltinMemory {
             switch (verb == null ? "" : verb) {
                 case "file":
                     return file(args);
+                case "track":
+                    return track(args);
                 case "search":
                     return search(args);
                 case "index":
@@ -1644,6 +1648,13 @@ public final class BuiltinMemory {
                             + "oss memory file <path.md>"));
         }
 
+        // A filed copy is a copy, and the source keeps moving. Nothing used to compare the two, so
+        // a note filed in the morning and edited three commits later went on answering searches
+        // with the morning's text -- and looked healthy doing it. Only tracked notes carry the
+        // digest this reads, so an untracked store reports nothing here rather than a warning it
+        // cannot act on.
+        out.addAll(driftChecks());
+
         long items = countNotes(DIR.resolve("harvest")) + countNotes(DIR.resolve("sessions"));
         out.add(new Check(
                 "harvested",
@@ -1745,6 +1756,85 @@ public final class BuiltinMemory {
         return 0;
     }
 
+    /**
+     * Tracked notes measured against the files they were taken from.
+     *
+     * <p>Three states worth telling apart, because the fix differs: the source is gone (the copy is
+     * now the only record and nothing will ever refresh it), the source has changed (one command
+     * fixes it), or everything agrees. A store with no tracked notes produces no check at all —
+     * silence is the honest report when there is nothing to compare.
+     */
+    static List<Check> driftChecks() {
+        return driftChecks(DIR);
+    }
+
+    /** The same rules against a named folder, so a test can build a store and check the verdict. */
+    static List<Check> driftChecks(Path dir) {
+        List<Path> tracked = new ArrayList<>();
+        List<String> stale = new ArrayList<>();
+        List<String> missing = new ArrayList<>();
+        if (!Files.isDirectory(dir)) {
+            return List.of();
+        }
+        try (Stream<Path> walk = Files.list(dir)) {
+            for (Path note : walk.filter(Files::isRegularFile)
+                    .filter(f -> f.getFileName().toString().endsWith(".md"))
+                    .toList()) {
+                Map<String, String> front;
+                try {
+                    front = PackNotes.frontMatter(Files.readString(note, StandardCharsets.UTF_8));
+                } catch (IOException e) {
+                    continue;
+                }
+                String source = front.get("source");
+                String repo = front.get("repo");
+                String sha = front.get("sha256");
+                if (source == null || repo == null || sha == null) {
+                    continue;
+                }
+                tracked.add(note);
+                Path origin = Path.of(repo).resolve(source);
+                if (!Files.isRegularFile(origin)) {
+                    missing.add(source);
+                    continue;
+                }
+                try {
+                    if (!PackNotes.sha256(Files.readString(origin, StandardCharsets.UTF_8)).equals(sha)) {
+                        stale.add(source);
+                    }
+                } catch (IOException e) {
+                    missing.add(source);
+                }
+            }
+        } catch (IOException e) {
+            return List.of();
+        }
+        if (tracked.isEmpty()) {
+            return List.of();
+        }
+        List<Check> out = new ArrayList<>();
+        if (missing.isEmpty() && stale.isEmpty()) {
+            out.add(new Check("tracked", Check.Status.OK, tracked.size() + " note(s) match their sources", ""));
+            return out;
+        }
+        if (!stale.isEmpty()) {
+            out.add(new Check(
+                    "tracked",
+                    Check.Status.WARN,
+                    stale.size() + " of " + tracked.size() + " changed since filing: " + String.join(", ", stale),
+                    "oss memory track   refiles them from source"));
+        }
+        if (!missing.isEmpty()) {
+            out.add(new Check(
+                    "tracked",
+                    Check.Status.FAIL,
+                    missing.size() + " source(s) gone: " + String.join(", ", missing),
+                    "the filed copy is now the only record — move it somewhere permanent, "
+                            + "or delete it if the finding went with the branch"));
+        }
+        return out;
+    }
+
     /** Markdown files under a folder, or zero when it is not there. Never throws for an absent one. */
     static long countNotes(Path folder) {
         if (!Files.isDirectory(folder)) {
@@ -1797,6 +1887,124 @@ public final class BuiltinMemory {
             }
         }
         return filed > 0 ? 0 : 1;
+    }
+
+    // -------------------------------------------------------------------- track ---
+
+    /**
+     * File every note a repository carries, and keep the copies pointed at their sources.
+     *
+     * <p>{@code file} is the one-off; this is the repeat. It walks a checkout, files what it finds
+     * under the note's own title rather than its filename, and stamps each copy with the path,
+     * commit and digest it came from. Running it again is the whole point: unchanged notes are
+     * skipped, changed ones are refreshed, and {@code doctor} can say which sources have moved
+     * ahead of their copies in between.
+     *
+     * <p>Idempotent by construction — the name comes from the title, so the second run overwrites
+     * the first rather than leaving a dated pair for somebody to reconcile.
+     */
+    private static int track(List<String> args) throws IOException {
+        boolean all = args.contains("--all");
+        boolean dry = args.contains("--dry-run");
+        Path root = args.stream()
+                .filter(a -> !a.startsWith("--"))
+                .findFirst()
+                .map(Path::of)
+                .orElse(Path.of(""))
+                .toAbsolutePath()
+                .normalize();
+        if (!Files.isDirectory(root)) {
+            System.err.println("error  not a directory: " + root);
+            return 2;
+        }
+        List<Path> sources = PackNotes.discover(root, all);
+        if (sources.isEmpty()) {
+            System.out.println("  no notes found under " + root);
+            if (!all) {
+                System.out.println("  looked in: " + String.join(", ", PackNotes.DEFAULT_FOLDERS));
+                System.out.println("  oss memory track --all    every markdown outside the build folders");
+            } else if (!PackNotes.looksTrackable(root)) {
+                System.out.println("  (this is not a pack or a git checkout — is it the folder you meant?)");
+            }
+            return 0;
+        }
+
+        Files.createDirectories(DIR);
+        String commit = headCommit(root);
+        int added = 0;
+        int updated = 0;
+        int unchanged = 0;
+        for (Path source : sources) {
+            PackNotes.Found found = PackNotes.examine(root, source);
+            Path dst = DIR.resolve(found.slug() + ".md");
+            String was = Files.isRegularFile(dst)
+                    ? PackNotes.frontMatter(Files.readString(dst, StandardCharsets.UTF_8))
+                            .getOrDefault("sha256", "")
+                    : null;
+            if (found.sha().equals(was)) {
+                unchanged++;
+                continue;
+            }
+            if (!dry) {
+                Map<String, String> fields = new LinkedHashMap<>();
+                fields.put("title", found.title());
+                fields.put("source", found.relative());
+                fields.put("repo", root.toString());
+                if (!commit.isBlank()) {
+                    fields.put("commit", commit);
+                }
+                fields.put("sha256", found.sha());
+                fields.put("tracked", LocalDate.now(ZoneOffset.UTC).toString());
+                Files.writeString(
+                        dst,
+                        PackNotes.withProvenance(Files.readString(source, StandardCharsets.UTF_8), fields),
+                        StandardCharsets.UTF_8);
+            }
+            System.out.printf("  %-9s %s%n", was == null ? "filed" : "refreshed", found.relative());
+            if (was == null) {
+                added++;
+            } else {
+                updated++;
+            }
+        }
+
+        System.out.println();
+        System.out.printf(
+                "  %d note(s) — %d new, %d refreshed, %d already current%n",
+                sources.size(), added, updated, unchanged);
+        if (dry) {
+            System.out.println("  --dry-run, nothing written");
+            return 0;
+        }
+        if (added + updated > 0) {
+            System.out.println("  indexing what changed…");
+            indexTheArchive();
+        }
+        System.out.println("  oss memory search \"<terms>\"     oss memory doctor   checks them against their sources");
+        return 0;
+    }
+
+    /**
+     * The commit a tracked copy was taken at, or empty when there is no git here.
+     *
+     * <p>Forgiving on purpose: a note filed out of a plain folder is still worth having, and
+     * failing the whole walk because one checkout has no {@code .git} would make the provenance
+     * stamp the enemy of the thing it documents.
+     */
+    private static String headCommit(Path root) {
+        try {
+            Process p = new ProcessBuilder("git", "-C", root.toString(), "rev-parse", "--short", "HEAD")
+                    .redirectErrorStream(false)
+                    .start();
+            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8)
+                    .strip();
+            return p.waitFor(10, TimeUnit.SECONDS) && p.exitValue() == 0 ? out : "";
+        } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            return "";
+        }
     }
 
     // ------------------------------------------------------------------- search ---

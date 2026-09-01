@@ -31,7 +31,7 @@
     "kb": ["--approve-upstream", "--help", "--name", "--version", "-V", "-h"],
     "llm": [],
     "memory": ["--approve-upstream", "--help", "--name", "--version", "-V", "-h"],
-    "memory builtin-verbs": ["contributions", "coverage", "curriculum", "digest", "doctor", "file", "gaps", "harvest", "import", "index", "map", "schedule", "search", "sessions"],
+    "memory builtin-verbs": ["contributions", "coverage", "curriculum", "digest", "doctor", "file", "gaps", "harvest", "import", "index", "map", "schedule", "search", "sessions", "track"],
     "model": ["--fetch", "--help", "--version", "-V", "-h"],
     "onboard": ["--help", "--no-steps", "--rebuild", "--repo", "--version", "-V", "-h", "-r"],
     "pick": ["--help", "--issues-only", "--limit", "--repo", "--version", "-V", "-h", "-r"],
