@@ -193,9 +193,7 @@ public final class PackNotes {
 
     /** A stable, filesystem-safe name. Stable is the point: filing twice must overwrite, not accumulate. */
     static String slug(String title) {
-        String s = title.toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "-")
-                .replaceAll("(^-+)|(-+$)", "");
+        String s = title.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("(^-+)|(-+$)", "");
         if (s.length() > 80) {
             s = s.substring(0, 80).replaceAll("-+$", "");
         }
@@ -233,7 +231,9 @@ public final class PackNotes {
                 for (String line : block.split("\\R")) {
                     int colon = line.indexOf(':');
                     if (colon > 0 && !line.startsWith(" ") && !line.startsWith("\t")) {
-                        merged.put(line.substring(0, colon).strip(), line.substring(colon + 1).strip());
+                        merged.put(
+                                line.substring(0, colon).strip(),
+                                line.substring(colon + 1).strip());
                     }
                 }
                 int after = body.indexOf('\n', end + 1);
@@ -261,7 +261,9 @@ public final class PackNotes {
         for (String line : block.split("\\R")) {
             int colon = line.indexOf(':');
             if (colon > 0 && !line.startsWith(" ") && !line.startsWith("\t")) {
-                out.put(line.substring(0, colon).strip(), line.substring(colon + 1).strip());
+                out.put(
+                        line.substring(0, colon).strip(),
+                        line.substring(colon + 1).strip());
             }
         }
         return out;

@@ -726,7 +726,7 @@ public final class BuiltinMemory {
             final com.osscli.knowledge.SessionNotes.Scored topic =
                     com.osscli.knowledge.SessionNotes.topicOf(text + "\n" + project, project, pack.topics());
             final String fallbackName = project.isBlank() ? "session " + session.id() : project + " session";
-            String title = com.osscli.knowledge.SessionNotes.titleOf(session.raw(), fallbackName);
+            String title = com.osscli.knowledge.SessionNotes.titleOf(session.raw(), fallbackName, null, project);
 
             com.osscli.knowledge.Enrichment.Summary summary =
                     new com.osscli.knowledge.Enrichment.Summary("", com.osscli.knowledge.Enrichment.By.NONE);
@@ -742,7 +742,7 @@ public final class BuiltinMemory {
                 // of its own. "why chnaged scraping count is greter than 1" is exactly what was
                 // asked and is not something anybody will ever find again.
                 title = com.osscli.knowledge.SessionNotes.titleOf(
-                        session.raw(), fallbackName, summary.present() ? summary.text() : null);
+                        session.raw(), fallbackName, summary.present() ? summary.text() : null, project);
             }
             final String finalTitle = title;
             Path note = com.osscli.knowledge.SessionNotes.fileInWithoutClobbering(
@@ -899,9 +899,11 @@ public final class BuiltinMemory {
         if (project == null || project.isBlank()) {
             return false;
         }
-        String p = project.toLowerCase(java.util.Locale.ROOT);
+        // Normalised on both sides: an exclusion written against the old flattened folder name has
+        // to keep matching a project label now taken from the real path. See SessionNotes.matchable.
+        String p = com.osscli.knowledge.SessionNotes.matchable(project);
         for (String skip : excluded) {
-            if (p.contains(skip.toLowerCase(java.util.Locale.ROOT))) {
+            if (p.contains(com.osscli.knowledge.SessionNotes.matchable(skip))) {
                 return true;
             }
         }
@@ -1854,7 +1856,8 @@ public final class BuiltinMemory {
                     continue;
                 }
                 try {
-                    if (!PackNotes.sha256(Files.readString(origin, StandardCharsets.UTF_8)).equals(sha)) {
+                    if (!PackNotes.sha256(Files.readString(origin, StandardCharsets.UTF_8))
+                            .equals(sha)) {
                         stale.add(source);
                     }
                 } catch (IOException e) {
@@ -2025,8 +2028,7 @@ public final class BuiltinMemory {
 
         System.out.println();
         System.out.printf(
-                "  %d note(s) — %d new, %d refreshed, %d already current%n",
-                sources.size(), added, updated, unchanged);
+                "  %d note(s) — %d new, %d refreshed, %d already current%n", sources.size(), added, updated, unchanged);
         if (dry) {
             System.out.println("  --dry-run, nothing written");
             return 0;
@@ -2051,8 +2053,7 @@ public final class BuiltinMemory {
             Process p = new ProcessBuilder("git", "-C", root.toString(), "rev-parse", "--short", "HEAD")
                     .redirectErrorStream(false)
                     .start();
-            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8)
-                    .strip();
+            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).strip();
             return p.waitFor(10, TimeUnit.SECONDS) && p.exitValue() == 0 ? out : "";
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) {
@@ -2298,16 +2299,42 @@ public final class BuiltinMemory {
      */
     private static List<Note> load() throws IOException {
         List<Note> out = new ArrayList<>();
-        if (!Files.isDirectory(DIR)) {
-            return out;
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (Path root : com.osscli.retrieval.StaleNotes.configuredRoots()) {
+            loadFrom(root, seen, out);
         }
-        try (Stream<Path> s = Files.walk(DIR)) {
+        return out;
+    }
+
+    /**
+     * Every note under one configured root, added once.
+     *
+     * <p>This used to read {@code DIR} alone while {@code index} embedded every configured folder,
+     * so {@code search} and {@code ask} answered the same question from different corpora: a note
+     * filed into the archive by {@code memory sessions} was returned by {@code ask} and invisible to
+     * {@code search}. Found looking for a note that had been filed correctly and could not be found.
+     *
+     * <p>The archive is under version control and the store beside it is not, which is the whole
+     * reason for the dot-directory filter: {@code .git/objects} is 2,656 files of zlib that once
+     * became 40,910 passages in the vector index. Same shape, same rule.
+     */
+    private static void loadFrom(Path root, java.util.Set<String> seen, List<Note> out) throws IOException {
+        if (!Files.isDirectory(root)) {
+            return;
+        }
+        try (Stream<Path> s = Files.walk(root)) {
             for (Path p : s.filter(Files::isRegularFile)
+                    .filter(f -> ArchiveNotes.notInsideADotDirectory(root, f))
                     .filter(f -> f.getFileName().toString().endsWith(".md"))
                     .sorted()
                     .toList()) {
+                // Two roots can hold the same file when one is configured inside the other, and a
+                // note answering twice reads as two sources agreeing.
+                if (!seen.add(p.toAbsolutePath().normalize().toString())) {
+                    continue;
+                }
                 Note n = new Note();
-                n.name = DIR.relativize(p).toString();
+                n.name = root.relativize(p).toString();
                 try {
                     n.body = Files.readString(p);
                 } catch (IOException e) {
@@ -2319,7 +2346,6 @@ public final class BuiltinMemory {
                 out.add(n);
             }
         }
-        return out;
     }
 
     /** The first heading, the frontmatter title, or the filename — in that order of preference. */
