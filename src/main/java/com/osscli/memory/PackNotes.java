@@ -165,7 +165,9 @@ public final class PackNotes {
     static String relative(Path root, Path source) {
         Path r = root.toAbsolutePath().normalize();
         Path s = source.toAbsolutePath().normalize();
-        return s.startsWith(r) ? r.relativize(s).toString() : s.toString();
+        // Stored in the note's frontmatter and compared by doctor on every later run, so it
+        // cannot be spelled one way on Windows and another everywhere else.
+        return com.osscli.AppPaths.slashes(s.startsWith(r) ? r.relativize(s).toString() : s.toString());
     }
 
     /**

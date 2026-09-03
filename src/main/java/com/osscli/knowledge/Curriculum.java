@@ -258,7 +258,7 @@ public final class Curriculum {
                     continue;
                 }
                 (isApplied(path) ? applied : discussed)
-                        .add(archive.relativize(file).toString());
+                        .add(slashes(archive.relativize(file).toString()));
             }
         }
         // Where you used it beats where you mentioned it.
@@ -292,7 +292,8 @@ public final class Curriculum {
      * reached first" and the curriculum cited itself. Nothing threw; the answers were just worse.
      */
     static String slashes(String path) {
-        return path == null ? "" : path.replace('\\', '/');
+        // One rule, one place. Two copies of this is how the separators diverged in the first place.
+        return com.osscli.AppPaths.slashes(path);
     }
 
     /** Write one area's note, unless a decision has already been made about it. */
