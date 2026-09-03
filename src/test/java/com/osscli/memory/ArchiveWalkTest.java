@@ -105,4 +105,40 @@ class ArchiveWalkTest {
         assertTrue(body.contains("startsWith(temp)"), "and refuse anything outside it");
         assertEquals(1, body.split("refusing to delete", -1).length - 1, "and say so rather than fail silently");
     }
+
+    @Test
+    @DisplayName("a hidden root does not hide everything inside it")
+    void theRuleIsAskedAboutTheRelativePath(@TempDir Path tmp) throws IOException {
+        // Every harvested note lives under ~/.oss-cli/memory, and the absolute form of this rule
+        // says no to all of them because .oss-cli begins with a dot. Applied to the search corpus
+        // it dropped 1,386 notes and reported a smaller total rather than an error -- visible only
+        // because the number moved.
+        Path root = tmp.resolve(".oss-cli").resolve("memory");
+        Path note = root.resolve("harvest").resolve("gh-apache-logging-log4j2-4279.md");
+        Files.createDirectories(note.getParent());
+        Files.writeString(note, "# 4279", StandardCharsets.UTF_8);
+
+        assertFalse(ArchiveNotes.notInsideADotDirectory(note), "the absolute form is why this overload exists");
+        assertTrue(ArchiveNotes.notInsideADotDirectory(root, note), "a hidden root is still a root");
+
+        // And the rule it is standing in for still holds below that root.
+        Path inside = root.resolve(".git").resolve("objects").resolve("fe").resolve("c39918");
+        Files.createDirectories(inside.getParent());
+        Files.writeString(inside, "x", StandardCharsets.UTF_8);
+        assertFalse(ArchiveNotes.notInsideADotDirectory(root, inside), "version control is still not writing");
+    }
+
+    @Test
+    @DisplayName("the search corpus asks the relative form")
+    void searchUsesTheOverload() throws IOException {
+        String source =
+                Files.readString(Path.of("src/main/java/com/osscli/memory/BuiltinMemory.java"), StandardCharsets.UTF_8);
+        int at = source.indexOf("private static void loadFrom(");
+        assertTrue(at > 0, "loadFrom moved; this guard needs rewriting");
+
+        String body = source.substring(at, source.indexOf("\n    }", at));
+        assertTrue(
+                body.contains("notInsideADotDirectory(root, f)"),
+                "the absolute form here discards every note under ~/.oss-cli");
+    }
 }

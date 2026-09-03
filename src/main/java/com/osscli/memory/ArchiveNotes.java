@@ -82,6 +82,31 @@ public final class ArchiveNotes {
         return true;
     }
 
+    /**
+     * The same rule, asked only about the part of a path below its root.
+     *
+     * <p>The absolute form judges the whole path, which is wrong the moment a root is itself
+     * hidden. {@code ~/.oss-cli/memory} is where every harvested note lives, and every one of them
+     * sits under {@code .oss-cli}: applying the absolute rule there discards the entire store and
+     * reports a smaller number rather than an error. Measured at 1,374 notes where there were
+     * 2,760 -- caught only because the count moved.
+     *
+     * <p>What the caller means is "nothing the tool keeps for itself inside this archive", and that
+     * is a question about the relative path.
+     */
+    static boolean notInsideADotDirectory(Path root, Path file) {
+        Path relative;
+        try {
+            relative = root.toAbsolutePath()
+                    .normalize()
+                    .relativize(file.toAbsolutePath().normalize());
+        } catch (IllegalArgumentException e) {
+            // Different roots on Windows cannot be relativized; judge the whole path as before.
+            return notInsideADotDirectory(file);
+        }
+        return notInsideADotDirectory(relative);
+    }
+
     /** What a walk of the archive found, including what it could not read and why. */
     public record Walk(List<Note> notes, int found, int unreadable, boolean ranOutOfTime) {
 

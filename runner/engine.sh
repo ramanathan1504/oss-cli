@@ -1002,6 +1002,19 @@ usage() {
     | awk 'NR==1 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}'
 }
 
+# Asking a subcommand what it does must never be a way of doing it.
+#
+# Only the first word was ever checked, so `--help` after it was an ordinary
+# argument: `oss run repro --help` read it as the issue number and scaffolded
+# and ran `repros/issue---help/`, which is a directory somebody then has to
+# find and delete. Checked in front of the dispatch rather than inside each
+# cmd_*, so a subcommand added later cannot reintroduce it.
+for _arg in "${@:2}"; do
+  case "$_arg" in
+    --help|-h) usage; exit 0 ;;
+  esac
+done
+
 case "${1:-help}" in
   list)     shift; cmd_list "$@" ;;
   run)      shift; cmd_run "$@" ;;

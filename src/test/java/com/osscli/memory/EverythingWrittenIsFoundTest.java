@@ -52,7 +52,19 @@ class EverythingWrittenIsFoundTest {
         int at = src.indexOf("private static List<Note> load()");
         assertTrue(at > 0, "the loader is gone; this test guards what it reaches");
         String body = src.substring(at, src.indexOf("\n    }", at));
-        assertTrue(body.contains("Files.walk"), "a one-level listing cannot see a note in a subfolder");
+        assertTrue(body.contains("loadFrom("), "load() must delegate to the walking reader");
+
+        // And it must walk every folder that is configured, not only the one beside the binary.
+        // search read DIR alone while index embedded every configured root, so a session note in
+        // the archive answered `ask` and was invisible to `search`.
+        assertTrue(body.contains("configuredRoots()"), "the archive is a place notes land too");
+
+        int walker = src.indexOf("private static void loadFrom(");
+        assertTrue(walker > 0, "the walking reader is gone; this test guards what it reaches");
+        String walkBody = src.substring(walker, src.indexOf("\n    }", walker));
+        assertTrue(walkBody.contains("Files.walk"), "a one-level listing cannot see a note in a subfolder");
+        // The archive is under version control; .git/objects became 40,910 passages once already.
+        assertTrue(walkBody.contains("notInsideADotDirectory"), "version control is not writing");
 
         for (String folder : WHERE_NOTES_LAND) {
             assertTrue(

@@ -112,6 +112,21 @@ public final class SessionNotes {
      * title whenever it is usable at all.
      */
     public static String titleOf(List<Sessions.Turn> turns, String fallback, String summary) {
+        return titleOf(turns, fallback, summary, "");
+    }
+
+    /**
+     * The same, allowed to fall back on where the session ran.
+     *
+     * <p>The last resort used to be the typed phrase alone, and a session titled
+     * "i need run this linux so what need to change" is a true record of what was asked and names
+     * nothing anybody will search for. That note was eight kilobytes about a Python scraper --
+     * carrier modules, DrissionPage, Xvfb -- and none of those words were in its name.
+     *
+     * <p>The directory is free and it is a name: prefixing it costs no model call and makes the
+     * note reachable by the project it is about. Used only when everything better has failed.
+     */
+    public static String titleOf(List<Sessions.Turn> turns, String fallback, String summary, String project) {
         String reference = referenceIn(turns);
         String phrase = bestPhrase(turns);
         if (reference != null) {
@@ -129,7 +144,56 @@ public final class SessionNotes {
         if (fromSummary != null) {
             return clip(fromSummary);
         }
-        return phrase == null ? fallback : clip(phrase);
+        if (phrase == null) {
+            return fallback;
+        }
+        String where = whereItRan(project);
+        return where.isEmpty() ? clip(phrase) : clip(where + " — " + phrase);
+    }
+
+    /**
+     * The distinguishing part of a project label, or empty when there is none.
+     *
+     * <p>{@code Downloads-Spot_Rates-Worker-client-live-2026-08-27-54ee268} is mostly noise at both
+     * ends: the folder somebody happens to keep checkouts in, and the date and commit an export was
+     * stamped with. What is worth putting in a title is the middle.
+     */
+    static String whereItRan(String project) {
+        if (project == null || project.isBlank()) {
+            return "";
+        }
+        List<String> parts = new java.util.ArrayList<>(List.of(project.split("-")));
+        while (!parts.isEmpty() && GENERIC_FOLDERS.contains(parts.get(0).toLowerCase(Locale.ROOT))) {
+            parts.remove(0);
+        }
+        while (!parts.isEmpty() && isStamp(parts.get(parts.size() - 1))) {
+            parts.remove(parts.size() - 1);
+        }
+        return parts.isEmpty() ? "" : String.join("-", parts);
+    }
+
+    /** Folders people keep checkouts in. Naming one identifies nothing. */
+    private static final java.util.Set<String> GENERIC_FOLDERS = java.util.Set.of(
+            "",
+            "downloads",
+            "documents",
+            "desktop",
+            "projects",
+            "project",
+            "src",
+            "code",
+            "repos",
+            "repo",
+            "work",
+            "workspace",
+            "dev",
+            "users",
+            "home",
+            "git");
+
+    /** A date fragment or a short commit, which a title is no better for carrying. */
+    private static boolean isStamp(String part) {
+        return part.matches("\\d{1,4}") || part.matches("[0-9a-f]{7,40}");
     }
 
     /**
@@ -508,11 +572,32 @@ public final class SessionNotes {
      * <p>Deliberately not a check for the home folder. People do work there, and excluding it would
      * drop real sessions to catch two.
      */
+    /**
+     * A project label reduced to the form the rules match on.
+     *
+     * <p>Every run of anything that is not a letter or a digit becomes a single {@code -}. This
+     * exists because {@link #projectOf} now tells the truth about a path and the truth contains
+     * characters the old encoding destroyed. This checkout is at {@code ~/own repo/oss-cli}, with a
+     * space; Claude Code's folder name flattened that to {@code own-repo-oss-cli}, which is what
+     * {@code kb.json} excludes. Reading the real {@code cwd} yields {@code own repo-oss-cli}, and
+     * the exclusion would have silently stopped matching -- so this tool's own development sessions,
+     * the ones explicitly excluded, would have begun filing themselves as knowledge.
+     *
+     * <p>Both spellings normalise here to the same string, so a rule written against either form
+     * keeps working and no exclusion has to be rewritten.
+     */
+    public static String matchable(String project) {
+        if (project == null) {
+            return "";
+        }
+        return project.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("^-+|-+$", "");
+    }
+
     public static boolean ranInATempDirectory(String project) {
         if (project == null || project.isBlank()) {
             return false;
         }
-        String p = project.toLowerCase(Locale.ROOT);
+        String p = matchable(project);
         return p.startsWith("private-tmp")
                 || p.startsWith("tmp-")
                 || p.equals("tmp")
@@ -615,19 +700,39 @@ public final class SessionNotes {
     // ==========================================
 
     /**
-     * Which checkout a session ran in, recovered from the folder Claude Code named after it.
+     * The absolute directory a session ran in, or empty when the transcript does not say.
      *
-     * <p>The encoding is lossy on purpose by the tool that wrote it: every {@code /} becomes
-     * {@code -}, and so does every {@code -} already in a path, so {@code owner/some-name} and
-     * {@code owner-some/name} arrive identical. That is fine for this. The string is a label
-     * and a set of terms to match on, not a path to open.
+     * <p>Unlike {@link #projectOf} this is a path that can be opened. It goes in the frontmatter so
+     * a note leads back to the code it is about.
+     */
+    public static String pathOf(Path transcript) {
+        return com.osscli.memory.Sessions.cwdOf(transcript);
+    }
+
+    /**
+     * Which checkout a session ran in.
+     *
+     * <p>Taken from the {@code cwd} the transcript records, and only from the folder name when it
+     * records none. The folder name is a lossy encoding by the tool that wrote it: every {@code /}
+     * becomes {@code -}, and so does every {@code _} and every {@code -} already in the path, so
+     * {@code Downloads/Spot_Rates-Worker} and {@code Downloads/Spot/Rates/Worker} arrive identical
+     * and neither can be opened. A note was filed against {@code Downloads-Spot-Rates-Worker-...},
+     * a directory that does not exist, while the transcript beside it held the real name on every
+     * line.
+     *
+     * <p>The shape is unchanged either way -- separators become {@code -}, the home prefix goes --
+     * because {@link #ranInATempDirectory} and the {@code exclude} list match on this string, and a
+     * fix that silently stopped either of them from matching would be worse than the bug.
      */
     public static String projectOf(Path transcript) {
         Path parent = transcript.getParent();
         if (parent == null) {
             return "";
         }
-        String dir = parent.getFileName().toString();
+        String cwd = com.osscli.memory.Sessions.cwdOf(transcript);
+        String dir = cwd.isBlank()
+                ? parent.getFileName().toString()
+                : cwd.replace('\\', '/').replace('/', '-');
         // Sessions run against a scratchpad carry the real project inside their own name; the
         // useful half is the checkout, not the temporary directory it was given.
         int embedded = dir.indexOf("--Users-");
@@ -679,6 +784,12 @@ public final class SessionNotes {
         sb.append("topic: ").append(topic.topic()).append('\n');
         if (!project.isBlank()) {
             sb.append("project: ").append(yaml(project)).append('\n');
+        }
+        // The one field here that can be opened. `project` is separators-flattened so the temp-dir
+        // and exclude rules can match on it; this is what the transcript said the directory was.
+        String ran = pathOf(session.file());
+        if (!ran.isBlank()) {
+            sb.append("path: ").append(yaml(ran)).append('\n');
         }
         sb.append("tool: ").append(session.tool()).append('\n');
         if (!session.when().isBlank()) {

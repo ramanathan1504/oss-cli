@@ -101,6 +101,9 @@ public final class Sessions {
      * "who said what". Keeping both means a note can be laid out one way and a title extracted
      * another way from the same read.
      */
+    /** How far into a transcript to look for its {@code cwd}; it is on the opening entries. */
+    private static final int CWD_SCAN_LINES = 200;
+
     public record Turn(boolean user, String text) {}
 
     /** One transcript, reduced to the part worth keeping. */
@@ -233,6 +236,61 @@ public final class Sessions {
         } catch (IOException e) {
             return 0L;
         }
+    }
+
+    /**
+     * The directory a session actually ran in, as the transcript recorded it.
+     *
+     * <p>Claude Code names the folder holding a transcript after the checkout, but the encoding is
+     * lossy: every {@code /} becomes {@code -}, and so does every {@code _} and every {@code -}
+     * already in the path. {@code Downloads/Spot_Rates-Worker-client-live} and
+     * {@code Downloads/Spot/Rates/Worker/client/live} arrive identical, and neither can be opened.
+     *
+     * <p>The transcript itself does not guess. Every entry carries {@code cwd} with the real
+     * absolute path, so read that and stop reconstructing it. Found when a note about a Python
+     * scraper was filed under {@code Downloads-Spot-Rates-Worker-...} -- a directory that does not
+     * exist on the machine that wrote it.
+     *
+     * <p>Reads only as far as the first {@code cwd}, which is on the opening entries. The largest
+     * transcript here is 51 MB and this runs every hour.
+     */
+    public static String cwdOf(Path transcript) {
+        if (transcript == null || !transcript.getFileName().toString().endsWith(".jsonl")) {
+            return "";
+        }
+        try (java.io.BufferedReader in = Files.newBufferedReader(transcript, StandardCharsets.UTF_8)) {
+            String line;
+            int read = 0;
+            while ((line = in.readLine()) != null && read++ < CWD_SCAN_LINES) {
+                int at = line.indexOf("\"cwd\":");
+                if (at < 0) {
+                    continue;
+                }
+                int open = line.indexOf('"', at + 6);
+                if (open < 0) {
+                    continue;
+                }
+                StringBuilder sb = new StringBuilder();
+                for (int i = open + 1; i < line.length(); i++) {
+                    char c = line.charAt(i);
+                    if (c == '"') {
+                        break;
+                    }
+                    // A Windows cwd arrives as D:\\a\\repo and is two characters per separator.
+                    if (c == '\\' && i + 1 < line.length()) {
+                        sb.append(line.charAt(++i));
+                        continue;
+                    }
+                    sb.append(c);
+                }
+                String cwd = sb.toString().strip();
+                return cwd.isEmpty() ? "" : cwd;
+            }
+        } catch (IOException e) {
+            // The folder name is still there to fall back on, and it was the only answer before.
+            return "";
+        }
+        return "";
     }
 
     /**

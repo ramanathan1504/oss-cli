@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 /**
@@ -46,6 +47,7 @@ public final class BuiltinMemory {
      */
     public static final List<String> VERBS = List.of(
             "file",
+            "track",
             "search",
             "index",
             "map",
@@ -724,7 +726,7 @@ public final class BuiltinMemory {
             final com.osscli.knowledge.SessionNotes.Scored topic =
                     com.osscli.knowledge.SessionNotes.topicOf(text + "\n" + project, project, pack.topics());
             final String fallbackName = project.isBlank() ? "session " + session.id() : project + " session";
-            String title = com.osscli.knowledge.SessionNotes.titleOf(session.raw(), fallbackName);
+            String title = com.osscli.knowledge.SessionNotes.titleOf(session.raw(), fallbackName, null, project);
 
             com.osscli.knowledge.Enrichment.Summary summary =
                     new com.osscli.knowledge.Enrichment.Summary("", com.osscli.knowledge.Enrichment.By.NONE);
@@ -740,7 +742,7 @@ public final class BuiltinMemory {
                 // of its own. "why chnaged scraping count is greter than 1" is exactly what was
                 // asked and is not something anybody will ever find again.
                 title = com.osscli.knowledge.SessionNotes.titleOf(
-                        session.raw(), fallbackName, summary.present() ? summary.text() : null);
+                        session.raw(), fallbackName, summary.present() ? summary.text() : null, project);
             }
             final String finalTitle = title;
             Path note = com.osscli.knowledge.SessionNotes.fileInWithoutClobbering(
@@ -897,9 +899,11 @@ public final class BuiltinMemory {
         if (project == null || project.isBlank()) {
             return false;
         }
-        String p = project.toLowerCase(java.util.Locale.ROOT);
+        // Normalised on both sides: an exclusion written against the old flattened folder name has
+        // to keep matching a project label now taken from the real path. See SessionNotes.matchable.
+        String p = com.osscli.knowledge.SessionNotes.matchable(project);
         for (String skip : excluded) {
-            if (p.contains(skip.toLowerCase(java.util.Locale.ROOT))) {
+            if (p.contains(com.osscli.knowledge.SessionNotes.matchable(skip))) {
                 return true;
             }
         }
@@ -1133,12 +1137,69 @@ public final class BuiltinMemory {
         }
     }
 
+    /**
+     * One line per verb, for when somebody asks what it does instead of doing it.
+     *
+     * <p>Stated as data rather than printed from each verb, because the bug this exists to fix was
+     * every verb answering {@code --help} by running.
+     */
+    private static final Map<String, String> USAGE = Map.ofEntries(
+            Map.entry("file", "oss memory file <path.md> […]      keep a copy of a note"),
+            Map.entry(
+                    "track",
+                    "oss memory track [<dir>] [--all] [--dry-run]   file every note a repository carries,"
+                            + " stamped with where it came from"),
+            Map.entry("search", "oss memory search \"<terms>\"          find a note again"),
+            Map.entry("index", "oss memory index [--forget-missing]   read the notes into the corpus"),
+            Map.entry("map", "oss memory map                       which notes touch which topic"),
+            Map.entry("coverage", "oss memory coverage                  what you have touched"),
+            Map.entry("gaps", "oss memory gaps                      what you have not"),
+            Map.entry(
+                    "harvest",
+                    "oss memory harvest [<user>] [--sessions]   pull your own public work"
+                            + " — NETWORK, and writes up to 1000 files"),
+            Map.entry("sessions", "oss memory sessions                  file the transcripts on this machine"),
+            Map.entry("contributions", "oss memory contributions             one note per change of yours that merged"),
+            Map.entry("curriculum", "oss memory curriculum <subject>      gap, backlog or covered, per area"),
+            Map.entry("digest", "oss memory digest                    what you actually worked out, per topic"),
+            Map.entry("import", "oss memory import <folder>           a chat product's export, redacted"),
+            Map.entry("schedule", "oss memory schedule --install        run the harvest daily"),
+            Map.entry("doctor", "oss memory doctor                    is any of this actually working"));
+
+    /**
+     * Answer {@code --help} rather than acting on it.
+     *
+     * <p>Every verb here used to treat {@code --help} as a stray argument and run. {@code oss
+     * memory harvest --help} fetched a thousand items over the network before printing anything,
+     * and there was no way to ask a verb what it did without doing it. Checked once, in front of
+     * the switch, so a verb added later cannot reintroduce it.
+     */
+    private static int help(String verb) {
+        String line = USAGE.get(verb);
+        System.out.println();
+        if (line != null) {
+            System.out.println("  " + line);
+        } else {
+            System.out.println("  oss memory <verb>");
+            System.out.println("  verbs: " + String.join(", ", VERBS));
+        }
+        System.out.println();
+        return 0;
+    }
+
     /** Dispatch a verb. Returns a process exit code. */
     public static int run(String verb, List<String> args) {
+        // Before the switch, not inside each verb: asking what something does must never be a way
+        // of doing it.
+        if (args != null && (args.contains("--help") || args.contains("-h"))) {
+            return help(verb);
+        }
         try {
             switch (verb == null ? "" : verb) {
                 case "file":
                     return file(args);
+                case "track":
+                    return track(args);
                 case "search":
                     return search(args);
                 case "index":
@@ -1644,6 +1705,13 @@ public final class BuiltinMemory {
                             + "oss memory file <path.md>"));
         }
 
+        // A filed copy is a copy, and the source keeps moving. Nothing used to compare the two, so
+        // a note filed in the morning and edited three commits later went on answering searches
+        // with the morning's text -- and looked healthy doing it. Only tracked notes carry the
+        // digest this reads, so an untracked store reports nothing here rather than a warning it
+        // cannot act on.
+        out.addAll(driftChecks());
+
         long items = countNotes(DIR.resolve("harvest")) + countNotes(DIR.resolve("sessions"));
         out.add(new Check(
                 "harvested",
@@ -1745,6 +1813,86 @@ public final class BuiltinMemory {
         return 0;
     }
 
+    /**
+     * Tracked notes measured against the files they were taken from.
+     *
+     * <p>Three states worth telling apart, because the fix differs: the source is gone (the copy is
+     * now the only record and nothing will ever refresh it), the source has changed (one command
+     * fixes it), or everything agrees. A store with no tracked notes produces no check at all —
+     * silence is the honest report when there is nothing to compare.
+     */
+    static List<Check> driftChecks() {
+        return driftChecks(DIR);
+    }
+
+    /** The same rules against a named folder, so a test can build a store and check the verdict. */
+    static List<Check> driftChecks(Path dir) {
+        List<Path> tracked = new ArrayList<>();
+        List<String> stale = new ArrayList<>();
+        List<String> missing = new ArrayList<>();
+        if (!Files.isDirectory(dir)) {
+            return List.of();
+        }
+        try (Stream<Path> walk = Files.list(dir)) {
+            for (Path note : walk.filter(Files::isRegularFile)
+                    .filter(f -> f.getFileName().toString().endsWith(".md"))
+                    .toList()) {
+                Map<String, String> front;
+                try {
+                    front = PackNotes.frontMatter(Files.readString(note, StandardCharsets.UTF_8));
+                } catch (IOException e) {
+                    continue;
+                }
+                String source = front.get("source");
+                String repo = front.get("repo");
+                String sha = front.get("sha256");
+                if (source == null || repo == null || sha == null) {
+                    continue;
+                }
+                tracked.add(note);
+                Path origin = Path.of(repo).resolve(source);
+                if (!Files.isRegularFile(origin)) {
+                    missing.add(source);
+                    continue;
+                }
+                try {
+                    if (!PackNotes.sha256(Files.readString(origin, StandardCharsets.UTF_8))
+                            .equals(sha)) {
+                        stale.add(source);
+                    }
+                } catch (IOException e) {
+                    missing.add(source);
+                }
+            }
+        } catch (IOException e) {
+            return List.of();
+        }
+        if (tracked.isEmpty()) {
+            return List.of();
+        }
+        List<Check> out = new ArrayList<>();
+        if (missing.isEmpty() && stale.isEmpty()) {
+            out.add(new Check("tracked", Check.Status.OK, tracked.size() + " note(s) match their sources", ""));
+            return out;
+        }
+        if (!stale.isEmpty()) {
+            out.add(new Check(
+                    "tracked",
+                    Check.Status.WARN,
+                    stale.size() + " of " + tracked.size() + " changed since filing: " + String.join(", ", stale),
+                    "oss memory track   refiles them from source"));
+        }
+        if (!missing.isEmpty()) {
+            out.add(new Check(
+                    "tracked",
+                    Check.Status.FAIL,
+                    missing.size() + " source(s) gone: " + String.join(", ", missing),
+                    "the filed copy is now the only record — move it somewhere permanent, "
+                            + "or delete it if the finding went with the branch"));
+        }
+        return out;
+    }
+
     /** Markdown files under a folder, or zero when it is not there. Never throws for an absent one. */
     static long countNotes(Path folder) {
         if (!Files.isDirectory(folder)) {
@@ -1797,6 +1945,122 @@ public final class BuiltinMemory {
             }
         }
         return filed > 0 ? 0 : 1;
+    }
+
+    // -------------------------------------------------------------------- track ---
+
+    /**
+     * File every note a repository carries, and keep the copies pointed at their sources.
+     *
+     * <p>{@code file} is the one-off; this is the repeat. It walks a checkout, files what it finds
+     * under the note's own title rather than its filename, and stamps each copy with the path,
+     * commit and digest it came from. Running it again is the whole point: unchanged notes are
+     * skipped, changed ones are refreshed, and {@code doctor} can say which sources have moved
+     * ahead of their copies in between.
+     *
+     * <p>Idempotent by construction — the name comes from the title, so the second run overwrites
+     * the first rather than leaving a dated pair for somebody to reconcile.
+     */
+    private static int track(List<String> args) throws IOException {
+        boolean all = args.contains("--all");
+        boolean dry = args.contains("--dry-run");
+        Path root = args.stream()
+                .filter(a -> !a.startsWith("--"))
+                .findFirst()
+                .map(Path::of)
+                .orElse(Path.of(""))
+                .toAbsolutePath()
+                .normalize();
+        if (!Files.isDirectory(root)) {
+            System.err.println("error  not a directory: " + root);
+            return 2;
+        }
+        List<Path> sources = PackNotes.discover(root, all);
+        if (sources.isEmpty()) {
+            System.out.println("  no notes found under " + root);
+            if (!all) {
+                System.out.println("  looked in: " + String.join(", ", PackNotes.DEFAULT_FOLDERS));
+                System.out.println("  oss memory track --all    every markdown outside the build folders");
+            } else if (!PackNotes.looksTrackable(root)) {
+                System.out.println("  (this is not a pack or a git checkout — is it the folder you meant?)");
+            }
+            return 0;
+        }
+
+        Files.createDirectories(DIR);
+        String commit = headCommit(root);
+        int added = 0;
+        int updated = 0;
+        int unchanged = 0;
+        for (Path source : sources) {
+            PackNotes.Found found = PackNotes.examine(root, source);
+            Path dst = DIR.resolve(found.slug() + ".md");
+            String was = Files.isRegularFile(dst)
+                    ? PackNotes.frontMatter(Files.readString(dst, StandardCharsets.UTF_8))
+                            .getOrDefault("sha256", "")
+                    : null;
+            if (found.sha().equals(was)) {
+                unchanged++;
+                continue;
+            }
+            if (!dry) {
+                Map<String, String> fields = new LinkedHashMap<>();
+                fields.put("title", found.title());
+                fields.put("source", found.relative());
+                fields.put("repo", root.toString());
+                if (!commit.isBlank()) {
+                    fields.put("commit", commit);
+                }
+                fields.put("sha256", found.sha());
+                fields.put("tracked", LocalDate.now(ZoneOffset.UTC).toString());
+                Files.writeString(
+                        dst,
+                        PackNotes.withProvenance(Files.readString(source, StandardCharsets.UTF_8), fields),
+                        StandardCharsets.UTF_8);
+            }
+            System.out.printf("  %-9s %s%n", was == null ? "filed" : "refreshed", found.relative());
+            if (was == null) {
+                added++;
+            } else {
+                updated++;
+            }
+        }
+
+        System.out.println();
+        System.out.printf(
+                "  %d note(s) — %d new, %d refreshed, %d already current%n", sources.size(), added, updated, unchanged);
+        if (dry) {
+            System.out.println("  --dry-run, nothing written");
+            return 0;
+        }
+        if (added + updated > 0) {
+            System.out.println("  indexing what changed…");
+            indexTheArchive();
+        }
+        System.out.println("  oss memory search \"<terms>\"     oss memory doctor   checks them against their sources");
+        return 0;
+    }
+
+    /**
+     * The commit a tracked copy was taken at, or empty when there is no git here.
+     *
+     * <p>Forgiving on purpose: a note filed out of a plain folder is still worth having, and
+     * failing the whole walk because one checkout has no {@code .git} would make the provenance
+     * stamp the enemy of the thing it documents.
+     */
+    private static String headCommit(Path root) {
+        try {
+            Process p = new ProcessBuilder("git", "-C", root.toString(), "rev-parse", "--short", "HEAD")
+                    .redirectErrorStream(false)
+                    .start();
+            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).strip();
+            return p.waitFor(10, TimeUnit.SECONDS) && p.exitValue() == 0 ? out : "";
+        } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            return "";
+        }
     }
 
     // ------------------------------------------------------------------- search ---
@@ -2035,16 +2299,42 @@ public final class BuiltinMemory {
      */
     private static List<Note> load() throws IOException {
         List<Note> out = new ArrayList<>();
-        if (!Files.isDirectory(DIR)) {
-            return out;
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (Path root : com.osscli.retrieval.StaleNotes.configuredRoots()) {
+            loadFrom(root, seen, out);
         }
-        try (Stream<Path> s = Files.walk(DIR)) {
+        return out;
+    }
+
+    /**
+     * Every note under one configured root, added once.
+     *
+     * <p>This used to read {@code DIR} alone while {@code index} embedded every configured folder,
+     * so {@code search} and {@code ask} answered the same question from different corpora: a note
+     * filed into the archive by {@code memory sessions} was returned by {@code ask} and invisible to
+     * {@code search}. Found looking for a note that had been filed correctly and could not be found.
+     *
+     * <p>The archive is under version control and the store beside it is not, which is the whole
+     * reason for the dot-directory filter: {@code .git/objects} is 2,656 files of zlib that once
+     * became 40,910 passages in the vector index. Same shape, same rule.
+     */
+    private static void loadFrom(Path root, java.util.Set<String> seen, List<Note> out) throws IOException {
+        if (!Files.isDirectory(root)) {
+            return;
+        }
+        try (Stream<Path> s = Files.walk(root)) {
             for (Path p : s.filter(Files::isRegularFile)
+                    .filter(f -> ArchiveNotes.notInsideADotDirectory(root, f))
                     .filter(f -> f.getFileName().toString().endsWith(".md"))
                     .sorted()
                     .toList()) {
+                // Two roots can hold the same file when one is configured inside the other, and a
+                // note answering twice reads as two sources agreeing.
+                if (!seen.add(p.toAbsolutePath().normalize().toString())) {
+                    continue;
+                }
                 Note n = new Note();
-                n.name = DIR.relativize(p).toString();
+                n.name = root.relativize(p).toString();
                 try {
                     n.body = Files.readString(p);
                 } catch (IOException e) {
@@ -2056,7 +2346,6 @@ public final class BuiltinMemory {
                 out.add(n);
             }
         }
-        return out;
     }
 
     /** The first heading, the frontmatter title, or the filename — in that order of preference. */
