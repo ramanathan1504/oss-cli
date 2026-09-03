@@ -2334,7 +2334,7 @@ public final class BuiltinMemory {
                     continue;
                 }
                 Note n = new Note();
-                n.name = root.relativize(p).toString();
+                n.name = com.osscli.AppPaths.slashes(root.relativize(p).toString());
                 try {
                     n.body = Files.readString(p);
                 } catch (IOException e) {

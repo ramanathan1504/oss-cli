@@ -251,9 +251,12 @@ public class BackupCommand implements Callable<Integer> {
                         // each file belongs. Outside it, prefix with external/<name>/ rather than
                         // an absolute path -- an absolute path in a zip restores onto whatever that
                         // path happens to be on the machine unpacking it.
-                        String entry = file.startsWith(base)
-                                ? base.relativize(file).toString()
-                                : "external/" + dir.getFileName() + "/" + dir.relativize(file);
+                        // Zip entries are separated by "/" whatever wrote them; a backslash here
+                        // restores as a file whose name contains one, not as a directory.
+                        String entry = com.osscli.AppPaths.slashes(
+                                file.startsWith(base)
+                                        ? base.relativize(file).toString()
+                                        : "external/" + dir.getFileName() + "/" + dir.relativize(file));
                         zos.putNextEntry(new ZipEntry(entry));
                         try (FileInputStream fis = new FileInputStream(file.toFile())) {
                             byte[] buffer = new byte[8192];

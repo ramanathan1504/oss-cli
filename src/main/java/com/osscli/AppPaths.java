@@ -80,6 +80,23 @@ public class AppPaths {
         Paths.get(HOME_DIR, ".self-analyse"), Paths.get(HOME_DIR, ".issue-ai"),
     };
 
+    /**
+     * A path as a string, with one separator whatever wrote it.
+     *
+     * <p>For any path that is <em>stored</em>, <em>keyed</em> or <em>compared</em> -- a note's
+     * frontmatter, an index key, a zip entry, a coverage evidence line. Windows hands back
+     * {@code repros\\issue-4279\\README.md} and every one of those uses then disagrees with the
+     * same file written anywhere else: a note filed on Windows is not the note doctor looks for, an
+     * archive read on two machines indexes twice, and a zip entry with a backslash restores as a
+     * file whose name contains one rather than as a directory.
+     *
+     * <p>Not for display. What a person sees in their own terminal should look like their own
+     * filesystem.
+     */
+    public static String slashes(String path) {
+        return path == null ? "" : path.replace('\\', '/');
+    }
+
     public static final Path DATA_DIR = BASE_DIR.resolve("data");
     public static final Path REPORTS_DIR = BASE_DIR.resolve("reports");
     public static final Path BACKUPS_DIR = BASE_DIR.resolve("backups");
