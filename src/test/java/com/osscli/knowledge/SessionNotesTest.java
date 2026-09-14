@@ -362,6 +362,32 @@ class SessionNotesTest {
                 first, SessionNotes.fileInWithoutClobbering(archive, "log4j", "2026-08-28", "PR 812", "session-a"));
     }
 
+    @Test
+    @DisplayName("a session's notes are found by id wherever its title put them, and a running log is none of them")
+    void notesAreFoundBySession(@org.junit.jupiter.api.io.TempDir Path archive) throws java.io.IOException {
+        Path early = archive.resolve("Projects/log4j/2026-09-09-first-title.md");
+        Path later = archive.resolve("Projects/log4j/2026-09-09-second-title.md");
+        Path other = archive.resolve("Projects/log4j/2026-09-09-other.md");
+        Path log = archive.resolve("Projects/log4j/pr-812.md");
+        java.nio.file.Files.createDirectories(early.getParent());
+        java.nio.file.Files.writeString(early, "---\nsession: session-a\n---\n# first title\n");
+        java.nio.file.Files.writeString(later, "---\nsession: session-a\n---\n# second title\n");
+        java.nio.file.Files.writeString(other, "---\nsession: session-b\n---\n# other\n");
+        java.nio.file.Files.writeString(
+                log, "---\nkind: running-log\n---\n\n# PR 812\n\n<!-- session:session-a -->\n## 2026-09-09\n");
+
+        Map<String, List<Path>> found = SessionNotes.notesBySession(archive);
+
+        assertEquals(
+                java.util.Set.of(early, later),
+                java.util.Set.copyOf(found.get("session-a")),
+                "five sessions in a real archive had two notes");
+        assertEquals(List.of(other), found.get("session-b"));
+        assertFalse(
+                found.values().stream().anyMatch(v -> v.contains(log)),
+                "a running log holds many sessions and is never one session's note");
+    }
+
     // ==========================================
     // Topics
     // ==========================================
@@ -419,6 +445,32 @@ class SessionNotesTest {
 
         assertEquals("log4j", scored.topic());
         assertTrue(scored.why().contains("ran in"), scored.why());
+    }
+
+    @Test
+    @DisplayName("letters inside ordinary words do not decide a topic")
+    void wordsInsideWordsDoNotFile() {
+        Map<String, List<String>> topics = Map.of(
+                "freight-tracking", List.of("eta", "awb"),
+                "databases", List.of("rds", "sql"),
+                "testing", List.of("@test", "junit"));
+
+        assertEquals(
+                "general",
+                SessionNotes.topicOf(
+                                "the details are in the metadata, in other words the records and tests", "", topics)
+                        .topic(),
+                "eta and rds were counted 282 times inside details and words across one machine's sessions");
+        assertEquals(
+                "databases",
+                SessionNotes.topicOf("moved the RDS instance and rewrote the SQL", "", topics)
+                        .topic());
+        assertEquals(
+                "testing",
+                SessionNotes.topicOf("@Test methods under JUnit5", "", topics).topic());
+        assertEquals(
+                "general",
+                SessionNotes.topicOf("fix this", "records-service", topics).topic());
     }
 
     @Test

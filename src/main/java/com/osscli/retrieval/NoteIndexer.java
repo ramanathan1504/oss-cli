@@ -77,42 +77,8 @@ public final class NoteIndexer {
                 continue;
             }
 
-            try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.walk(localPath)) {
-                List<java.nio.file.Path> files = stream.filter(java.nio.file.Files::isRegularFile)
-                        // Nothing inside a dot-directory is a note.
-                        //
-                        // Putting an archive under git turns its own history into 603 "notes" and
-                        // 40,910 "passages": every object under .git is a zlib blob, and read as
-                        // text it embeds as plausible-looking nonsense that outnumbers the real
-                        // notes and competes with them at every query. .obsidian, .DS_Store's
-                        // neighbours and every editor's state folder are the same kind of thing.
-                        //
-                        // Latent until now only because nobody had version-controlled their notes.
-                        // The extension list below could never have caught it: these files have no
-                        // extension at all.
-                        .filter(p -> {
-                            for (java.nio.file.Path part : p) {
-                                String name = part.toString();
-                                if (name.length() > 1 && name.charAt(0) == '.') {
-                                    return false;
-                                }
-                            }
-                            return true;
-                        })
-                        .filter(p -> {
-                            String name = p.toString().toLowerCase();
-                            return !name.endsWith(".png")
-                                    && !name.endsWith(".pdf")
-                                    && !name.endsWith(".zip")
-                                    && !name.endsWith(".jpg")
-                                    && !name.endsWith(".jpeg")
-                                    && !name.endsWith(".gif")
-                                    && !name.endsWith(".jar")
-                                    && !name.endsWith(".ds_store")
-                                    && !name.endsWith(".docx")
-                                    && !name.endsWith(".class");
-                        })
-                        .toList();
+            try {
+                List<java.nio.file.Path> files = notesUnder(localPath);
 
                 LOGGER.info(
                         "  ↳ Found {} total active discussion files inside '{}' and its subfolders.",
@@ -167,6 +133,10 @@ public final class NoteIndexer {
                         LOGGER.warn("    ⚠ Redacted from '{}': {}", fileName, scrubbed.summary());
                         tally.merge(fileName, 1, Integer::sum);
                         scrubbed.counts().forEach((k, v) -> totals.merge(k, v, Integer::sum));
+                    }
+
+                    if (fileName.endsWith(".json") && exportAlreadyIndexed(absolutePath, lastModified, embedModel)) {
+                        continue;
                     }
 
                     // Clean Content-Based Comparison
@@ -276,6 +246,53 @@ public final class NoteIndexer {
             }
         }
         return new Result(tally, totals);
+    }
+
+    /**
+     * The files under a note folder that could be notes.
+     *
+     * <p>Nothing inside a dot-directory is a note: an archive under git turned its own history into
+     * 603 "notes" and 40,910 "passages" of zlib. The rule is asked about the path <em>below</em> the
+     * folder, because the folder may itself be hidden — every harvested note lives under {@code
+     * ~/.oss-cli/memory}, and judging the absolute path found 0 of 1,472 notes there on every run
+     * from 2026-08-28 on.
+     */
+    static List<java.nio.file.Path> notesUnder(java.nio.file.Path folder) throws java.io.IOException {
+        try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.walk(folder)) {
+            return stream.filter(java.nio.file.Files::isRegularFile)
+                    .filter(p -> com.osscli.memory.ArchiveNotes.notInsideADotDirectory(folder, p))
+                    .filter(p -> {
+                        String name = p.toString().toLowerCase();
+                        return !name.endsWith(".png")
+                                && !name.endsWith(".pdf")
+                                && !name.endsWith(".zip")
+                                && !name.endsWith(".jpg")
+                                && !name.endsWith(".jpeg")
+                                && !name.endsWith(".gif")
+                                && !name.endsWith(".jar")
+                                && !name.endsWith(".ds_store")
+                                && !name.endsWith(".docx")
+                                && !name.endsWith(".class");
+                    })
+                    .toList();
+        }
+    }
+
+    /**
+     * Whether a JSON export array was already indexed from this exact file.
+     *
+     * <p>Its conversations are stored as {@code path#0}, {@code path#1} and so on, never under the
+     * plain path, so the content comparison every other note goes through could never find them and
+     * each export was re-embedded on every run.
+     */
+    static boolean exportAlreadyIndexed(String absolutePath, long lastModified, String embedModel) {
+        String first = absolutePath + "#0";
+        try {
+            return SqliteStorage.loadPersonalChatLastModified(first) == lastModified
+                    && embedModel.equals(SqliteStorage.loadPersonalChatEmbeddingModel(first));
+        } catch (java.sql.SQLException e) {
+            return false;
+        }
     }
 
     /**

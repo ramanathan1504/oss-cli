@@ -94,7 +94,7 @@ public final class ArchiveNotes {
      * <p>What the caller means is "nothing the tool keeps for itself inside this archive", and that
      * is a question about the relative path.
      */
-    static boolean notInsideADotDirectory(Path root, Path file) {
+    public static boolean notInsideADotDirectory(Path root, Path file) {
         Path relative;
         try {
             relative = root.toAbsolutePath()
@@ -132,8 +132,8 @@ public final class ArchiveNotes {
         }
     }
 
-    /** One note that could actually be read. */
-    public record Note(Path path, String lowercaseText) {}
+    /** One note that could actually be read, as written and lowercased. */
+    public record Note(Path path, String text, String lowercaseText) {}
 
     /**
      * Every readable {@code .md} under {@code archive}, lowercased once.
@@ -159,7 +159,7 @@ public final class ArchiveNotes {
                     // are. The budget would be spent on them and the shortfall reported as
                     // "measured 200 of 900 notes -- the rest are still in the cloud", which is a
                     // true sentence about the wrong cause.
-                    .filter(ArchiveNotes::notInsideADotDirectory)
+                    .filter(p -> notInsideADotDirectory(archive, p))
                     .filter(p -> p.getFileName().toString().endsWith(".md"))
                     .toList();
         }
@@ -183,7 +183,7 @@ public final class ArchiveNotes {
                     unreadable++;
                     continue;
                 }
-                notes.add(new Note(note, text.toLowerCase(Locale.ROOT)));
+                notes.add(new Note(note, text, text.toLowerCase(Locale.ROOT)));
             }
         } finally {
             reader.shutdownNow();

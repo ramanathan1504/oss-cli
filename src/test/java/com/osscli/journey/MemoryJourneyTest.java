@@ -97,4 +97,31 @@ class MemoryJourneyTest {
             assertTrue(notes <= 1, "filing twice left " + notes + " notes");
         }
     }
+
+    @Test
+    @DisplayName("filing a note again on a later day replaces the earlier copies, and only those")
+    void refilingOnALaterDayReplaces(@TempDir Path home, @TempDir Path work) throws Exception {
+        aNote(work);
+        Journey.oss(home, work, "memory", "file", "note.md");
+        Path memory = home.resolve("memory");
+        Path earlier = memory.resolve("2026-01-01-note.md");
+        try (var filed = Files.list(memory)) {
+            Files.move(
+                    filed.filter(p -> p.toString().endsWith(".md")).findFirst().orElseThrow(), earlier);
+        }
+        Path unstamped = memory.resolve("2026-01-02-note.md");
+        Files.writeString(unstamped, "# Pool deadlock above 200 threads\n\nFiled before copies were stamped.\n");
+        Path unrelated = memory.resolve("2026-01-03-note.md");
+        Files.writeString(unrelated, "# A different note that shares a file name\n");
+
+        Journey.Ran again = Journey.oss(home, work, "memory", "file", "note.md");
+
+        assertEquals(0, again.code(), again.all());
+        assertFalse(Files.exists(earlier), "one review had four dated copies from being filed on four days");
+        assertFalse(Files.exists(unstamped), "a copy filed before stamping is recognised by its heading");
+        assertTrue(Files.exists(unrelated), "a different note with the same file name is not a copy");
+        try (var kept = Files.list(memory)) {
+            assertEquals(2, kept.filter(p -> p.toString().endsWith(".md")).count());
+        }
+    }
 }

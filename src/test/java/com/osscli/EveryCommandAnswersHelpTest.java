@@ -116,4 +116,18 @@ class EveryCommandAnswersHelpTest {
             assertTrue(r.says("oss --help"), prefix + " must say where usage actually comes from: " + r.all());
         }
     }
+
+    @Test
+    @DisplayName("every built-in memory verb answers --help instead of running")
+    void everyMemoryVerbPrintsItsUsage() {
+        List<String> broken = new ArrayList<>();
+        for (String verb : com.osscli.memory.BuiltinMemory.VERBS) {
+            Cli.Result r = Cli.run("memory", verb, "--help");
+            if (!r.ok() || !r.says("oss memory " + verb)) {
+                broken.add(verb + " -> exit " + r.exitCode() + ": "
+                        + r.all().lines().filter(l -> !l.isBlank()).findFirst().orElse("(no output)"));
+            }
+        }
+        assertEquals(List.of(), broken, "memory verbs that ran, or printed nothing useful, when asked for help");
+    }
 }

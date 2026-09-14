@@ -22,7 +22,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -39,7 +38,7 @@ import java.util.TreeMap;
  *
  * <h2>Two grades, and why they are not one</h2>
  *
- * <p><b>Applied</b> requires the mentions to appear in more than one note. A single long note that
+ * <p><b>Touched</b> requires the mentions to appear in at least three notes. A single long note that
  * uses a term forty times is one thing you read once; three notes that each return to it is a
  * subject you have actually worked in. Collapsing the two would let one afternoon's reading read as
  * experience.
@@ -96,9 +95,9 @@ public final class Coverage {
     /**
      * Score every area of a yardstick against the notes in an archive.
      *
-     * <p>Matching is literal and case-insensitive, on purpose. The alternative is a model deciding
-     * whether a note is "about" an area, which turns a measurement into an opinion and makes the
-     * number move when nothing was written.
+     * <p>Matching is by {@link Mentions} — words, not letters inside other words — and never by a
+     * model, on purpose. The alternative is a model deciding whether a note is "about" an area,
+     * which turns a measurement into an opinion and makes the number move when nothing was written.
      */
     public static List<Area> score(Path archive, List<String> areas) throws IOException {
         Map<String, Integer> noteCount = new LinkedHashMap<>();
@@ -119,13 +118,14 @@ public final class Coverage {
         // Through ArchiveNotes, which puts a deadline on every read. This used to call readString
         // directly, and on an archive that lives in iCloud and has been evicted, every one of those
         // is a download: `oss memory map` sat for over two minutes printing nothing.
+        Map<String, Mentions> matchers = new LinkedHashMap<>();
+        areas.forEach(a -> matchers.put(a, Mentions.of(a)));
         lastWalk = ArchiveNotes.walk(archive);
         {
             for (ArchiveNotes.Note read : lastWalk.notes()) {
                 Path note = read.path();
-                String text = read.lowercaseText();
                 for (String area : areas) {
-                    int hits = count(text, area.toLowerCase(Locale.ROOT));
+                    int hits = matchers.get(area).in(read.text(), read.lowercaseText());
                     if (hits < MENTION_FLOOR) {
                         // One passing use of a word is not knowledge of the subject. Without a
                         // floor, a single stray "thread" put most of an archive under concurrency.
@@ -150,7 +150,6 @@ public final class Coverage {
         return out;
     }
 
-    /** Non-overlapping occurrences, which is what "mentions" means to a person counting them. */
     /**
      * What the last walk could not read.
      *
@@ -166,17 +165,14 @@ public final class Coverage {
         return lastWalk == null ? "" : lastWalk.warning();
     }
 
-    private static int count(String haystack, String needle) {
-        if (needle.isBlank()) {
-            return 0;
-        }
-        int n = 0;
-        int at = haystack.indexOf(needle);
-        while (at >= 0) {
-            n++;
-            at = haystack.indexOf(needle, at + needle.length());
-        }
-        return n;
+    /**
+     * Whether the last walk read only part of the archive.
+     *
+     * <p>A score from a partial walk grades every unread area as "nothing", which is a fair thing to
+     * print beside a warning and a false thing to write into a note that outlives the warning.
+     */
+    public static boolean lastWalkPartial() {
+        return lastWalk != null && lastWalk.partial();
     }
 
     /** Which notes touch which topic — the question the map answers, over the same archive. */
@@ -186,15 +182,16 @@ public final class Coverage {
         if (!Files.isDirectory(archive) || topics.isEmpty()) {
             return out;
         }
+        Map<String, Mentions> matchers = new LinkedHashMap<>();
+        topics.values().forEach(terms -> terms.forEach(t -> matchers.computeIfAbsent(t, Mentions::of)));
         lastWalk = ArchiveNotes.walk(archive);
         {
             for (ArchiveNotes.Note read : lastWalk.notes()) {
                 Path note = read.path();
-                String text = read.lowercaseText();
                 for (Map.Entry<String, List<String>> topic : topics.entrySet()) {
                     int hits = 0;
                     for (String term : topic.getValue()) {
-                        hits += count(text, term.toLowerCase(Locale.ROOT));
+                        hits += matchers.get(term).in(read.text(), read.lowercaseText());
                     }
                     if (hits >= MENTION_FLOOR) {
                         out.get(topic.getKey()).add(note.getFileName().toString());

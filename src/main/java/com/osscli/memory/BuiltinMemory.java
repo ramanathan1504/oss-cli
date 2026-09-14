@@ -663,6 +663,7 @@ public final class BuiltinMemory {
             SessionLedger.forget();
         }
         SessionLedger ledger = SessionLedger.load();
+        Map<String, List<Path>> notesBySession = null;
         List<String> skipProjects = excludedProjects(pack);
 
         int filed = 0;
@@ -789,6 +790,17 @@ public final class BuiltinMemory {
                                     com.osscli.knowledge.SessionNotes.touched(session.touchedPaths()),
                                     summary),
                             StandardCharsets.UTF_8);
+                }
+                if (session.id() != null) {
+                    if (notesBySession == null) {
+                        notesBySession = com.osscli.knowledge.SessionNotes.notesBySession(archive);
+                    }
+                    for (Path stale : notesBySession.getOrDefault(session.id(), List.of())) {
+                        if (!stale.equals(note)) {
+                            Files.deleteIfExists(stale);
+                        }
+                    }
+                    notesBySession.put(session.id(), reference == null ? List.of(note) : List.of());
                 }
                 ledger.mark(file);
                 written.add(note);
@@ -1385,9 +1397,18 @@ public final class BuiltinMemory {
         }
         Path into = DIR.resolve("gaps");
         Files.createDirectories(into);
+        int unwritten = 0;
         for (Map.Entry<String, List<String>> tech : pack.yardsticks().entrySet()) {
             List<Coverage.Area> areas = Coverage.score(pack.archive(), tech.getValue());
             say(Coverage.lastWarning());
+            if (Coverage.lastWalkPartial()) {
+                System.out.printf(
+                        "  %-16s not written — only part of the archive was read, so unread areas would be"
+                                + " recorded as having nothing%n",
+                        tech.getKey());
+                unwritten++;
+                continue;
+            }
             Path note = into.resolve("gaps-" + slug(tech.getKey()) + ".md");
             Files.writeString(note, gapNote(tech.getKey(), areas), StandardCharsets.UTF_8);
             long missing =
@@ -1398,7 +1419,7 @@ public final class BuiltinMemory {
                     tech.getKey(), missing, areas.size(), thin, note.getFileName());
         }
         System.out.println("  oss memory index      makes them searchable with everything else");
-        return 0;
+        return unwritten > 0 ? 1 : 0;
     }
 
     /**
@@ -1922,14 +1943,25 @@ public final class BuiltinMemory {
                 System.err.println("  skipped (not a file)  " + a);
                 continue;
             }
-            String body = Files.readString(src);
+            Path source = src.toRealPath();
+            String body = PackNotes.withProvenance(Files.readString(src), Map.of("filed_from", source.toString()));
             // Dated and slugged, so the directory sorts chronologically and two notes with the same
             // title on different days do not collide. Filing the same file twice overwrites rather
             // than accumulating near-duplicates nobody will ever reconcile.
             String slug = slug(src.getFileName().toString());
             Path dst = DIR.resolve(LocalDate.now(ZoneOffset.UTC) + "-" + slug + ".md");
+            List<Path> earlier = earlierCopies(DIR, slug, source, body).stream()
+                    .filter(p -> !p.equals(dst))
+                    .toList();
             Files.writeString(dst, body, StandardCharsets.UTF_8);
-            System.out.println("  filed  " + dst.getFileName());
+            for (Path copy : earlier) {
+                Files.deleteIfExists(copy);
+            }
+            System.out.println("  filed  " + dst.getFileName()
+                    + (earlier.isEmpty()
+                            ? ""
+                            : "  (replaced " + earlier.size() + " earlier cop" + (earlier.size() == 1 ? "y" : "ies")
+                                    + ")"));
             filed++;
         }
         if (filed > 0) {
@@ -1945,6 +1977,49 @@ public final class BuiltinMemory {
             }
         }
         return filed > 0 ? 0 : 1;
+    }
+
+    /**
+     * Copies of this note filed on other days.
+     *
+     * <p>The name carries the day it was filed, so filing the same review again the next day wrote a
+     * second file beside the first; one review had four. A copy is recognised by the source it was
+     * filed from, or — for a copy filed before that was recorded — by sharing its heading. A
+     * different note that merely has the same file name is neither, and is kept.
+     */
+    static List<Path> earlierCopies(Path dir, String slug, Path source, String body) throws IOException {
+        List<Path> out = new java.util.ArrayList<>();
+        if (!Files.isDirectory(dir)) {
+            return out;
+        }
+        java.util.regex.Pattern dated = java.util.regex.Pattern.compile(
+                "\\d{4}-\\d{2}-\\d{2}-" + java.util.regex.Pattern.quote(slug) + "\\.md");
+        String heading = headingOf(body);
+        List<Path> candidates;
+        try (Stream<Path> files = Files.list(dir)) {
+            candidates = files.filter(
+                            f -> dated.matcher(f.getFileName().toString()).matches())
+                    .toList();
+        }
+        for (Path candidate : candidates) {
+            String text = Files.readString(candidate, StandardCharsets.UTF_8);
+            String from = PackNotes.frontMatter(text).get("filed_from");
+            boolean same = from != null
+                    ? from.equals(source.toString())
+                    : !heading.isEmpty() && heading.equals(headingOf(text));
+            if (same) {
+                out.add(candidate);
+            }
+        }
+        return out;
+    }
+
+    private static String headingOf(String text) {
+        return text.lines()
+                .filter(l -> l.startsWith("# "))
+                .findFirst()
+                .map(String::strip)
+                .orElse("");
     }
 
     // -------------------------------------------------------------------- track ---

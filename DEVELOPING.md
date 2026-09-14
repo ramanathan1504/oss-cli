@@ -452,10 +452,8 @@ ship already wrong, and no container resolves this jar in the first place.
    pointed at already-clean text.
 3. **`sync --me` ordering** — the personal-profile section can `return 1` before
    directory ingestion runs, despite that section being labelled "always runs".
-4. **JSON-array re-ingestion** — rows are keyed `path#index` while the cache
-   check reads `path`, so array exports are re-ingested and re-embedded every run.
-5. **Vectors are stored as JSON text.** Readable and portable, but roughly 4.6 KB
+4. **Vectors are stored as JSON text.** Readable and portable, but roughly 4.6 KB
    per 384-dimension vector. At corpus scale that dominates database size; a
    BLOB encoding would cut it several-fold.
-6. **`InspectCommand` log format** — a summary line passes 5 arguments to a
+5. **`InspectCommand` log format** — a summary line passes 5 arguments to a
    pattern with 1 placeholder, so the chunk table prints mangled.

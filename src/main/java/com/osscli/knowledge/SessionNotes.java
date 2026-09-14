@@ -506,6 +506,39 @@ public final class SessionNotes {
     }
 
     /**
+     * Every standalone note under the archive's projects, by the session it was filed from.
+     *
+     * <p>A session's note is named from its title, and the title is recomputed on every run from a
+     * transcript that is still growing. When it moved, the next run wrote a second note beside the
+     * first and left both: five sessions in a real archive had two. Looking a session up by id finds
+     * the note it already has wherever it now lives. A running log is not in this map — it holds
+     * many sessions and has no {@code session:} field of its own.
+     */
+    public static Map<String, List<Path>> notesBySession(Path archive) {
+        Map<String, List<Path>> out = new java.util.HashMap<>();
+        Path projects = archive.resolve("Projects");
+        if (!java.nio.file.Files.isDirectory(projects)) {
+            return out;
+        }
+        List<Path> notes;
+        try (java.util.stream.Stream<Path> walk = java.nio.file.Files.walk(projects)) {
+            notes = walk.filter(java.nio.file.Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().endsWith(".md"))
+                    .filter(p -> com.osscli.memory.ArchiveNotes.notInsideADotDirectory(projects, p))
+                    .toList();
+        } catch (java.io.IOException e) {
+            return out;
+        }
+        for (Path note : notes) {
+            String id = sessionOf(note);
+            if (id != null && !id.equals("unknown")) {
+                out.computeIfAbsent(id, k -> new ArrayList<>()).add(note);
+            }
+        }
+        return out;
+    }
+
+    /**
      * A note with its frontmatter and title removed, for embedding inside another note.
      *
      * <p>A running log is one document, and a document does not have a second YAML block in the
@@ -620,7 +653,8 @@ public final class SessionNotes {
      * about the sessions run from a home folder.
      */
     public static Scored topicOf(String transcriptText, String project, Map<String, List<String>> topics) {
-        String haystack = transcriptText == null ? "" : transcriptText.toLowerCase(Locale.ROOT);
+        String text = transcriptText == null ? "" : transcriptText;
+        String haystack = text.toLowerCase(Locale.ROOT);
         String best = null;
         int bestScore = 0;
         List<String> bestTerms = List.of();
@@ -628,7 +662,7 @@ public final class SessionNotes {
             int score = 0;
             List<String> hit = new ArrayList<>();
             for (String term : e.getValue()) {
-                int n = count(haystack, term.toLowerCase(Locale.ROOT));
+                int n = com.osscli.memory.Mentions.of(term).in(text, haystack);
                 if (n > 0) {
                     score += n;
                     hit.add(term);
@@ -670,29 +704,14 @@ public final class SessionNotes {
         if (project == null || project.isBlank()) {
             return null;
         }
-        String p = project.toLowerCase(Locale.ROOT);
         for (Map.Entry<String, List<String>> e : topics.entrySet()) {
             for (String term : e.getValue()) {
-                if (p.contains(term.toLowerCase(Locale.ROOT))) {
+                if (com.osscli.memory.Mentions.of(term).in(project) > 0) {
                     return e.getKey();
                 }
             }
         }
         return null;
-    }
-
-    /** Occurrences, not lines. A count of lines under-reports every term used twice in a paragraph. */
-    static int count(String haystack, String needle) {
-        if (needle.isBlank()) {
-            return 0;
-        }
-        int n = 0;
-        int at = haystack.indexOf(needle);
-        while (at >= 0) {
-            n++;
-            at = haystack.indexOf(needle, at + needle.length());
-        }
-        return n;
     }
 
     // ==========================================

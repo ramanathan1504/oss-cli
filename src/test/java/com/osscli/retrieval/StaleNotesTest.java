@@ -133,4 +133,19 @@ class StaleNotesTest {
         assertTrue(sweep.gone().isEmpty());
         assertFalse(sweep.unreachableFolders().contains(""));
     }
+
+    @Test
+    @DisplayName("a conversation from an export is judged by the export file it came from")
+    void exportRowsAreNotDeletions(@TempDir Path root) throws IOException {
+        Path export = root.resolve("conversations.json");
+        Files.writeString(export, "[{\"title\":\"a\"},{\"title\":\"b\"}]");
+        List<String> indexed = List.of(export + "#0", export + "#1");
+
+        StaleNotes.Sweep present = StaleNotes.sweep(indexed, List.of(root));
+        assertEquals(List.of(), present.gone(), "every export row was pruned and rebuilt on each run");
+        assertEquals(List.of(), StaleNotes.outside(indexed, present));
+
+        Files.delete(export);
+        assertEquals(indexed, StaleNotes.sweep(indexed, List.of(root)).gone());
+    }
 }
