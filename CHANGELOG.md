@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.10.4
+
+_2026-09-16_
+
+- memory/only real session fences (#249)
+
+
 ## 4.10.3
 
 _2026-09-16_
