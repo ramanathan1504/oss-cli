@@ -93,6 +93,66 @@ class KeepTheArchiveCurrentTest {
     }
 
     @Test
+    @DisplayName("a checkout sees what was merged upstream after it was last fetched")
+    void checkoutsAreFetchedBeforeFiling(@TempDir Path dir) throws Exception {
+        Path origin = dir.resolve("origin.git");
+        Path upstream = dir.resolve("upstream");
+        Path checkout = dir.resolve("checkout");
+        git(dir, "init", "--quiet", "--bare", "-b", "main", origin.toString());
+        git(dir, "clone", "--quiet", origin.toString(), upstream.toString());
+        commit(upstream, "first");
+        git(upstream, "push", "--quiet", "origin", "HEAD:main");
+        git(dir, "clone", "--quiet", origin.toString(), checkout.toString());
+
+        // Merged upstream after the checkout last fetched: invisible to origin/main until a fetch.
+        commit(upstream, "merged this morning");
+        git(upstream, "push", "--quiet", "origin", "HEAD:main");
+        String before = git(checkout, "rev-parse", "origin/main");
+
+        assertEquals("", com.osscli.knowledge.Contributions.fetch(checkout));
+
+        String after = git(checkout, "rev-parse", "origin/main");
+        assertFalse(before.equals(after), "origin/main did not move, so the job would file yesterday's work");
+        // Only the remote-tracking ref moved: the working tree and local branch are the person's.
+        assertEquals(before, git(checkout, "rev-parse", "HEAD"));
+    }
+
+    @Test
+    @DisplayName("a checkout that cannot be fetched says why instead of hanging")
+    void anUnreachableRemoteIsReported(@TempDir Path dir) throws Exception {
+        Path checkout = dir.resolve("checkout");
+        git(dir, "init", "--quiet", "-b", "main", checkout.toString());
+        git(
+                checkout,
+                "remote",
+                "add",
+                "origin",
+                dir.resolve("does-not-exist.git").toString());
+
+        String why = com.osscli.knowledge.Contributions.fetch(checkout);
+
+        assertFalse(why.isEmpty(), "a fetch that failed reported success");
+    }
+
+    private static void commit(Path repo, String message) throws Exception {
+        Files.writeString(repo.resolve("file.txt"), message + "\n", StandardCharsets.UTF_8);
+        git(repo, "add", "file.txt");
+        git(repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "--quiet", "-m", message);
+    }
+
+    private static String git(Path in, String... args) throws Exception {
+        List<String> cmd = new java.util.ArrayList<>(List.of("git"));
+        cmd.addAll(List.of(args));
+        Process p = new ProcessBuilder(cmd)
+                .directory(in.toFile())
+                .redirectErrorStream(true)
+                .start();
+        String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).strip();
+        assertEquals(0, p.waitFor(), String.join(" ", cmd) + ": " + out);
+        return out;
+    }
+
+    @Test
     @DisplayName("an unchanged curriculum page is not rewritten")
     void curriculumLeavesUnchangedPagesAlone(@TempDir Path archive) throws IOException {
         Curriculum.Item item = new Curriculum.Item("log4j", "Appenders", "backlog", 12, 40, "note.md");
