@@ -1,7 +1,6 @@
 package com.osscli.memory;
 
 import com.osscli.AppPaths;
-import com.osscli.retrieval.Corpus;
 import com.osscli.retrieval.PassageSplitter;
 import com.osscli.retrieval.TextIndex;
 import java.io.IOException;
@@ -2334,33 +2333,41 @@ public final class BuiltinMemory {
      */
     private static Integer searchByMeaning(String query, int noteCount) {
         try {
-            Corpus corpus = Corpus.load(m -> System.out.println("  " + m));
-            if (!corpus.semantic()) {
+            if (!com.osscli.retrieval.Embeddings.isReady()) {
                 return null;
             }
-            // Notes only. The corpus also holds review write-ups, and 'memory search' is asked about
-            // what you filed -- widening it here would answer a question nobody asked.
-            List<Corpus.Hit> hits = corpus.search(query, 8).stream()
-                    .filter(h -> "note".equals(h.kind()))
-                    .toList();
+            // Through the passage index, which is what every note in the store is embedded into.
+            //
+            // This used to rank a Corpus, and a Corpus is the top level of one folder: 55 notes and
+            // ten review write-ups on a store holding 2,748 notes and 44,332 embedded passages.
+            // Everything filed in a subfolder -- every harvested thread, every session note, every
+            // note in the archive -- was embedded on every run and then ranked by nothing. Asked
+            // for a sentence copied verbatim out of a note, the answer came back without it.
+            //
+            // A whole note was also one vector, and the model reads about two hundred words of it,
+            // so a long note was represented by its front matter. NoteRetriever scores passages and
+            // keeps the best one per note, which is what the review path has always done.
+            List<com.osscli.model.PromptContextChunk> hits;
+            try (com.osscli.ui.Live live = com.osscli.ui.Live.start("reading what you have written")) {
+                live.step("comparing the query against every passage");
+                // The floor the search path has always used, not the review path's. Quoting a note
+                // into a review unasked wants 0.50; answering somebody who typed a question wants
+                // what the store has, and a paraphrase of a real sentence scores 0.41 here.
+                hits = com.osscli.retrieval.NoteRetriever.retrieveFor(
+                        query, 8, null, com.osscli.retrieval.Corpus.RELEVANCE_FLOOR);
+            }
             if (hits.isEmpty()) {
                 return null;
             }
-            // Same rule as the term path: one line per note, at its best passage.
-            Map<String, Corpus.Hit> best = new LinkedHashMap<>();
-            for (Corpus.Hit h : hits) {
-                String file = h.id().startsWith("note:") ? h.id().substring(5) : h.id();
-                Corpus.Hit seen = best.get(file);
-                if (seen == null || h.score() > seen.score()) {
-                    best.put(file, h);
-                }
-            }
-            System.out.println("  " + best.size() + " of " + noteCount + " note(s), by meaning");
+            long indexed = com.osscli.storage.SqliteStorage.embeddedNoteCount();
+            System.out.println(
+                    "  " + hits.size() + " of " + (indexed > 0 ? indexed : noteCount) + " note(s), by meaning");
             System.out.println();
-            for (Map.Entry<String, Corpus.Hit> e : best.entrySet()) {
-                System.out.printf("  %.2f  %s%n", e.getValue().score(), e.getKey());
-                if (!e.getValue().title().isBlank()) {
-                    System.out.println("        " + e.getValue().title());
+            for (com.osscli.model.PromptContextChunk h : hits) {
+                System.out.printf("  %.2f  %s%n", h.relevanceScore(), h.sourceRef());
+                String line = firstLineOf(h.content());
+                if (!line.isBlank()) {
+                    System.out.println("        " + line);
                 }
             }
             return 0;
@@ -2368,6 +2375,20 @@ public final class BuiltinMemory {
             // Ranking by meaning is the better answer, not the only one.
             return null;
         }
+    }
+
+    /** The first line of a passage worth showing, short enough to sit under a score. */
+    private static String firstLineOf(String passage) {
+        if (passage == null) {
+            return "";
+        }
+        for (String line : passage.split("\n")) {
+            String cleaned = line.replaceAll("^[#>*\\-\\s]+", "").strip();
+            if (cleaned.length() > 3) {
+                return cleaned.length() > 96 ? cleaned.substring(0, 93) + "..." : cleaned;
+            }
+        }
+        return "";
     }
 
     // -------------------------------------------------------------------- index ---

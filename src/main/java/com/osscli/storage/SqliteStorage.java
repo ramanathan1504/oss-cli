@@ -1262,6 +1262,25 @@ public class SqliteStorage {
     }
 
     /**
+     * How many notes have passages in the index.
+     *
+     * <p>The honest denominator for a search by meaning. {@code memory search} used to report the
+     * number of markdown files it could see on disk while ranking a corpus of 65 -- the top level
+     * of one folder -- so a store of 2,748 notes answered as though all of them had been considered.
+     */
+    public static long embeddedNoteCount() {
+        String sql = "SELECT count(DISTINCT file_path) FROM personal_chat_chunk "
+                + "WHERE vector IS NOT NULL AND vector != '';";
+        try (Connection conn = DatabaseManager.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql);
+                ResultSet rs = ps.executeQuery()) {
+            return rs.next() ? rs.getLong(1) : 0;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /**
      * Loads passage vectors WITHOUT their text.
      *
      * <p>A chunked corpus holds tens of thousands of passages; pulling their content along with
