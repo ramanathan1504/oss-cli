@@ -224,18 +224,20 @@ public final class SessionLog {
         if (text == null) {
             return ids;
         }
-        String opener = "<!-- session:";
-        int at = text.indexOf(opener);
-        while (at >= 0) {
-            int end = text.indexOf(" -->", at + opener.length());
-            if (end < 0) {
-                break;
-            }
-            String id = text.substring(at + opener.length(), end).strip();
-            if (!id.isEmpty() && !ids.contains(id)) {
+        // A fence is a line of its own with a closing fence to match, because that is the only
+        // way this class writes one. A transcript that talks about the format quotes it inline --
+        // "blocks keyed by a `<!-- session:UUID -->` marker" -- and reading that as a fence put
+        // the word UUID into a log's header as though it were a session somebody could reopen.
+        java.util.regex.Matcher m =
+                java.util.regex.Pattern.compile("(?m)^<!-- session:(\\S+) -->$").matcher(text);
+        while (m.find()) {
+            String id = m.group(1);
+            boolean closed = java.util.regex.Pattern.compile("(?m)^" + java.util.regex.Pattern.quote(close(id)) + "$")
+                    .matcher(text)
+                    .find(m.end());
+            if (closed && !ids.contains(id)) {
                 ids.add(id);
             }
-            at = text.indexOf(opener, end);
         }
         return ids;
     }

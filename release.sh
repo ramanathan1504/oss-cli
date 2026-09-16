@@ -223,21 +223,46 @@ gh pr create --title "Release v$VERSION" \
 PR_NUMBER=$(gh pr view "$RELEASE_BRANCH" --json number -q .number)
 
 echo "→ Waiting for CI on PR #$PR_NUMBER (this gates the merge)..."
-# Checks are scheduled a few seconds after the PR is created. Asking before
-# they exist prints "no checks reported" and exits nonzero, which set -e
-# turns into an aborted release with the PR left open -- v1.8.3 hit exactly
-# this. Wait for them to appear, then watch.
-for _ in $(seq 1 30); do
-    if gh pr checks "$PR_NUMBER" 2>&1 | grep -q "no checks reported"; then
-        sleep 10
-    else
-        break
-    fi
+# Gated on the CI workflow run for this exact commit, not on whatever checks happen
+# to be listed. `gh pr checks --watch` returns as soon as every check it can see has
+# finished, and a fast job from another workflow finishes long before CI's own jobs
+# are even registered -- v4.10.3's pull request was merged sixteen seconds after it
+# was opened, with its Windows and macOS jobs still running. Nothing on GitHub stops
+# that either: main has no required status checks, so this wait is the only gate.
+HEAD_SHA=$(git rev-parse HEAD)
+CI_STATE="missing"
+for _ in $(seq 1 120); do
+    CI_STATE=$(gh run list --commit "$HEAD_SHA" --workflow CI --json status,conclusion \
+        -q 'if length == 0 then "missing" elif all(.status == "completed") then (if all(.conclusion == "success") then "success" else "failure" end) else "pending" end' \
+        2>/dev/null || echo "missing")
+    case "$CI_STATE" in
+        success) break ;;
+        failure)
+            echo "❌ CI failed on $HEAD_SHA. PR #$PR_NUMBER is left open and nothing was merged."
+            exit 1
+            ;;
+        *) sleep 20 ;;
+    esac
 done
-gh pr checks "$PR_NUMBER" --watch --fail-fast
+if [ "$CI_STATE" != "success" ]; then
+    echo "❌ CI on $HEAD_SHA did not finish within 40 minutes. PR #$PR_NUMBER is left open."
+    exit 1
+fi
+echo "   ✓ CI passed on $HEAD_SHA"
 
 echo "→ Merging..."
-gh pr merge "$PR_NUMBER" --squash --delete-branch
+# The merge is checked by asking GitHub, not by gh's exit code. `gh pr merge` merges
+# on the server and then tidies the local checkout, and when the tidying fails it
+# exits nonzero after the merge has already happened -- set -e then stopped v4.10.0
+# with the pull request merged and no tag, no release, no stable, no formula.
+gh pr merge "$PR_NUMBER" --squash --delete-branch || true
+if [ "$(gh pr view "$PR_NUMBER" --json state -q .state)" != "MERGED" ]; then
+    echo "❌ PR #$PR_NUMBER is not merged. Nothing was tagged."
+    exit 1
+fi
+git switch -q main 2>/dev/null || true
+git branch -D "$RELEASE_BRANCH" >/dev/null 2>&1 || true
+git push origin --delete "$RELEASE_BRANCH" >/dev/null 2>&1 || true
 
 echo "→ Tagging the merged commit..."
 git switch main

@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -94,6 +95,27 @@ class SessionProvenanceTest {
         // Twice is one pass and no writes: an archive under git must not record a commit a day for
         // a field that did not change.
         assertEquals(0, SessionLog.backfill(projects));
+    }
+
+    @Test
+    @DisplayName("a fence quoted inside the conversation is not a session")
+    void quotedFencesAreNotSessions() {
+        String log = """
+                ---
+                kind: running-log
+                source: session-log
+                ---
+
+                <!-- session:38ebf78d-fd4d-4131-a5eb-9dc27d477626 -->
+                ## 2026-09-01 · issue 4279
+
+                Topic-first, with per-session blocks keyed by a `<!-- session:UUID -->` marker.
+                <!-- session:ID --> written mid-sentence is prose too.
+                <!-- /session:38ebf78d-fd4d-4131-a5eb-9dc27d477626 -->
+                """;
+
+        // Measured on a real archive: one log of 61 listed "UUID" as a session to reopen.
+        assertEquals(List.of("38ebf78d-fd4d-4131-a5eb-9dc27d477626"), SessionLog.idsIn(log));
     }
 
     @Test
