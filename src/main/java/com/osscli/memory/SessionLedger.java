@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -39,6 +40,14 @@ import java.util.Map;
  * requires reading the file, which is the exact cost being avoided. Size and mtime can in principle
  * both be preserved across an edit; for append-only logs written by another program they never are,
  * and {@code oss memory sessions --all} exists for the day that assumption is wrong.
+ *
+ * <p><b>The stamp recorded is the one that was read, not the one on disk at the end.</b> A
+ * transcript is still being appended to while it is filed, and stamping it afresh after the note is
+ * written records text the note never saw as already filed — it would then never be filed at all.
+ *
+ * <p><b>A transcript deleted from a folder that is still there is forgotten.</b> Measured at 43 of
+ * 802 entries pointing at nothing. A folder that is itself missing is left alone, because an absent
+ * folder is a mount problem rather than a deletion.
  */
 public final class SessionLedger {
 
@@ -47,16 +56,22 @@ public final class SessionLedger {
 
     private final Map<String, String> seen;
 
+    private final Map<String, String> observed = new HashMap<>();
+
     private SessionLedger(Map<String, String> seen) {
         this.seen = seen;
     }
 
     /** What has been filed before, or an empty ledger on the first run or an unreadable one. */
     public static SessionLedger load() {
+        return load(FILE);
+    }
+
+    static SessionLedger load(Path file) {
         Map<String, String> seen = new LinkedHashMap<>();
-        if (Files.isRegularFile(FILE)) {
+        if (Files.isRegularFile(file)) {
             try {
-                for (String line : Files.readAllLines(FILE, StandardCharsets.UTF_8)) {
+                for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
                     int tab = line.indexOf('\t');
                     if (tab > 0) {
                         seen.put(line.substring(0, tab), line.substring(tab + 1));
@@ -83,14 +98,17 @@ public final class SessionLedger {
     /** True when this transcript has grown, appeared, or been rewritten since the last run. */
     public boolean changed(Path file) {
         String now = stampOf(file);
+        if (!now.isEmpty()) {
+            observed.put(file.toString(), now);
+        }
         return now.isEmpty() || !now.equals(seen.get(file.toString()));
     }
 
-    /** Record that this transcript was filed as it stands. */
+    /** Record that this transcript was filed as it stood when {@link #changed} looked at it. */
     public void mark(Path file) {
-        String now = stampOf(file);
-        if (!now.isEmpty()) {
-            seen.put(file.toString(), now);
+        String stamp = observed.containsKey(file.toString()) ? observed.get(file.toString()) : stampOf(file);
+        if (!stamp.isEmpty()) {
+            seen.put(file.toString(), stamp);
         }
     }
 
@@ -107,12 +125,23 @@ public final class SessionLedger {
      * that matches nothing, which silently refiles a transcript for ever.
      */
     public void save() throws IOException {
-        Files.createDirectories(FILE.getParent());
+        save(FILE);
+    }
+
+    void save(Path file) throws IOException {
+        seen.keySet().removeIf(SessionLedger::deletedFromAPresentFolder);
+        Files.createDirectories(file.getParent());
         StringBuilder sb = new StringBuilder();
         seen.forEach((path, stamp) -> sb.append(path).append('\t').append(stamp).append('\n'));
-        Path tmp = FILE.resolveSibling(FILE.getFileName() + ".tmp");
+        Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
         Files.writeString(tmp, sb.toString(), StandardCharsets.UTF_8);
-        Files.move(tmp, FILE, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        Files.move(tmp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    static boolean deletedFromAPresentFolder(String path) {
+        Path transcript = Path.of(path);
+        Path folder = transcript.getParent();
+        return folder != null && Files.isDirectory(folder) && !Files.exists(transcript);
     }
 
     /** Forget everything, so the next run reads every transcript again. */

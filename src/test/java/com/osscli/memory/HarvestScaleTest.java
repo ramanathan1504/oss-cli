@@ -51,14 +51,20 @@ class HarvestScaleTest {
                 "https://github.com/owner/name/pull/" + n);
     }
 
+    /** One note, rendered the way a harvest renders it. */
+    private static String note(com.osscli.model.Issue i) {
+        return com.osscli.knowledge.IssueNotes.rewrite(
+                null, i, "owner/name", java.util.List.of(), java.util.Set.of("participant"), "2026-01-01T00:00:00Z");
+    }
+
     /** How long a run of {@code n} notes takes, after a warm-up the JIT has seen. */
     private static long nanosFor(int n) {
         for (int i = 0; i < 1_000; i++) {
-            BuiltinMemory.harvestNote(at(i), java.util.List.of());
+            note(at(i));
         }
         long start = System.nanoTime();
         for (int i = 0; i < n; i++) {
-            BuiltinMemory.harvestNote(at(i), java.util.List.of());
+            note(at(i));
             BuiltinMemory.harvestName(at(i));
         }
         return System.nanoTime() - start;

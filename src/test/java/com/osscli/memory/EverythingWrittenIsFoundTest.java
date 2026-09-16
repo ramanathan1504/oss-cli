@@ -110,6 +110,14 @@ class EverythingWrittenIsFoundTest {
         // at three scores under a heading that said "note(s)" -- three pieces of writing where
         // there is one, and the other matches pushed off the list.
         assertTrue(src.contains("best.size() + \" of \" + notes.size()"), "the count must be of notes, not passages");
-        assertTrue(src.contains("best.size() + \" of \" + noteCount"), "the meaning path counts them too");
+
+        // The meaning path keeps the same rule by ranking through NoteRetriever, which scores
+        // passages and keeps the best one per file. The denominator beside the results is a count
+        // of notes that are actually in the index -- it used to be the number of markdown files on
+        // disk, printed while ranking the 65 in one folder.
+        assertTrue(src.contains("NoteRetriever.retrieveFor("), "the meaning path must rank through the passage index");
+        assertTrue(src.contains("embeddedNoteCount()"), "the meaning path must say how many notes it really ranked");
+        String retriever = Files.readString(Path.of("src/main/java/com/osscli/retrieval/NoteRetriever.java"));
+        assertTrue(retriever.contains("bestPerFile"), "one note is one result, whatever matched inside it");
     }
 }

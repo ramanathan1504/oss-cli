@@ -55,6 +55,21 @@ public final class NoteRetriever {
      *     its own earlier output about the same change, which would read as corroboration while being an echo
      */
     public static List<PromptContextChunk> retrieveFor(String queryText, int limit, String excludePathSubstring) {
+        return retrieveFor(queryText, limit, excludePathSubstring, ContextRetriever.similarityThreshold());
+    }
+
+    /**
+     * The same, at a floor the caller chooses.
+     *
+     * <p>Two callers, two questions, and one number cannot answer both. Enriching a review asks
+     * "is this note close enough to quote unasked", which wants 0.50 -- a passage that is merely
+     * related would be presented as prior work on the same change. A person typing {@code memory
+     * search} has asked, and wants what the store has: a paraphrase of a sentence in a real note
+     * scores 0.41 against this model, so the stricter floor answers "nothing" to a question the
+     * store can answer.
+     */
+    public static List<PromptContextChunk> retrieveFor(
+            String queryText, int limit, String excludePathSubstring, double threshold) {
         if (queryText == null || queryText.isBlank()) {
             return List.of();
         }
@@ -69,7 +84,6 @@ public final class NoteRetriever {
             if (queryVector == null) {
                 return List.of();
             }
-            double threshold = ContextRetriever.similarityThreshold();
 
             Map<String, SqliteStorage.ChatChunk> bestPerFile = new HashMap<>();
             Map<String, Double> bestScore = new HashMap<>();

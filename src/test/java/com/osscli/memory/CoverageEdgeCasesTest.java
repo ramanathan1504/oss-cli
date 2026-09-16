@@ -108,15 +108,16 @@ class CoverageEdgeCasesTest {
     }
 
     @Test
-    @DisplayName("overlapping occurrences are counted the way a person counts them")
-    void countingIsNonOverlapping(@TempDir Path archive) throws IOException {
-        // "aaaaaa" contains "aa" three times to a person and five times to a scan that steps one
-        // character at a time. The difference decides whether a floor of three is reached, so it is
-        // not a detail -- and the body is six characters rather than four precisely because a
-        // count below the floor is discarded, which would have hidden the property being tested.
-        note(archive, "a.md", "aaaaaa");
+    @DisplayName("a mention is a word, not the same letters inside another word")
+    void mentionsAreWords(@TempDir Path archive) throws IOException {
+        note(archive, "consensus.md", "Raft elects a leader. Raft replicates the log. Raft is simpler.");
+        note(archive, "writing.md", "a draft, a second draft, a final draft, and the draft after that");
 
-        assertEquals(3, Coverage.score(archive, List.of("aa")).get(0).mentions());
+        Coverage.Area raft = Coverage.score(archive, List.of("Raft")).get(0);
+
+        assertEquals(3, raft.mentions(), "159 notes were about Raft because they said draft");
+        assertEquals(1, raft.notes());
+        assertEquals("consensus.md", raft.strongest());
     }
 
     @Test

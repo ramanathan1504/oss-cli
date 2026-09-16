@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.10.0
+
+_2026-09-16_
+
+- memory: a note says which conversation it came out of, and so does the index
+- release: look for the previous release among version tags
+- memory: search ranks what is indexed, not the top level of one folder
+- memory: harvest files its notes in the archive, where everything else reads
+- memory: index what is under a hidden home, file each note once, count words not letters
+- memory: a path written down means the same thing on every machine (#240)
+- memory/track notes at source (#239)
+
+
 ## 4.9.7
 
 _2026-08-30_

@@ -89,7 +89,7 @@ public final class StaleNotes {
             if (raw == null || raw.isBlank()) {
                 continue;
             }
-            Path note = Path.of(raw);
+            Path note = Path.of(onDisk(raw));
             if (Files.exists(note)) {
                 continue;
             }
@@ -112,6 +112,17 @@ public final class StaleNotes {
             }
         }
         return new Sweep(gone, unreachable);
+    }
+
+    /**
+     * The file an indexed path lives in.
+     *
+     * <p>A conversation split out of a JSON export is indexed as {@code export.json#3}, which is not
+     * a file. Checked as written it never exists, so every export row was pruned as deleted and
+     * rebuilt on the next run.
+     */
+    static String onDisk(String indexed) {
+        return indexed.replaceFirst("#\\d+$", "");
     }
 
     /** The folders this install considers to hold notes. */
@@ -150,7 +161,7 @@ public final class StaleNotes {
             if (raw == null || raw.isBlank() || alreadyHandled.contains(raw)) {
                 continue;
             }
-            if (!Files.exists(Path.of(raw))) {
+            if (!Files.exists(Path.of(onDisk(raw)))) {
                 out.add(raw);
             }
         }

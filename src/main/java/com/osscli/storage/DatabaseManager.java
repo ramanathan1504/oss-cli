@@ -32,7 +32,7 @@ public class DatabaseManager {
 
     private static final Logger LOGGER = LogManager.getLogger(DatabaseManager.class);
     // private static final String DB_URL = "jdbc:sqlite:data/issue_intelligence.db";
-    private static final int CURRENT_SCHEMA_VERSION = 17;
+    private static final int CURRENT_SCHEMA_VERSION = 18;
 
     /**
      * How long a statement waits for a lock before giving up.
@@ -549,6 +549,63 @@ public class DatabaseManager {
                             + " SELECT repository, issue_number, file_path FROM old_personal_code_footprint;");
                     stmt.execute("DROP TABLE old_personal_code_footprint;");
                 }
+            }
+        },
+
+        // Migration 18: a note remembers which conversation it came from
+        new Migration() {
+            @Override
+            public int getTargetVersion() {
+                return 18;
+            }
+
+            /**
+             * Records the session a note was filed from, beside the note.
+             *
+             * <p>A note filed from a terminal session is a record of a conversation that is still on
+             * disk and can still be reopened. The id was written into the note and nowhere else, so
+             * a search could tell you what had been decided and not where to go on with it -- the id
+             * had to be found by opening the file and scrolling to a fence in the body.
+             *
+             * <p>Backfilled from the content already stored rather than by re-reading the archive.
+             * The rows hold the notes, the notes hold their own frontmatter, and re-embedding 2,748
+             * of them to learn something that is already in the database would be minutes of ONNX
+             * for a string that can be read.
+             */
+            @Override
+            public void execute(Connection conn) throws SQLException {
+                LOGGER.info("Upgrading database schema to Version 18 (a note names the session behind it)...");
+                if (!tableExists(conn, "personal_chat_memory")) {
+                    return;
+                }
+                try (Statement stmt = conn.createStatement()) {
+                    if (!columnExists(conn, "personal_chat_memory", "sessions")) {
+                        stmt.execute("ALTER TABLE personal_chat_memory ADD COLUMN sessions TEXT;");
+                    }
+                    if (!columnExists(conn, "personal_chat_memory", "tool")) {
+                        stmt.execute("ALTER TABLE personal_chat_memory ADD COLUMN tool TEXT;");
+                    }
+                }
+                int filled = 0;
+                try (PreparedStatement read =
+                                conn.prepareStatement("SELECT file_path, content FROM personal_chat_memory;");
+                        PreparedStatement write = conn.prepareStatement(
+                                "UPDATE personal_chat_memory SET sessions = ?, tool = ? WHERE file_path = ?;");
+                        ResultSet rs = read.executeQuery()) {
+                    while (rs.next()) {
+                        com.osscli.model.Provenance from = com.osscli.model.Provenance.of(rs.getString(2));
+                        if (!from.present()) {
+                            continue;
+                        }
+                        write.setString(1, from.sessions());
+                        write.setString(2, from.tool());
+                        write.setString(3, rs.getString(1));
+                        write.addBatch();
+                        filled++;
+                    }
+                    write.executeBatch();
+                }
+                LOGGER.info("  {} note(s) named the session they came from.", filled);
             }
         }
     };

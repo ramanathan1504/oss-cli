@@ -194,6 +194,33 @@ class SessionJourneyTest {
     }
 
     @Test
+    @DisplayName("a session whose title changes keeps one note, under the new title")
+    void aRetitledSessionIsMovedNotCopied(@TempDir Path home, @TempDir Path work) throws Exception {
+        Path archive = work.resolve("archive");
+        Path transcripts = work.resolve("transcripts");
+        configure(home, archive, transcripts);
+        transcript(transcripts, "acme-log4j-fork", "a.jsonl", "the rollover appender skips a file on the hour");
+        assertEquals(
+                0,
+                Journey.ossAtHome(home, work, work.resolve("fakehome"), "memory", "sessions", "--all")
+                        .code());
+
+        transcript(
+                transcripts,
+                "acme-log4j-fork",
+                "a.jsonl",
+                "why does the appender lose the hourly rollover file",
+                "the rollover appender skips a file on the hour");
+        Journey.Ran again = Journey.ossAtHome(home, work, work.resolve("fakehome"), "memory", "sessions", "--all");
+
+        assertEquals(0, again.code(), again.all());
+        List<Path> notes = notesIn(archive);
+        assertEquals(1, notes.size(), "five sessions in a real archive had a note per title:\n" + namesOf(notes));
+        assertTrue(
+                namesOf(notes).contains("lose-the-hourly"), "and the one kept is the current one:\n" + namesOf(notes));
+    }
+
+    @Test
     @DisplayName("the tool's own summarising prompt is never filed as knowledge")
     void theToolDoesNotFileItsOwnPrompts(@TempDir Path home, @TempDir Path work) throws Exception {
         // Asking a command-line tool to summarise a transcript creates a session of its own, which

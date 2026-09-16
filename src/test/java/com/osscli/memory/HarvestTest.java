@@ -39,6 +39,17 @@ class HarvestTest {
         return new Issue(number, title, "the body", "open", 0, null, null, null, labels, null, null, url);
     }
 
+    /** The note harvest files for one item, as it would be written on a first run. */
+    private static String note(Issue i, List<String> discussion) {
+        return com.osscli.knowledge.IssueNotes.rewrite(
+                null,
+                i,
+                BuiltinMemory.repositoryOf(i),
+                discussion,
+                java.util.Set.of("participant"),
+                "2026-01-01T00:00:00Z");
+    }
+
     @Test
     @DisplayName("the repository comes from the item's own URL")
     void repositoryIsReadNotGuessed() {
@@ -86,15 +97,14 @@ class HarvestTest {
                 "Fix circular references in exceptions",
                 List.of(new Label("bug"), new Label("appenders")));
 
-        String note = BuiltinMemory.harvestNote(i, List.of());
+        String note = note(i, List.of());
 
-        assertTrue(note.startsWith("# apache/logging-log4j2 #4249"), note);
-        assertTrue(note.contains("## Fix circular references in exceptions"), note);
-        assertTrue(note.contains("- labels: bug, appenders"), note);
-        assertTrue(note.contains("- link: https://github.com/apache/logging-log4j2/pull/4249"), note);
-        // No DEVONthink, no database, no front matter anything has to understand: a folder of
-        // markdown is the whole format, which is why the built-in can read what the extension wrote.
-        assertTrue(!note.contains("---\n"), "the note should not need front matter");
+        assertTrue(note.contains("# apache/logging-log4j2 Issue #4249 — Fix circular references in exceptions"), note);
+        assertTrue(note.contains("**Labels:** `bug` `appenders`"), note);
+        assertTrue(note.contains("https://github.com/apache/logging-log4j2/pull/4249"), note);
+        // The one field that is not decoration: a second harvest finds the note it already wrote by
+        // reading this, which is what keeps a changed title from filing a second copy beside it.
+        assertTrue(note.contains("github: apache/logging-log4j2#4249"), note);
     }
 
     @Test
@@ -109,7 +119,7 @@ class HarvestTest {
     void noteIsShapedForTheDigest() {
         Issue i = issue(4249, "https://github.com/apache/logging-log4j2/pull/4249", "Fix circular refs", List.of());
 
-        String note = BuiltinMemory.harvestNote(i, List.of());
+        String note = note(i, List.of());
 
         // Every harvester that has written into this archive uses these, Digest mines them, and 443
         // of 623 notes carry them. A harvest inventing its own layout writes notes the rest of the
@@ -124,7 +134,7 @@ class HarvestTest {
     void discussionIsPreserved() {
         Issue i = issue(1, "https://github.com/o/n/issues/1", "t", List.of());
 
-        String note = BuiltinMemory.harvestNote(
+        String note = note(
                 i,
                 List.of(
                         BuiltinMemory.comment(java.util.Map.of(
@@ -155,6 +165,6 @@ class HarvestTest {
     void noThreadMeansNoHeading() {
         Issue i = issue(1, "https://github.com/o/n/issues/1", "t", List.of());
 
-        assertFalse(BuiltinMemory.harvestNote(i, List.of()).contains("(Review Discussions)"));
+        assertFalse(note(i, List.of()).contains("(Review Discussions)"));
     }
 }

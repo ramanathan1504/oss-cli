@@ -16,12 +16,14 @@
  */
 package com.osscli.retrieval;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -30,30 +32,16 @@ import org.junit.jupiter.api.io.TempDir;
  * That the note walk indexes notes and nothing else.
  *
  * <p>Putting an archive under git turned its own history into the corpus: 603 "notes" and 40,910
- * "passages", every one of them a zlib blob under {@code .git/objects} read as prose. They embed to
- * plausible-looking nonsense, they outnumbered the 877 real notes, and they competed with them at
- * every query.
+ * "passages", every one of them a zlib blob under {@code .git/objects} read as prose.
  *
- * <p>The extension filter could never have caught it -- a git object has no extension at all -- and
- * nothing failed. The index simply got bigger, which reads as progress.
+ * <p>This used to reimplement the rule and check the source for a matching character comparison.
+ * Both passed while the indexer applied the rule to the absolute path and found 0 of 1,472 notes under
+ * {@code ~/.oss-cli/memory} for seventeen days. It calls the walk the indexer calls now.
  */
 class NoteWalkTest {
 
-    /**
-     * The walk as {@link NoteIndexer} performs it.
-     *
-     * <p>Reimplemented here rather than reached through {@code index}, which needs an embedder and a
-     * database. What is asserted is the rule -- which paths are notes -- and that rule is checked
-     * against the source below so the two cannot drift apart.
-     */
-    private static boolean wouldIndex(Path root, Path file) {
-        for (Path part : root.relativize(file)) {
-            String name = part.toString();
-            if (name.length() > 1 && name.charAt(0) == '.') {
-                return false;
-            }
-        }
-        return true;
+    private static List<Path> walked(Path root) throws IOException {
+        return NoteIndexer.notesUnder(root);
     }
 
     @Test
@@ -65,41 +53,47 @@ class NoteWalkTest {
         Path note = root.resolve("rollover.md");
         Files.writeString(note, "# rollover");
 
-        assertFalse(wouldIndex(root, object), "603 of these became notes the first time this ran");
-        assertTrue(wouldIndex(root, note));
+        List<Path> found = walked(root);
+        assertFalse(found.contains(object), "603 of these became notes the first time this ran");
+        assertTrue(found.contains(note));
     }
 
     @Test
     @DisplayName("every editor's state folder goes the same way")
     void otherDotFoldersToo(@TempDir Path root) throws IOException {
-        for (String hidden : java.util.List.of(".obsidian", ".vscode", ".idea", ".Trash")) {
+        for (String hidden : List.of(".obsidian", ".vscode", ".idea", ".Trash")) {
             Files.createDirectories(root.resolve(hidden));
-            Path inside = root.resolve(hidden).resolve("workspace.json");
-            Files.writeString(inside, "{}");
-            assertFalse(wouldIndex(root, inside), hidden + " is state, not writing");
+            Files.writeString(root.resolve(hidden).resolve("workspace.json"), "{}");
         }
+        assertEquals(List.of(), walked(root));
     }
 
     @Test
-    @DisplayName("a folder that merely starts with a dot in its name is not a dot-folder")
-    void singleDotSegmentsAreNotHidden(@TempDir Path root) throws IOException {
-        // "." appears in a relativized path and must not exclude everything under it.
+    @DisplayName("a folder with a dot inside its name is not a dot-folder")
+    void dottedNamesAreNotHidden(@TempDir Path root) throws IOException {
         Path note = root.resolve("notes.d").resolve("a.md");
         Files.createDirectories(note.getParent());
         Files.writeString(note, "# a");
 
-        assertTrue(wouldIndex(root, note));
+        assertEquals(List.of(note), walked(root));
     }
 
     @Test
-    @DisplayName("the rule above is the rule the indexer actually applies")
-    void theIndexerSkipsDotDirectories() throws IOException {
-        // The reimplementation in this file is only worth having if it matches. Asserted at the
-        // source, because a walk that quietly stops filtering costs a corpus and fails nothing.
-        String source = Files.readString(Path.of("src/main/java/com/osscli/retrieval/NoteIndexer.java"));
+    @DisplayName("a note folder that is itself hidden still has notes in it")
+    void aHiddenRootIsStillARoot(@TempDir Path tmp) throws IOException {
+        Path root = tmp.resolve(".oss-cli").resolve("memory");
+        Path filed = root.resolve("2026-09-14-review.md");
+        Path harvested = root.resolve("harvest").resolve("gh-owner-name-1.md");
+        Files.createDirectories(harvested.getParent());
+        Files.writeString(filed, "# review");
+        Files.writeString(harvested, "# issue");
+        Path git = root.resolve(".git").resolve("HEAD");
+        Files.createDirectories(git.getParent());
+        Files.writeString(git, "ref: refs/heads/main");
 
-        assertTrue(
-                source.contains("charAt(0) == '.'"),
-                "NoteIndexer must skip dot-directories, or a versioned archive indexes its own history");
+        List<Path> found = walked(root);
+        assertTrue(found.contains(filed), "0 of 1,472 notes were found under ~/.oss-cli/memory");
+        assertTrue(found.contains(harvested));
+        assertFalse(found.contains(git), "and what the tool keeps inside that root is still not a note");
     }
 }

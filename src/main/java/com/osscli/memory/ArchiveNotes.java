@@ -94,7 +94,7 @@ public final class ArchiveNotes {
      * <p>What the caller means is "nothing the tool keeps for itself inside this archive", and that
      * is a question about the relative path.
      */
-    static boolean notInsideADotDirectory(Path root, Path file) {
+    public static boolean notInsideADotDirectory(Path root, Path file) {
         Path relative;
         try {
             relative = root.toAbsolutePath()
@@ -132,8 +132,8 @@ public final class ArchiveNotes {
         }
     }
 
-    /** One note that could actually be read. */
-    public record Note(Path path, String lowercaseText) {}
+    /** One note that could actually be read, as written and lowercased. */
+    public record Note(Path path, String text, String lowercaseText) {}
 
     /**
      * Every readable {@code .md} under {@code archive}, lowercased once.
@@ -142,6 +142,19 @@ public final class ArchiveNotes {
      * and 56 MB is enough for that to be worth not doing twice.
      */
     public static Walk walk(Path archive) throws IOException {
+        return walk(archive, file -> true);
+    }
+
+    /**
+     * The same walk, over the part of an archive a caller cares about.
+     *
+     * <p>The budget is what makes this worth sharing rather than copying. A caller that wants one
+     * folder out of an archive — the issue notes under each topic, say — would otherwise write its
+     * own loop of {@code readString}, and the first evicted note would hang the command that
+     * contains it for as long as the download takes. Filtering before the read keeps the fifteen
+     * seconds for the files that were asked for.
+     */
+    public static Walk walk(Path archive, java.util.function.Predicate<Path> include) throws IOException {
         List<Note> notes = new ArrayList<>();
         int unreadable = 0;
         boolean ranOutOfTime = false;
@@ -159,8 +172,9 @@ public final class ArchiveNotes {
                     // are. The budget would be spent on them and the shortfall reported as
                     // "measured 200 of 900 notes -- the rest are still in the cloud", which is a
                     // true sentence about the wrong cause.
-                    .filter(ArchiveNotes::notInsideADotDirectory)
+                    .filter(p -> notInsideADotDirectory(archive, p))
                     .filter(p -> p.getFileName().toString().endsWith(".md"))
+                    .filter(include)
                     .toList();
         }
 
@@ -183,7 +197,7 @@ public final class ArchiveNotes {
                     unreadable++;
                     continue;
                 }
-                notes.add(new Note(note, text.toLowerCase(Locale.ROOT)));
+                notes.add(new Note(note, text, text.toLowerCase(Locale.ROOT)));
             }
         } finally {
             reader.shutdownNow();

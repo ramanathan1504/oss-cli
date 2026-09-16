@@ -1129,9 +1129,11 @@ public class SqliteStorage {
         // Read from the note itself rather than passed in, so every caller records it and none has to
         // remember to. It is re-read on every write, which is what makes promotion automatic: take
         // part in a thread you had only collected, and the next harvest and sync move it across.
+        com.osscli.model.Provenance from = com.osscli.model.Provenance.of(content);
         String sql = "INSERT OR REPLACE INTO personal_chat_memory "
-                + "(file_path, file_name, last_modified, content, vector, embedding_model, embedding_dim, tier) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?);";
+                + "(file_path, file_name, last_modified, content, vector, embedding_model, embedding_dim, tier,"
+                + " sessions, tool) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
         try (Connection conn = DatabaseManager.getConnection();
                 PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, filePath);
@@ -1142,6 +1144,11 @@ public class SqliteStorage {
             ps.setString(6, embeddingModel);
             ps.setInt(7, vector == null ? 0 : vector.length);
             ps.setString(8, Tier.of(content).name());
+            // Read from the note for the same reason the tier is: a note that says which
+            // conversation it came from should answer that wherever it is found, and no caller
+            // should have to remember to pass it.
+            ps.setString(9, from.sessions());
+            ps.setString(10, from.tool());
             ps.executeUpdate();
         }
     }
@@ -1258,6 +1265,80 @@ public class SqliteStorage {
                 ps.executeBatch();
             }
             conn.commit();
+        }
+    }
+
+    /**
+     * The same, for a note known only by its file name.
+     *
+     * <p>A search result carries the name, not the path. Two notes in two folders can share a name,
+     * and a resume command built from the wrong one of them opens somebody's other conversation --
+     * so an ambiguous name answers nothing rather than guessing between them.
+     */
+    public static com.osscli.model.Provenance provenanceOfNoteNamed(String fileName) {
+        String sql = "SELECT DISTINCT sessions, tool FROM personal_chat_memory "
+                + "WHERE file_name = ? AND sessions IS NOT NULL AND sessions != '';";
+        try (Connection conn = DatabaseManager.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, fileName);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    return com.osscli.model.Provenance.none();
+                }
+                com.osscli.model.Provenance only = new com.osscli.model.Provenance(
+                        rs.getString(1), rs.getString(2) == null ? "" : rs.getString(2));
+                return rs.next() ? com.osscli.model.Provenance.none() : only;
+            }
+        } catch (Exception e) {
+            return com.osscli.model.Provenance.none();
+        }
+    }
+
+    /**
+     * The conversation a note came out of, or nothing when it did not come from one.
+     *
+     * <p>Looked up by path, because that is what a search result carries: the ranking is over
+     * passages and a passage knows its file, so this is the step between "here is the note" and
+     * "here is the command that reopens the session it came from".
+     */
+    public static com.osscli.model.Provenance provenanceOf(String filePath) {
+        String sql = "SELECT sessions, tool FROM personal_chat_memory WHERE file_path = ?;";
+        try (Connection conn = DatabaseManager.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, filePath);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    String sessions = rs.getString(1);
+                    String tool = rs.getString(2);
+                    if (sessions != null && !sessions.isBlank()) {
+                        return new com.osscli.model.Provenance(sessions, tool == null ? "" : tool);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // A store that predates the columns answers nothing, which is the same answer as a
+            // note that came from no session -- and both are fine to show as no resume line.
+            return com.osscli.model.Provenance.none();
+        }
+        return com.osscli.model.Provenance.none();
+    }
+
+    /**
+     * How many notes have passages in the index.
+     *
+     * <p>The honest denominator for a search by meaning. {@code memory search} used to report the
+     * number of markdown files it could see on disk while ranking a corpus of 65 -- the top level
+     * of one folder -- so a store of 2,748 notes answered as though all of them had been considered.
+     */
+    public static long embeddedNoteCount() {
+        String sql = "SELECT count(DISTINCT file_path) FROM personal_chat_chunk "
+                + "WHERE vector IS NOT NULL AND vector != '';";
+        try (Connection conn = DatabaseManager.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql);
+                ResultSet rs = ps.executeQuery()) {
+            return rs.next() ? rs.getLong(1) : 0;
+        } catch (Exception e) {
+            return 0;
         }
     }
 
