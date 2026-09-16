@@ -310,8 +310,15 @@ public final class Curriculum {
             Files.deleteIfExists(pathFor(archive, item.subject(), already, item.area()));
         }
         Path note = pathFor(archive, item.subject(), item.state(), item.area());
+        String fresh = noteFor(item, evidence);
+        // Unchanged is left alone. The daily job runs this, and 506 notes rewritten every morning
+        // with the same bytes is a sync client re-uploading all of them and an indexer re-reading
+        // all of them to learn that nothing moved.
+        if (Files.isRegularFile(note) && fresh.equals(Files.readString(note, StandardCharsets.UTF_8))) {
+            return true;
+        }
         Files.createDirectories(note.getParent());
-        Files.writeString(note, noteFor(item, evidence), StandardCharsets.UTF_8);
+        Files.writeString(note, fresh, StandardCharsets.UTF_8);
         return true;
     }
 }

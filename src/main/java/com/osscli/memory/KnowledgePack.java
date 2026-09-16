@@ -70,18 +70,21 @@ public final class KnowledgePack {
     private final Map<String, List<String>> yardsticks;
     private final List<String> excluded;
     private final List<String> transcripts;
+    private final List<Path> checkouts;
 
     private KnowledgePack(
             Path archive,
             Map<String, List<String>> topics,
             Map<String, List<String>> yardsticks,
             List<String> excluded,
-            List<String> transcripts) {
+            List<String> transcripts,
+            List<Path> checkouts) {
         this.archive = archive;
         this.topics = topics;
         this.yardsticks = yardsticks;
         this.excluded = excluded;
         this.transcripts = transcripts;
+        this.checkouts = checkouts;
     }
 
     /**
@@ -93,7 +96,7 @@ public final class KnowledgePack {
      */
     public static KnowledgePack of(
             Path archive, Map<String, List<String>> topics, Map<String, List<String>> yardsticks) {
-        return new KnowledgePack(archive, topics, yardsticks, List.of(), List.of());
+        return new KnowledgePack(archive, topics, yardsticks, List.of(), List.of(), List.of());
     }
 
     /** The same, saying which projects produce sessions that are not knowledge. */
@@ -102,7 +105,7 @@ public final class KnowledgePack {
             Map<String, List<String>> topics,
             Map<String, List<String>> yardsticks,
             List<String> excluded) {
-        return new KnowledgePack(archive, topics, yardsticks, excluded, List.of());
+        return new KnowledgePack(archive, topics, yardsticks, excluded, List.of(), List.of());
     }
 
     /**
@@ -123,18 +126,29 @@ public final class KnowledgePack {
                 }
             }
         }
-        return new KnowledgePack(DEFAULT_ARCHIVE, Map.of(), Map.of(), List.of(), List.of());
+        return new KnowledgePack(DEFAULT_ARCHIVE, Map.of(), Map.of(), List.of(), List.of(), List.of());
     }
 
-    private static KnowledgePack parse(JsonNode node) {
+    static KnowledgePack parse(JsonNode node) {
         String path = node.path("archive").asText("");
         Path archive = path.isBlank() ? DEFAULT_ARCHIVE : expand(path);
         List<String> excluded = new ArrayList<>();
         node.path("exclude").forEach(v -> excluded.add(v.asText()));
         List<String> transcripts = new ArrayList<>();
         node.path("transcripts").forEach(v -> transcripts.add(v.asText()));
+        List<Path> checkouts = new ArrayList<>();
+        node.path("checkouts").forEach(v -> {
+            if (!v.asText("").isBlank()) {
+                checkouts.add(expand(v.asText().strip()));
+            }
+        });
         return new KnowledgePack(
-                archive, listsOf(node.path("topics")), listsOf(node.path("yardsticks")), excluded, transcripts);
+                archive,
+                listsOf(node.path("topics")),
+                listsOf(node.path("yardsticks")),
+                excluded,
+                transcripts,
+                checkouts);
     }
 
     /** {@code ~} is what a person writes, and Java is the only thing that does not know it. */
@@ -186,6 +200,23 @@ public final class KnowledgePack {
      */
     public List<String> transcripts() {
         return transcripts;
+    }
+
+    /**
+     * The checkouts whose merged work the daily job keeps filed.
+     *
+     * <p>{@code contributions} reads one checkout's release branches and had to be run by hand in
+     * each of them, so a change merged on a Tuesday was in the archive whenever somebody next
+     * remembered: 33 notes on disk where there were 65 to write. Naming the checkouts once lets the
+     * daily harvest keep them current. Empty by default -- a checkout is a place on this disk, and
+     * nothing is guessed about which ones are yours.
+     *
+     * <pre>{@code
+     * { "checkouts": ["~/src/owner-name"] }
+     * }</pre>
+     */
+    public List<Path> checkouts() {
+        return checkouts;
     }
 
     /** True when this is the shipped default rather than something the user wrote. */

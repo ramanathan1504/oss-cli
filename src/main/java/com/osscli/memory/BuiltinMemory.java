@@ -490,7 +490,44 @@ public final class BuiltinMemory {
             // the store the line above indexes.
             embedNotes(projects.toString());
         }
+        keepTheRestCurrent(pack);
         return 0;
+    }
+
+    /**
+     * The other things the archive is built from, refreshed by the same daily run.
+     *
+     * <p>Harvest was the only writer on a schedule. {@code contributions} had to be run by hand in
+     * each checkout and {@code curriculum} by hand at all, so the pages somebody reads went stale
+     * in the order nobody remembered them: contributions at 33 notes where there were 65 to
+     * write, and the areas left to learn last placed four weeks before the coverage they are
+     * measured from had moved from 54 to 90 of 131.
+     *
+     * <p>Here rather than as another scheduled job, because the daily job is the one already
+     * installed on every platform this runs on, and a second one is a second thing to install.
+     * Neither step can fail the harvest: each is reported and the next still runs.
+     */
+    private static void keepTheRestCurrent(KnowledgePack pack) {
+        for (Path checkout : pack.checkouts()) {
+            if (!Files.isDirectory(checkout.resolve(".git"))) {
+                System.out.println("  " + checkout + " is in kb.json checkouts and is not a git checkout — skipped");
+                continue;
+            }
+            System.out.println();
+            try {
+                contributions(List.of(checkout.toString()));
+            } catch (Exception e) {
+                System.out.println("  could not refresh contributions in " + checkout + ": " + e.getMessage());
+            }
+        }
+        if (!pack.yardsticks().isEmpty()) {
+            System.out.println();
+            try {
+                curriculum(List.of());
+            } catch (Exception e) {
+                System.out.println("  could not refresh the curriculum: " + e.getMessage());
+            }
+        }
     }
 
     /**
@@ -654,8 +691,11 @@ public final class BuiltinMemory {
         KnowledgePack pack = KnowledgePack.load();
         Path into = pack.archive().resolve("Projects");
         com.osscli.github.GitHubClient gh = offline ? null : new com.osscli.github.GitHubClient();
+        Map<String, List<Path>> filedAlready = contributionNotesByPr(into);
 
         int written = 0;
+        int kept = 0;
+        int doubled = 0;
         int noConversation = 0;
         java.util.Map<String, Integer> byTopic = new java.util.TreeMap<>();
         try (com.osscli.ui.Live live = com.osscli.ui.Live.start("reading your history")) {
@@ -691,21 +731,55 @@ public final class BuiltinMemory {
                         talk == null ? List.of() : talk.timeline(),
                         l.coAuthored());
 
-                if (!dryRun) {
-                    Path folder = into.resolve(topic.topic()).resolve("contributions");
-                    Files.createDirectories(folder);
-                    Files.writeString(
-                            folder.resolve(com.osscli.knowledge.Contributions.nameFor(c)),
-                            com.osscli.knowledge.Contribution.noteFor(c, topic.topic()),
-                            StandardCharsets.UTF_8);
+                // Filed by the change, never by the name. The name carries the topic and the title,
+                // and both move: the topic scorer changed how it counts and three pull requests were
+                // filed a second time under a second subject, and a title read while GitHub is
+                // refusing requests falls back to the commit subject and slugs differently.
+                // A commit that names no pull request has no identity to file by, and "#0" is not
+                // one: every such change would share it, and the first would overwrite the rest.
+                List<Path> prior = l.pr() > 0 ? filedAlready.getOrDefault(repo + "#" + l.pr(), List.of()) : List.of();
+                boolean fetched = talk != null && !talk.title().isBlank();
+                if (!prior.isEmpty() && !fetched) {
+                    // The note on disk was written when GitHub answered. A run that could not reach
+                    // it -- offline, or rate limited after the harvest before it -- would replace the
+                    // review with a note that has none, and say nothing about having done so.
+                    kept++;
+                    byTopic.merge(topicOfNote(prior.get(0)), 1, Integer::sum);
+                    continue;
                 }
-                byTopic.merge(topic.topic(), 1, Integer::sum);
-                written++;
+                String filedUnder = prior.isEmpty() ? topic.topic() : topicOfNote(prior.get(0));
+                Path note = prior.isEmpty()
+                        ? into.resolve(filedUnder)
+                                .resolve("contributions")
+                                .resolve(com.osscli.knowledge.Contributions.nameFor(c))
+                        : prior.get(0);
+                if (!dryRun) {
+                    String fresh = com.osscli.knowledge.Contribution.noteFor(c, filedUnder);
+                    if (!fresh.equals(readOrNull(note))) {
+                        Files.createDirectories(note.getParent());
+                        Files.writeString(note, fresh, StandardCharsets.UTF_8);
+                        written++;
+                    }
+                    for (Path extra : prior) {
+                        if (!extra.equals(note) && Files.deleteIfExists(extra)) {
+                            doubled++;
+                        }
+                    }
+                }
+                byTopic.merge(filedUnder, 1, Integer::sum);
             }
         }
 
         com.osscli.ui.Out.gap();
-        com.osscli.ui.Out.ok(written + " contribution note(s)" + (dryRun ? " (dry run, nothing written)" : ""));
+        com.osscli.ui.Out.ok(landed.size() + " contribution(s), " + written + " note(s) changed"
+                + (dryRun ? " (dry run, nothing written)" : ""));
+        if (kept > 0) {
+            com.osscli.ui.Out.note(kept + " kept as they were — GitHub did not answer, and a note without its review"
+                    + " is not a refresh");
+        }
+        if (doubled > 0) {
+            com.osscli.ui.Out.note(doubled + " second copy(ies) under another topic removed");
+        }
         byTopic.forEach((topic, n) -> com.osscli.ui.Out.kv(topic, String.valueOf(n)));
         if (noConversation > 0) {
             // Said out loud: a change that merged unopposed is a real fact about the change, and a
@@ -717,6 +791,41 @@ public final class BuiltinMemory {
             embedNotes(into.toString());
         }
         return 0;
+    }
+
+    /**
+     * Every contribution note already filed, by the change it is about.
+     *
+     * <p>Keyed on the frontmatter's {@code project} and {@code pr}, which are the two facts about a
+     * note that do not move when its topic or title does.
+     */
+    static Map<String, List<Path>> contributionNotesByPr(Path projects) throws IOException {
+        Map<String, List<Path>> out = new LinkedHashMap<>();
+        ArchiveNotes.Walk walk = ArchiveNotes.walk(
+                projects,
+                f -> f.getParent() != null
+                        && "contributions".equals(f.getParent().getFileName().toString()));
+        List<ArchiveNotes.Note> notes = new ArrayList<>(walk.notes());
+        notes.sort(java.util.Comparator.comparing(n -> n.path().toString()));
+        for (ArchiveNotes.Note n : notes) {
+            Map<String, String> front = com.osscli.knowledge.IssueNotes.frontmatter(n.text());
+            String project = front.getOrDefault("project", "");
+            String pr = front.getOrDefault("pr", "");
+            if (!project.isBlank() && !pr.isBlank() && !"0".equals(pr.strip())) {
+                out.computeIfAbsent(project + "#" + pr, k -> new ArrayList<>()).add(n.path());
+            }
+        }
+        if (walk.partial()) {
+            // A note that was not read is a note that would be written again beside itself.
+            throw new IOException("could not read every contribution note already filed" + walk.warning());
+        }
+        return out;
+    }
+
+    /** The topic a note is filed under, which is the folder two levels above it. */
+    private static String topicOfNote(Path note) {
+        Path topic = note.getParent() == null ? null : note.getParent().getParent();
+        return topic == null ? "general" : topic.getFileName().toString();
     }
 
     // ----------------------------------------------------------------- sessions ---
