@@ -64,6 +64,21 @@ if [ "$BEHIND" != "0" ]; then
     exit 1
 fi
 
+# Ahead is as fatal as behind, and far quieter about it. The release branch is cut
+# from this main and squash-merged, so commits that were never pushed ride into the
+# release commit -- and the local main that still holds them as separate commits can
+# never fast-forward to it. v4.10.0 did exactly this: five local commits went out
+# inside "Release v4.10.0", the pull after the merge refused to fast-forward, and the
+# script stopped there with the pull request merged and no tag, no release, no stable,
+# no formula. Changes reach main through their own pull request first.
+AHEAD=$(git rev-list --count origin/main..HEAD)
+if [ "$AHEAD" != "0" ]; then
+    echo "❌ main is $AHEAD commit(s) ahead of origin that were never pushed."
+    echo "   A release squashes them into its own commit and then cannot tag it."
+    echo "   Open a pull request for them, merge it, pull, then release."
+    exit 1
+fi
+
 # Only version tags. The last thing this script does is move `stable` onto the release it
 # just cut, so `stable` and `v<version>` name the same commit -- and an unqualified describe
 # answered `stable`, which the guard then tried to read a version number out of. Every release
