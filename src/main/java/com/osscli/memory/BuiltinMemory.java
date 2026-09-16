@@ -326,12 +326,33 @@ public final class BuiltinMemory {
         }
 
         com.osscli.github.GitHubClient gh = new com.osscli.github.GitHubClient();
+        KnowledgePack pack = KnowledgePack.load();
+        Path projects = pack.archive().resolve("Projects");
+        com.osscli.knowledge.IssueNotes.Known known = com.osscli.knowledge.IssueNotes.filed(projects);
+        Map<String, com.osscli.knowledge.IssueNotes.Filed> archived = known.byItem();
+        // Filing against a half-read archive writes a second copy of every note it could not see.
+        // The store this used to write is still there and still readable, so the run degrades to it
+        // and says why rather than doubling the folder it was asked to refresh.
+        boolean fileIntoArchive = !known.partial();
+        if (!fileIntoArchive) {
+            System.out.println(known.warning());
+            System.out.println("  filing into the archive is skipped this run — a note that cannot be read"
+                    + " would be written again under a second name");
+        }
+        String stamp = java.time.Instant.now().toString();
         int written = 0;
+        int filed = 0;
+        int superseded = 0;
+        int doubled = 0;
         int withDiscussion = 0;
         int mine = 0;
         for (com.osscli.model.Issue issue : found) {
             List<String> discussion = new ArrayList<>();
+            java.util.Set<String> roles = new java.util.LinkedHashSet<>();
             String repo = repositoryOf(issue);
+            if (issue.user() != null && user.equalsIgnoreCase(issue.user().login())) {
+                roles.add("author");
+            }
             if (!"unknown".equals(repo) && issue.comments() > 0) {
                 try {
                     // Two pages. A thread past two hundred comments is one nobody reads to the end,
@@ -339,6 +360,10 @@ public final class BuiltinMemory {
                     for (Map<String, Object> c :
                             gh.getPaged("/repos/" + repo + "/issues/" + issue.number() + "/comments", 2)) {
                         discussion.add(comment(c));
+                        if (c.get("user") instanceof Map<?, ?> who
+                                && user.equalsIgnoreCase(String.valueOf(who.get("login")))) {
+                            roles.add("commenter");
+                        }
                         // The same page, read twice for two different purposes. The note keeps the
                         // conversation; this keeps the half of it the user wrote, with their name
                         // still attached -- which the note cannot answer, because a note is prose.
@@ -356,9 +381,78 @@ public final class BuiltinMemory {
             if (!discussion.isEmpty()) {
                 withDiscussion++;
             }
-            Path note = into.resolve(harvestName(issue));
-            Files.writeString(note, harvestNote(issue, discussion), StandardCharsets.UTF_8);
-            written++;
+            if (roles.isEmpty()) {
+                // `involves:` matched, so the user is on the thread somehow -- as assignee, or
+                // named in a comment somebody else wrote. Saying "participant" is the honest
+                // version of that; claiming a role this run cannot see would be worse.
+                roles.add("participant");
+            }
+            if ("unknown".equals(repo) || !fileIntoArchive) {
+                // Nothing to file it under: the repository is read from the item's own URL, and
+                // without it the note cannot be placed in a topic or found again by id.
+                Files.writeString(
+                        into.resolve(harvestName(issue)),
+                        com.osscli.knowledge.IssueNotes.rewrite(null, issue, repo, discussion, roles, stamp),
+                        StandardCharsets.UTF_8);
+                written++;
+                continue;
+            }
+            com.osscli.knowledge.IssueNotes.Filed prior =
+                    archived.get(com.osscli.knowledge.IssueNotes.id(repo, issue.number()));
+            String topic = prior != null
+                    ? prior.topic()
+                    : com.osscli.knowledge.SessionNotes.topicOf(
+                                    issue.title() + "\n" + (issue.body() == null ? "" : issue.body()),
+                                    repo,
+                                    pack.topics())
+                            .topic();
+            Path note = prior != null
+                    ? prior.path()
+                    : freeName(projects.resolve(topic).resolve(com.osscli.knowledge.IssueNotes.FOLDER), issue, repo);
+            String existing = prior == null ? null : prior.text();
+            String fresh = com.osscli.knowledge.IssueNotes.rewrite(existing, issue, repo, discussion, roles, stamp);
+            if (fresh != null) {
+                Files.createDirectories(note.getParent());
+                Files.writeString(note, fresh, StandardCharsets.UTF_8);
+                written++;
+            }
+            archived.put(
+                    com.osscli.knowledge.IssueNotes.id(repo, issue.number()),
+                    new com.osscli.knowledge.IssueNotes.Filed(
+                            topic,
+                            repo,
+                            issue.isPullRequest() ? "pr" : "issue",
+                            issue.number(),
+                            issue.title() == null ? repo : issue.title(),
+                            note,
+                            fresh == null ? existing : fresh));
+            // The flat copy this command used to write is now the same item in a worse place: not
+            // browsable, not backed up with the archive, and invisible to coverage, gaps and map.
+            // It goes only once its replacement is on disk.
+            if (Files.deleteIfExists(into.resolve(harvestName(issue)))) {
+                superseded++;
+            }
+            filed++;
+        }
+        if (fileIntoArchive) {
+            // Every thread that has two notes, not only the ones this run happened to fetch.
+            // GitHub's search stops at a thousand matches, so a thread filed twice two years ago is
+            // never in the page this command reads, and a sweep that only cleaned what it had just
+            // refreshed would leave those doubled for good. Both copies say the same stale thing;
+            // removing one loses nothing and stops it answering searches twice.
+            for (Map.Entry<String, List<Path>> e : known.duplicates().entrySet()) {
+                com.osscli.knowledge.IssueNotes.Filed keep = archived.get(e.getKey());
+                for (Path extra : e.getValue()) {
+                    if (keep != null && !extra.equals(keep.path()) && Files.deleteIfExists(extra)) {
+                        doubled++;
+                    }
+                }
+            }
+            Path index = projects.resolve(com.osscli.knowledge.IssueNotes.FOLDER)
+                    .resolve(com.osscli.knowledge.IssueNotes.INDEX);
+            Files.createDirectories(index.getParent());
+            Files.writeString(
+                    index, com.osscli.knowledge.IssueNotes.index(archived.values(), stamp), StandardCharsets.UTF_8);
         }
         System.out.printf("  %d of them carried a conversation worth keeping%n", withDiscussion);
         if (mine > 0) {
@@ -367,7 +461,17 @@ public final class BuiltinMemory {
             System.out.printf("  %d comment(s) you wrote yourself, kept as yours — oss profile --me%n", mine);
         }
 
-        System.out.printf("  harvested %d item(s) for %s into %s%n", written, user, into);
+        if (fileIntoArchive) {
+            System.out.printf("  %d of %d note(s) changed, filed under %s%n", written, filed, projects);
+        } else {
+            System.out.printf("  harvested %d item(s) for %s into %s%n", written, user, into);
+        }
+        if (superseded > 0) {
+            System.out.printf("  %d flat copy(ies) in %s replaced by the filed note%n", superseded, into);
+        }
+        if (doubled > 0) {
+            System.out.printf("  %d thread(s) had a second note under another topic, now one%n", doubled);
+        }
         if (result.truncated()) {
             // The number above is a page of the answer, and saying so is the difference between
             // "this is your record" and "this is the newest part of it". The first run of this
@@ -380,8 +484,13 @@ public final class BuiltinMemory {
             System.out.println();
             harvestSessions();
         }
-        com.osscli.schedule.DailyJob.record(true, written + " item(s) for " + user);
+        com.osscli.schedule.DailyJob.record(true, filed + " item(s) for " + user);
         embedWhatWasWritten();
+        if (!projects.equals(DIR)) {
+            // Written is not the same as searchable, and the archive is a different folder from
+            // the store the line above indexes.
+            embedNotes(projects.toString());
+        }
         return 0;
     }
 
@@ -1012,6 +1121,38 @@ public final class BuiltinMemory {
     }
 
     /**
+     * A file name inside a topic's issues folder that no other item already owns.
+     *
+     * <p>Two repositories can hold an issue numbered 42 whose titles reduce to the same words, and
+     * these notes are filed by topic rather than by repository — so the collision is reachable, and
+     * the second item would quietly overwrite the first on every harvest. The repository name is
+     * the one thing the two cannot share.
+     */
+    private static Path freeName(Path folder, com.osscli.model.Issue issue, String repo) {
+        Path candidate = folder.resolve(
+                com.osscli.knowledge.IssueNotes.nameFor(issue.isPullRequest(), issue.number(), issue.title()));
+        String taken = readOrNull(candidate);
+        if (taken == null) {
+            return candidate;
+        }
+        String about = com.osscli.knowledge.IssueNotes.frontmatter(taken).get("github");
+        if (about == null || about.equals(com.osscli.knowledge.IssueNotes.id(repo, issue.number()))) {
+            return candidate;
+        }
+        return folder.resolve(com.osscli.knowledge.IssueNotes.nameFor(
+                issue.isPullRequest(), issue.number(), repo + " " + issue.title()));
+    }
+
+    /** A file's text, or null when it is not there or cannot be read. */
+    private static String readOrNull(Path file) {
+        try {
+            return Files.readString(file, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /**
      * A filename Windows will actually accept, built from data GitHub sent.
      *
      * <p>{@code harvest} names each note after the repository, and the repository comes off the
@@ -1055,55 +1196,6 @@ public final class BuiltinMemory {
         java.util.regex.Matcher m =
                 java.util.regex.Pattern.compile("github\\.com/([^/]+/[^/]+)/").matcher(url);
         return m.find() ? m.group(1) : "unknown";
-    }
-
-    /** One harvested item, as the markdown a person would have written about it. */
-    static String harvestNote(com.osscli.model.Issue issue, List<String> discussion) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("# ")
-                .append(repositoryOf(issue))
-                .append(" #")
-                .append(issue.number())
-                .append('\n');
-        sb.append("## ")
-                .append(issue.title() == null ? "(no title)" : issue.title())
-                .append("\n\n");
-        sb.append("- state: ").append(issue.state()).append('\n');
-        if (issue.labels() != null && !issue.labels().isEmpty()) {
-            sb.append("- labels: ")
-                    .append(issue.labels().stream()
-                            .map(com.osscli.model.Label::name)
-                            .collect(java.util.stream.Collectors.joining(", ")))
-                    .append('\n');
-        }
-        if (issue.html_url() != null) {
-            sb.append("- link: ").append(issue.html_url()).append('\n');
-        }
-        sb.append('\n');
-
-        sb.append("## The Problem (What & Where)\n\n");
-        sb.append(
-                        issue.body() == null || issue.body().isBlank()
-                                ? "(filed with no description)"
-                                : issue.body().strip())
-                .append("\n\n");
-
-        // The conversation, in order. A comment stranded without the thread around it is the thing
-        // this exists to prevent: the reasoning is in the exchange, not in any one message.
-        if (discussion != null && !discussion.isEmpty()) {
-            sb.append("## The \"Why\" (Review Discussions)\n\n");
-            for (String line : discussion) {
-                sb.append(line).append("\n\n");
-            }
-        }
-
-        sb.append("## The Solution (How)\n\n");
-        sb.append(
-                        "closed".equalsIgnoreCase(issue.state())
-                                ? "Closed. The thread above carries how it was resolved."
-                                : "Still open at the time this was harvested.")
-                .append('\n');
-        return sb.toString();
     }
 
     /**
@@ -1670,6 +1762,30 @@ public final class BuiltinMemory {
         }
     }
 
+    /** How many GitHub threads the archive holds, across every topic's {@code issues/} folder. */
+    private static long countIssueNotes(Path projects) {
+        if (!Files.isDirectory(projects)) {
+            return 0;
+        }
+        try (java.util.stream.Stream<Path> topics = Files.list(projects)) {
+            long total = 0;
+            for (Path topic : topics.filter(Files::isDirectory).toList()) {
+                Path folder = topic.resolve(com.osscli.knowledge.IssueNotes.FOLDER);
+                if (!Files.isDirectory(folder)) {
+                    continue;
+                }
+                try (java.util.stream.Stream<Path> notes = Files.list(folder)) {
+                    total += notes.filter(n -> n.getFileName().toString().endsWith(".md"))
+                            .filter(n -> !n.getFileName().toString().equals(com.osscli.knowledge.IssueNotes.INDEX))
+                            .count();
+                }
+            }
+            return total;
+        } catch (IOException e) {
+            return 0;
+        }
+    }
+
     /**
      * The health of the memory, as values rather than as printed lines.
      *
@@ -1733,7 +1849,12 @@ public final class BuiltinMemory {
         // cannot act on.
         out.addAll(driftChecks());
 
-        long items = countNotes(DIR.resolve("harvest")) + countNotes(DIR.resolve("sessions"));
+        // Counted where the notes now are. `harvest` used to write a flat folder inside the store
+        // and this check counted that folder, so once the notes moved into the archive the report
+        // would have said "0 item(s)" about a store holding a thousand of them.
+        long items = countIssueNotes(archive.resolve("Projects"))
+                + countNotes(DIR.resolve("harvest"))
+                + countNotes(DIR.resolve("sessions"));
         out.add(new Check(
                 "harvested",
                 items > 0 ? Check.Status.OK : Check.Status.WARN,

@@ -142,6 +142,19 @@ public final class ArchiveNotes {
      * and 56 MB is enough for that to be worth not doing twice.
      */
     public static Walk walk(Path archive) throws IOException {
+        return walk(archive, file -> true);
+    }
+
+    /**
+     * The same walk, over the part of an archive a caller cares about.
+     *
+     * <p>The budget is what makes this worth sharing rather than copying. A caller that wants one
+     * folder out of an archive — the issue notes under each topic, say — would otherwise write its
+     * own loop of {@code readString}, and the first evicted note would hang the command that
+     * contains it for as long as the download takes. Filtering before the read keeps the fifteen
+     * seconds for the files that were asked for.
+     */
+    public static Walk walk(Path archive, java.util.function.Predicate<Path> include) throws IOException {
         List<Note> notes = new ArrayList<>();
         int unreadable = 0;
         boolean ranOutOfTime = false;
@@ -161,6 +174,7 @@ public final class ArchiveNotes {
                     // true sentence about the wrong cause.
                     .filter(p -> notInsideADotDirectory(archive, p))
                     .filter(p -> p.getFileName().toString().endsWith(".md"))
+                    .filter(include)
                     .toList();
         }
 
