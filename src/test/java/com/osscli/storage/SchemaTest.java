@@ -163,7 +163,7 @@ class SchemaTest {
             assertTrue(rs.next());
             // The number itself is not the point; that the tables exist at it is. Bump this with
             // CURRENT_SCHEMA_VERSION, and only after the two tests above still pass.
-            assertEquals(17, rs.getInt("v"));
+            assertEquals(18, rs.getInt("v"));
         }
     }
 
@@ -176,6 +176,10 @@ class SchemaTest {
             assertTrue(cols.contains("embedding_dim"), table + " has no embedding_dim");
         }
         assertTrue(columns("personal_chat_memory").contains("tier"), "personal_chat_memory has no tier");
+        // Which conversation a note came from. Without it a search can say what was settled and
+        // not where to go on with it.
+        assertTrue(columns("personal_chat_memory").contains("sessions"), "personal_chat_memory has no sessions");
+        assertTrue(columns("personal_chat_memory").contains("tool"), "personal_chat_memory has no tool");
     }
 
     private static Set<String> columns(String table) throws Exception {

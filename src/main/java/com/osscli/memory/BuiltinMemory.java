@@ -922,6 +922,13 @@ public final class BuiltinMemory {
 
         if (!dryRun) {
             ledger.save();
+            // Running logs written before the header carried their session ids gain it here. The
+            // rewrite on append only reaches a log a session touches again, and most of them are
+            // finished work.
+            int backfilled = com.osscli.knowledge.SessionLog.backfill(archive.resolve("Projects"));
+            if (backfilled > 0) {
+                com.osscli.ui.Out.note(backfilled + " running log(s) now name the sessions inside them");
+            }
         }
 
         com.osscli.ui.Out.gap();
@@ -2369,11 +2376,47 @@ public final class BuiltinMemory {
                 if (!line.isBlank()) {
                     System.out.println("        " + line);
                 }
+                String resume = resumeLineFor(h.sourceRef());
+                if (!resume.isBlank()) {
+                    System.out.println("        " + com.osscli.ui.Out.faint(resume));
+                }
             }
             return 0;
         } catch (Exception e) {
             // Ranking by meaning is the better answer, not the only one.
             return null;
+        }
+    }
+
+    /**
+     * How to reopen the conversation a result came out of, or empty when it did not come from one.
+     *
+     * <p>A note found by searching used to end the trail: it said what had been worked out and the
+     * id of the session that worked it out was a fence in the body, findable only by opening the
+     * file. The conversation is usually still on disk, and going on with it is a different and
+     * often better move than reading a summary of it.
+     */
+    private static String resumeLineFor(String sourceRef) {
+        try {
+            String name = sourceRef;
+            int passage = name.indexOf(" (passage ");
+            if (passage > 0) {
+                name = name.substring(0, passage);
+            }
+            com.osscli.model.Provenance from = com.osscli.storage.SqliteStorage.provenanceOfNoteNamed(name);
+            if (!from.present()) {
+                return "";
+            }
+            String id = from.firstSession();
+            String more = from.sessions().contains(",")
+                    ? "  (+" + (from.sessions().split(",").length - 1) + " more in this note)"
+                    : "";
+            // Two tools, two commands, and the id alone does not say which.
+            String command = "codex".equals(from.tool()) ? "codex resume " + id : "claude --resume " + id;
+            return command + more;
+        } catch (Exception e) {
+            // A store without the columns, or a note nothing knows about, simply has no resume line.
+            return "";
         }
     }
 

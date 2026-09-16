@@ -23,8 +23,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.stream.Stream;
 
 /**
@@ -162,6 +164,46 @@ public final class Sessions {
             all.add(Path.of(path.startsWith("~/") ? home + path.substring(1) : path));
         }
         return all;
+    }
+
+    /**
+     * Which tool wrote the session with this id, or empty when nothing on this machine did.
+     *
+     * <p>A running log carries the ids of every session that contributed to it, and an id alone
+     * does not say how to reopen it: {@code claude --resume} and {@code codex resume} are different
+     * commands. The transcript is named after the id, so the tool is a lookup rather than a guess.
+     *
+     * <p>Built once per process. The alternative is a walk of every transcript folder per id, and
+     * a running log with thirty sessions in it would pay for thirty walks of 752 files.
+     */
+    public static String toolForId(String id) {
+        if (id == null || id.isBlank()) {
+            return "";
+        }
+        return byId().getOrDefault(id, "");
+    }
+
+    private static volatile Map<String, String> toolsById;
+
+    private static Map<String, String> byId() {
+        Map<String, String> known = toolsById;
+        if (known != null) {
+            return known;
+        }
+        Map<String, String> built = new LinkedHashMap<>();
+        try {
+            for (Path transcript : discover(Path.of(System.getProperty("user.home", "")))) {
+                String name = transcript.getFileName().toString();
+                int dot = name.lastIndexOf('.');
+                built.putIfAbsent(dot > 0 ? name.substring(0, dot) : name, toolOf(transcript));
+            }
+        } catch (IOException e) {
+            // A machine whose transcripts cannot be listed still gets the ids; it is the tool
+            // beside them that goes missing, and that is a smaller loss than failing the filing.
+            // Whatever was read before the failure is kept: a partial answer names some of them.
+        }
+        toolsById = built;
+        return built;
     }
 
     /** Which tool wrote a file, from where it sits. Unknown paths are not guessed at. */

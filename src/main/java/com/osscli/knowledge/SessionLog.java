@@ -20,6 +20,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -193,28 +195,149 @@ public final class SessionLog {
                 existing = existing.substring(0, from)
                         + section
                         + existing.substring(to + close(sessionId).length() + 1);
-                Files.writeString(log, existing, StandardCharsets.UTF_8);
+                Files.writeString(log, withSessionsRecorded(existing), StandardCharsets.UTF_8);
                 return created;
             }
         }
-        Files.writeString(log, existing.stripTrailing() + "\n\n" + section, StandardCharsets.UTF_8);
+        Files.writeString(
+                log, withSessionsRecorded(existing.stripTrailing() + "\n\n" + section), StandardCharsets.UTF_8);
         return created;
     }
 
     /** How many sessions a log already holds, for a caller that wants to say so. */
     public static int sessionsIn(Path log) {
         try {
-            String text = Files.readString(log, StandardCharsets.UTF_8);
-            int n = 0;
-            int at = text.indexOf("<!-- session:");
-            while (at >= 0) {
-                n++;
-                at = text.indexOf("<!-- session:", at + 1);
-            }
-            return n;
+            return idsIn(Files.readString(log, StandardCharsets.UTF_8)).size();
         } catch (IOException e) {
             return 0;
         }
+    }
+
+    /**
+     * The id of every session that contributed to this log, oldest first.
+     *
+     * <p>Read from the fences rather than from the frontmatter, so the frontmatter can be written
+     * from this and never disagree with the sections it is describing.
+     */
+    public static List<String> idsIn(String text) {
+        List<String> ids = new ArrayList<>();
+        if (text == null) {
+            return ids;
+        }
+        String opener = "<!-- session:";
+        int at = text.indexOf(opener);
+        while (at >= 0) {
+            int end = text.indexOf(" -->", at + opener.length());
+            if (end < 0) {
+                break;
+            }
+            String id = text.substring(at + opener.length(), end).strip();
+            if (!id.isEmpty() && !ids.contains(id)) {
+                ids.add(id);
+            }
+            at = text.indexOf(opener, end);
+        }
+        return ids;
+    }
+
+    /**
+     * The same log, with its frontmatter naming the sessions inside it.
+     *
+     * <p>A running log is the one note kind whose sessions were readable only by scrolling: the
+     * ids are fences in the body, and the frontmatter said {@code kind: running-log} and stopped.
+     * So the note that holds an afternoon of work on an issue could not tell you which conversation
+     * to reopen, and neither could anything that indexed it.
+     *
+     * <p>Rewritten from the fences on every append, which makes it self-healing: a log written
+     * before this existed gains the field the next time a session touches it, and a log whose
+     * sections were edited by hand cannot drift from its own header.
+     *
+     * <p>The tool is here because an id alone does not say how to reopen it -- {@code claude
+     * --resume} and {@code codex resume} are different commands -- and because a machine that has
+     * both keeps them in one log whenever they were about the same subject.
+     */
+    static String withSessionsRecorded(String text) {
+        List<String> ids = idsIn(text);
+        if (ids.isEmpty() || text == null || !text.startsWith("---\n")) {
+            return text;
+        }
+        int end = text.indexOf("\n---", 3);
+        if (end < 0) {
+            return text;
+        }
+        String front = text.substring(4, end + 1);
+        String rest = text.substring(end + 1);
+
+        StringBuilder kept = new StringBuilder();
+        for (String line : front.split("\n", -1)) {
+            if (line.isEmpty() || line.startsWith("sessions:") || line.startsWith("tools:")) {
+                continue;
+            }
+            kept.append(line).append('\n');
+        }
+        List<String> tools = new ArrayList<>();
+        for (String id : ids) {
+            String tool = com.osscli.memory.Sessions.toolForId(id);
+            if (!tool.isBlank() && !tools.contains(tool)) {
+                tools.add(tool);
+            }
+        }
+        kept.append("sessions: ").append(String.join(", ", ids)).append('\n');
+        if (!tools.isEmpty()) {
+            kept.append("tools: ").append(String.join(", ", tools)).append('\n');
+        }
+        return "---\n" + kept + rest;
+    }
+
+    /**
+     * Give every running log already on disk the frontmatter this now writes.
+     *
+     * <p>The rewrite on append only reaches a log that a session touches again, and most of them
+     * are finished work: 61 running logs existed when this was added and a session had touched two
+     * of them that week. Without a pass over the rest, "which conversation was this" would have
+     * been answerable for the newest notes and no others.
+     *
+     * <p>Rewrites nothing whose header already says the same thing, so running it twice is one
+     * pass and no writes -- an archive under git must not record a commit a day for a field that
+     * did not change.
+     *
+     * @return how many logs gained the field
+     */
+    public static int backfill(Path projects) {
+        if (!Files.isDirectory(projects)) {
+            return 0;
+        }
+        int written = 0;
+        try (java.util.stream.Stream<Path> topics = Files.list(projects)) {
+            for (Path topic : topics.filter(Files::isDirectory).sorted().toList()) {
+                try (java.util.stream.Stream<Path> notes = Files.list(topic)) {
+                    for (Path note : notes.filter(
+                                    f -> f.getFileName().toString().endsWith(".md"))
+                            .sorted()
+                            .toList()) {
+                        String text;
+                        try {
+                            text = Files.readString(note, StandardCharsets.UTF_8);
+                        } catch (IOException e) {
+                            // One unreadable note is not a reason to leave the other sixty without
+                            // the field.
+                            continue;
+                        }
+                        if (!text.contains(MARKER)) {
+                            continue;
+                        }
+                        String updated = withSessionsRecorded(text);
+                        if (!updated.equals(text)) {
+                            Files.writeString(note, updated, StandardCharsets.UTF_8);
+                            written++;
+                        }
+                    }
+                }
+            }
+        } catch (IOException e) {
+            return written;
+        }
+        return written;
     }
 
     /** The dated heading one session contributes to the log. */
