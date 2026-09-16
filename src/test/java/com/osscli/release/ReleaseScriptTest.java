@@ -1,0 +1,56 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package com.osscli.release;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+/**
+ * That the release script can still find the release before this one.
+ *
+ * <p>Nothing else tests {@code release.sh}: it pushes, opens a pull request and merges, so it is
+ * run once per release by a person and never by the suite. The step this guards has no such excuse
+ * — choosing the previous tag is a line of shell that either names a version or does not.
+ *
+ * <p>It stopped naming one. The script's last act is to move a {@code stable} tag onto the release
+ * it just cut, so {@code stable} and {@code v4.9.7} name the same commit, and an unqualified
+ * {@code git describe --tags --abbrev=0} answered {@code stable}. The guard was then asked for the
+ * bump between "stable" and "4.9.8" and threw. Every release after the first one to move that tag
+ * would have died the same way, after the fetch and before anything was written — and the tag was
+ * introduced by this same script, so it broke the next release each time it succeeded.
+ */
+class ReleaseScriptTest {
+
+    @Test
+    @DisplayName("the previous release is looked for among version tags only")
+    void previousTagIsAVersion() throws IOException {
+        String script = Files.readString(Path.of("release.sh"));
+
+        int at = script.indexOf("PREV_TAG=$(git describe");
+        assertTrue(at > 0, "release.sh no longer reads the previous tag; this test guards that line");
+        String line = script.substring(at, script.indexOf('\n', at));
+
+        assertTrue(
+                line.contains("--match"), "an unqualified describe answers `stable`, which is not a version: " + line);
+        assertTrue(line.contains("v[0-9]"), "the match has to select version tags: " + line);
+    }
+}

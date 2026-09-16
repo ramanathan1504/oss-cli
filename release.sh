@@ -64,7 +64,12 @@ if [ "$BEHIND" != "0" ]; then
     exit 1
 fi
 
-PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+# Only version tags. The last thing this script does is move `stable` onto the release it
+# just cut, so `stable` and `v<version>` name the same commit -- and an unqualified describe
+# answered `stable`, which the guard then tried to read a version number out of. Every release
+# after the first one to move that tag would have died on "not a three-part version: stable",
+# after the fetch and before anything was written.
+PREV_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || echo "")
 
 # ---------------------------------------------------------------------------
 # Is this number big enough for what changed?

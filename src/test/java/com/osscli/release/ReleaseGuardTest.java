@@ -68,6 +68,17 @@ class ReleaseGuardTest {
             return;
         }
 
+        // A tag that is not a version cannot be compared with one. `release.sh` moves a `stable`
+        // tag onto each release it cuts, so an unqualified `git describe` answers `stable` on every
+        // machine that has fetched tags -- and the release died here on an IllegalArgumentException
+        // with a stack trace, which reads as a broken test rather than a fixable mistake.
+        if (previousTag == null || !previousTag.replaceFirst("^v", "").matches("\\d+\\.\\d+\\.\\d+")) {
+            org.junit.jupiter.api.Assertions.fail("guard.prevTag is '" + previousTag
+                    + "', which is not a release version, so there is no number to compare against."
+                    + "\n\nThe previous release is chosen with:"
+                    + "\n  git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*'");
+        }
+
         Surface previous = Surface.fromJson(Files.readString(previousPath, StandardCharsets.UTF_8));
         Surface live = Surface.current();
 
