@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.10.1
+
+_2026-09-16_
+
+- ci: bump actions/setup-java from 5 to 6 (#237)
+- deps: bump org.jline:jline from 3.30.4 to 4.4.0 (#238)
+- deps: bump the routine group across 1 directory with 3 updates (#241)
+- release: refuse a main that is ahead of origin, before anything is written (#243)
+
+
 ## 4.10.0
 
 _2026-09-16_
