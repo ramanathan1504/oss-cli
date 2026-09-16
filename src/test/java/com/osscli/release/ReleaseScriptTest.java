@@ -16,6 +16,7 @@
  */
 package com.osscli.release;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -67,5 +68,22 @@ class ReleaseScriptTest {
         assertTrue(ahead > 0, "release.sh no longer checks for commits that were never pushed");
         assertTrue(merge > 0, "release.sh no longer merges; this test guards what happens before it");
         assertTrue(ahead < merge, "the check has to run before the merge, while nothing is written");
+    }
+
+    @Test
+    @DisplayName("the merge waits for CI on the exact commit, and is confirmed by asking GitHub")
+    void mergeIsGatedOnCiAndVerified() throws IOException {
+        String script = Files.readString(Path.of("release.sh"));
+        int wait = script.indexOf("gh run list --commit \"$HEAD_SHA\" --workflow CI");
+        int merge = script.indexOf("gh pr merge");
+        int confirmed = script.indexOf("gh pr view \"$PR_NUMBER\" --json state");
+        int tag = script.indexOf("git tag -a \"v$VERSION\"");
+
+        // v4.10.3 was merged sixteen seconds after its pull request opened: gh pr checks --watch
+        // returned once the checks it could already see had finished, before CI had registered.
+        assertTrue(wait > 0 && wait < merge, "the merge must wait for the CI workflow on the release commit");
+        assertFalse(script.contains("gh pr checks \"$PR_NUMBER\" --watch"), "the racy watch is back");
+        // v4.10.0 stopped merged and untagged because gh exited nonzero after merging.
+        assertTrue(confirmed > merge && confirmed < tag, "the merge must be confirmed before tagging");
     }
 }
