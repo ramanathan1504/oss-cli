@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.10.3
+
+_2026-09-16_
+
+- memory: fetch the configured checkouts before filing their contributions (#246)
+
+
 ## 4.10.2
 
 _2026-09-16_
