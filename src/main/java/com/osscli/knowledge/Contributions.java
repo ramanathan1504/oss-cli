@@ -256,6 +256,62 @@ public final class Contributions {
         }
     }
 
+    /** How long a fetch may take. A fetch is a download, so it gets longer than a local read. */
+    private static final long FETCH_TIMEOUT_SECONDS = 120;
+
+    /**
+     * Bring a checkout's remote-tracking branches up to what the remote has, and nothing else.
+     *
+     * <p>{@link #landed} reads {@code origin/2.x} and {@code origin/main}, and those only move when
+     * somebody fetches. The daily job filed contributions from whatever was last fetched by hand:
+     * a change merged upstream that morning was invisible to it until a person happened to run
+     * {@code git fetch} in that checkout, and one was missing from the archive for exactly that
+     * reason on the day the job was added.
+     *
+     * <p>Only remote-tracking refs change. No working tree is touched, no local branch moves, no tag
+     * is fetched, nothing is pushed. It runs only for checkouts named in {@code kb.json}, which is
+     * where somebody asked for them to be kept current.
+     *
+     * <p>It cannot wait on a person. A scheduled job has no terminal, so a credential prompt or an
+     * unknown host key would hang it until the timeout: prompts are refused and SSH runs in batch
+     * mode -- unless the checkout configures its own {@code core.sshCommand}, which is left alone.
+     *
+     * @return empty on success, otherwise why it did not fetch
+     */
+    public static String fetch(Path checkout) {
+        List<String> cmd = new ArrayList<>(List.of("git", "fetch", "--quiet", "--no-tags", "origin"));
+        ProcessBuilder pb = new ProcessBuilder(cmd).directory(checkout.toFile());
+        pb.environment().put("GIT_TERMINAL_PROMPT", "0");
+        try {
+            String configured = git(checkout, List.of("git", "config", "--default", "", "--get", "core.sshCommand"));
+            if (configured.isBlank() && !pb.environment().containsKey("GIT_SSH_COMMAND")) {
+                pb.environment().put("GIT_SSH_COMMAND", "ssh -o BatchMode=yes");
+            }
+        } catch (IOException e) {
+            // Not knowing the configuration is not a reason to skip the fetch; batch mode is the
+            // safe reading of it.
+            pb.environment().putIfAbsent("GIT_SSH_COMMAND", "ssh -o BatchMode=yes");
+        }
+        // Discarded rather than read: reading a stalled download's output blocks before the
+        // deadline is ever checked, which is how a timeout fails to time anything out.
+        pb.redirectErrorStream(true);
+        pb.redirectOutput(ProcessBuilder.Redirect.DISCARD);
+        try {
+            Process p = pb.start();
+            if (!p.waitFor(FETCH_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                p.descendants().forEach(ProcessHandle::destroyForcibly);
+                p.destroyForcibly();
+                return "no answer from origin within " + FETCH_TIMEOUT_SECONDS + "s";
+            }
+            return p.exitValue() == 0 ? "" : "git fetch exited " + p.exitValue();
+        } catch (IOException e) {
+            return e.getMessage();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return "interrupted";
+        }
+    }
+
     /**
      * Run one git command and read its output.
      *

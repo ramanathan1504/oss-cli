@@ -514,6 +514,13 @@ public final class BuiltinMemory {
                 continue;
             }
             System.out.println();
+            String unfetched = com.osscli.knowledge.Contributions.fetch(checkout);
+            if (!unfetched.isEmpty()) {
+                // Still filed, from what was fetched last: a morning offline is a day behind, not
+                // a day of nothing.
+                System.out.println(
+                        "  could not fetch " + checkout + " (" + unfetched + ") — filing from what it last fetched");
+            }
             try {
                 contributions(List.of(checkout.toString()));
             } catch (Exception e) {
