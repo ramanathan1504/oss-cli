@@ -53,4 +53,19 @@ class ReleaseScriptTest {
                 line.contains("--match"), "an unqualified describe answers `stable`, which is not a version: " + line);
         assertTrue(line.contains("v[0-9]"), "the match has to select version tags: " + line);
     }
+
+    @Test
+    @DisplayName("a main with unpushed commits is refused before anything is written")
+    void unpushedCommitsAreRefused() throws IOException {
+        String script = Files.readString(Path.of("release.sh"));
+
+        // Squash-merging a release branch cut from a main that is ahead of origin folds those
+        // commits into the release commit, and the pull after the merge can then never
+        // fast-forward -- v4.10.0 stopped there, merged and untagged.
+        int ahead = script.indexOf("git rev-list --count origin/main..HEAD");
+        int merge = script.indexOf("gh pr merge");
+        assertTrue(ahead > 0, "release.sh no longer checks for commits that were never pushed");
+        assertTrue(merge > 0, "release.sh no longer merges; this test guards what happens before it");
+        assertTrue(ahead < merge, "the check has to run before the merge, while nothing is written");
+    }
 }
