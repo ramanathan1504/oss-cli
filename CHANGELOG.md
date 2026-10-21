@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.10.5
+
+_2026-10-21_
+
+- memory: date a filed note in the operator's zone, not UTC (#254)
+
+
 ## 4.10.4
 
 _2026-09-16_
