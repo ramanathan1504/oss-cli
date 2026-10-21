@@ -65,7 +65,8 @@ class NotesAreDatedLocallyTest {
         List<String> offenders = new ArrayList<>();
         for (Path dir : List.of(Path.of("src/main/java/com/osscli/memory"), Path.of("src/main/java/com/osscli/cli"))) {
             try (Stream<Path> walk = Files.walk(dir)) {
-                for (Path file : walk.filter(f -> f.toString().endsWith(".java")).toList()) {
+                for (Path file :
+                        walk.filter(f -> f.toString().endsWith(".java")).toList()) {
                     for (String line : Files.readAllLines(file)) {
                         if (line.contains("LocalDate.now(ZoneOffset.UTC)") || line.contains("LocalDate.now(ZoneId")) {
                             offenders.add(file.getFileName() + ": " + line.strip());
@@ -75,7 +76,6 @@ class NotesAreDatedLocallyTest {
             }
         }
         assertTrue(
-                offenders.isEmpty(),
-                "a day the operator reads as today must come from their own zone: " + offenders);
+                offenders.isEmpty(), "a day the operator reads as today must come from their own zone: " + offenders);
     }
 }

@@ -1644,9 +1644,7 @@ public final class BuiltinMemory {
     static String gapNote(String tech, List<Coverage.Area> areas) {
         StringBuilder sb = new StringBuilder();
         sb.append("# ").append(tech).append(" — what is not written down\n\n");
-        sb.append("Measured ")
-                .append(LocalDate.now())
-                .append(" against the areas declared in kb.json.\n");
+        sb.append("Measured ").append(LocalDate.now()).append(" against the areas declared in kb.json.\n");
         sb.append("An area with no notes is a thing not written down yet — that is the whole claim.\n\n");
 
         List<String> nothing = areas.stream()
