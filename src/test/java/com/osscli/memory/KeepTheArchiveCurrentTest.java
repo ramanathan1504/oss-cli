@@ -100,9 +100,12 @@ class KeepTheArchiveCurrentTest {
         Path checkout = dir.resolve("checkout");
         git(dir, "init", "--quiet", "--bare", "-b", "main", origin.toString());
         git(dir, "clone", "--quiet", origin.toString(), upstream.toString());
+        withoutBackgroundMaintenance(origin);
+        withoutBackgroundMaintenance(upstream);
         commit(upstream, "first");
         git(upstream, "push", "--quiet", "origin", "HEAD:main");
         git(dir, "clone", "--quiet", origin.toString(), checkout.toString());
+        withoutBackgroundMaintenance(checkout);
 
         // Merged upstream after the checkout last fetched: invisible to origin/main until a fetch.
         commit(upstream, "merged this morning");
@@ -138,6 +141,25 @@ class KeepTheArchiveCurrentTest {
         Files.writeString(repo.resolve("file.txt"), message + "\n", StandardCharsets.UTF_8);
         git(repo, "add", "file.txt");
         git(repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "--quiet", "-m", message);
+    }
+
+    /**
+     * Stop git handing this repository's upkeep to a process the test does not wait for.
+     *
+     * <p>{@code fetch} and {@code receive-pack} both run {@code gc --auto}, and gc detaches. The
+     * command returns, the test asserts and passes, and a background process is still creating
+     * files under {@code .git/objects} when {@code @TempDir} starts deleting the tree -- so cleanup
+     * dies on a directory that will not stay empty and takes the build with it, with every test
+     * green. It cost a release build one leg of four: ubuntu/JDK 17 failed on
+     * {@code checkout/.git/objects} while ubuntu/JDK 21, macOS and Windows passed, which is the
+     * shape of a race and not of a broken assertion.
+     *
+     * <p>Nothing in production turns this off. A real checkout wants its upkeep.
+     */
+    private static void withoutBackgroundMaintenance(Path repo) throws Exception {
+        git(repo, "config", "gc.auto", "0");
+        git(repo, "config", "maintenance.auto", "false");
+        git(repo, "config", "receive.autogc", "false");
     }
 
     private static String git(Path in, String... args) throws Exception {
