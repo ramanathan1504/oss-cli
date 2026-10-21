@@ -8,7 +8,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -1645,9 +1644,7 @@ public final class BuiltinMemory {
     static String gapNote(String tech, List<Coverage.Area> areas) {
         StringBuilder sb = new StringBuilder();
         sb.append("# ").append(tech).append(" — what is not written down\n\n");
-        sb.append("Measured ")
-                .append(LocalDate.now(ZoneOffset.UTC))
-                .append(" against the areas declared in kb.json.\n");
+        sb.append("Measured ").append(LocalDate.now()).append(" against the areas declared in kb.json.\n");
         sb.append("An area with no notes is a thing not written down yet — that is the whole claim.\n\n");
 
         List<String> nothing = areas.stream()
@@ -2192,7 +2189,7 @@ public final class BuiltinMemory {
             // title on different days do not collide. Filing the same file twice overwrites rather
             // than accumulating near-duplicates nobody will ever reconcile.
             String slug = slug(src.getFileName().toString());
-            Path dst = DIR.resolve(LocalDate.now(ZoneOffset.UTC) + "-" + slug + ".md");
+            Path dst = DIR.resolve(LocalDate.now() + "-" + slug + ".md");
             List<Path> earlier = earlierCopies(DIR, slug, source, body).stream()
                     .filter(p -> !p.equals(dst))
                     .toList();
@@ -2330,7 +2327,7 @@ public final class BuiltinMemory {
                     fields.put("commit", commit);
                 }
                 fields.put("sha256", found.sha());
-                fields.put("tracked", LocalDate.now(ZoneOffset.UTC).toString());
+                fields.put("tracked", LocalDate.now().toString());
                 Files.writeString(
                         dst,
                         PackNotes.withProvenance(Files.readString(source, StandardCharsets.UTF_8), fields),

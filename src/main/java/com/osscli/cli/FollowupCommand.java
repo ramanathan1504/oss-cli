@@ -13,7 +13,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -549,7 +548,7 @@ public class FollowupCommand implements Callable<Integer> {
         StringBuilder b = new StringBuilder();
         b.append("\n---\n\n");
         b.append("<!-- since:").append(head).append(" -->\n");
-        b.append("## Since the review — ").append(LocalDate.now(ZoneOffset.UTC)).append("\n\n");
+        b.append("## Since the review — ").append(LocalDate.now()).append("\n\n");
         b.append("Appended by `oss followup --since ").append(pr).append(" --write`. The review above\n");
         b.append("was written at `").append(shortSha(r.head)).append("` on ").append(r.reviewed);
         b.append("; the head is now `").append(shortSha(head)).append("`.\n\n");
