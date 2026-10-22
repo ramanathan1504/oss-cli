@@ -114,7 +114,8 @@ class DigestTest {
         String page = Digest.render(
                 "log4j", List.of(new Digest.Entry("gh-owner-name-1.md", "github", Digest.sectionsOf(NOTE))));
 
-        assertTrue(page.startsWith("# log4j"), page);
+        assertTrue(page.startsWith("---\ntitle: log4j digest\nkind: digest\ntopic: log4j\n"), page);
+        assertTrue(page.contains("---\n\n# log4j\n"), page);
         assertTrue(page.contains("_(github)_"), "the reader cannot tell public record from reasoning");
         assertTrue(page.contains("**The Problem (What & Where)**"), page);
         assertTrue(page.contains("identity set"), "the digest lost the content it exists to carry");

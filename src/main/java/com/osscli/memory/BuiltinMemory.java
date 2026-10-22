@@ -237,7 +237,11 @@ public final class BuiltinMemory {
             }
             Path out = pack.archive().resolve(topic + "-digest.md");
             Files.createDirectories(out.getParent());
-            Files.writeString(out, Digest.render(topic, entries), StandardCharsets.UTF_8);
+            String dated = Files.isRegularFile(out)
+                    ? com.osscli.knowledge.IssueNotes.frontmatter(Files.readString(out, StandardCharsets.UTF_8))
+                            .get("date")
+                    : null;
+            Files.writeString(out, Digest.render(topic, entries, dated), StandardCharsets.UTF_8);
             System.out.printf("  %-16s %d note(s) with something in them -> %s%n", topic, entries.size(), out);
         }
         return 0;
@@ -408,7 +412,8 @@ public final class BuiltinMemory {
                     ? prior.path()
                     : freeName(projects.resolve(topic).resolve(com.osscli.knowledge.IssueNotes.FOLDER), issue, repo);
             String existing = prior == null ? null : prior.text();
-            String fresh = com.osscli.knowledge.IssueNotes.rewrite(existing, issue, repo, discussion, roles, stamp);
+            String fresh =
+                    com.osscli.knowledge.IssueNotes.rewrite(existing, issue, repo, topic, discussion, roles, stamp);
             if (fresh != null) {
                 Files.createDirectories(note.getParent());
                 Files.writeString(note, fresh, StandardCharsets.UTF_8);

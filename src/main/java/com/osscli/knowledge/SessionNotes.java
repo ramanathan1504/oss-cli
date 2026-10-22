@@ -798,29 +798,19 @@ public final class SessionNotes {
             List<String> touched,
             Enrichment.Summary summary) {
         StringBuilder sb = new StringBuilder();
-        sb.append("---\n");
-        sb.append("title: ").append(yaml(title)).append('\n');
-        sb.append("topic: ").append(topic.topic()).append('\n');
-        if (!project.isBlank()) {
-            sb.append("project: ").append(yaml(project)).append('\n');
-        }
-        // The one field here that can be opened. `project` is separators-flattened so the temp-dir
-        // and exclude rules can match on it; this is what the transcript said the directory was.
+        // `path` is the one field here that can be opened. `project` is separators-flattened so the
+        // temp-dir and exclude rules can match on it; this is what the transcript said the directory was.
         String ran = pathOf(session.file());
-        if (!ran.isBlank()) {
-            sb.append("path: ").append(yaml(ran)).append('\n');
-        }
-        sb.append("tool: ").append(session.tool()).append('\n');
-        if (!session.when().isBlank()) {
-            sb.append("date: ").append(session.when()).append('\n');
-        }
-        sb.append("session: ").append(session.id()).append('\n');
-        sb.append("source: session\n");
-        sb.append("filed-because: ").append(yaml(topic.why())).append('\n');
-        if (summary.present()) {
-            sb.append("summarised-by: ").append(summary.by().label()).append('\n');
-        }
-        sb.append("---\n\n");
+        sb.append(
+                FrontMatter.of(title, "session-note", topic.topic(), session.when(), "session", List.of(topic.topic()))
+                        .put("project", project)
+                        .put("session", session.id())
+                        .put("tool", session.tool())
+                        .put("path", ran)
+                        .put("filed-because", topic.why())
+                        .put("timestamp", session.when())
+                        .put("summarised-by", summary.present() ? summary.by().label() : null)
+                        .render());
 
         sb.append("# ").append(title).append("\n\n");
 
@@ -879,12 +869,6 @@ public final class SessionNotes {
                 .append(session.file())
                 .append("`_\n");
         return com.osscli.util.Redactor.redact(sb.toString()).text();
-    }
-
-    /** Quoted only where it has to be, so the common case reads as prose rather than as data. */
-    public static String yaml(String value) {
-        String v = value.replace("\"", "'").replaceAll("\\s+", " ").strip();
-        return v.contains(":") || v.contains("#") || v.startsWith("-") ? "\"" + v + "\"" : v;
     }
 
     /** The paths a session actually opened, in the order it first opened them. */
