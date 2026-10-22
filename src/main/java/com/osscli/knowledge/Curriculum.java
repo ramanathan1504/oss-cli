@@ -131,15 +131,21 @@ public final class Curriculum {
      * difference between a reading list and a to-do list somebody else made for you.
      */
     public static String noteFor(Item item, List<String> evidence) {
+        return noteFor(item, evidence, null);
+    }
+
+    /**
+     * The same, dated {@code date}: the day the area was first placed, carried over from the note
+     * on disk so a run that changes nothing writes nothing.
+     */
+    public static String noteFor(Item item, List<String> evidence, String date) {
         StringBuilder sb = new StringBuilder();
-        sb.append("---\n");
-        sb.append("title: ").append(item.area()).append('\n');
-        sb.append("subject: ").append(item.subject()).append('\n');
-        sb.append("status: ").append(item.state()).append('\n');
-        sb.append("notes: ").append(item.notes()).append('\n');
-        sb.append("mentions: ").append(item.mentions()).append('\n');
-        sb.append("source: curriculum\n");
-        sb.append("---\n\n");
+        sb.append(FrontMatter.of(item.area(), "coverage", item.subject(), date, "curriculum", List.of(item.subject()))
+                .put("subject", item.subject())
+                .put("status", item.state())
+                .put("mentions", item.mentions())
+                .put("notes", item.notes())
+                .render());
 
         sb.append("# ")
                 .append(item.area())
@@ -304,13 +310,18 @@ public final class Curriculum {
             // afternoon and they would stop trusting the folders, which happens exactly once.
             return false;
         }
+        Path placed = pathFor(archive, item.subject(), already == null ? item.state() : already, item.area());
+        String date = Files.isRegularFile(placed)
+                ? IssueNotes.frontmatter(Files.readString(placed, StandardCharsets.UTF_8))
+                        .get("date")
+                : null;
         if (already != null && !already.equals(item.state())) {
             // It moved between the two generated states -- backlog to gap or back. Take the old
             // file out so the same area is not listed twice under two different answers.
             Files.deleteIfExists(pathFor(archive, item.subject(), already, item.area()));
         }
         Path note = pathFor(archive, item.subject(), item.state(), item.area());
-        String fresh = noteFor(item, evidence);
+        String fresh = noteFor(item, evidence, date);
         // Unchanged is left alone. The daily job runs this, and 506 notes rewritten every morning
         // with the same bytes is a sync client re-uploading all of them and an indexer re-reading
         // all of them to learn that nothing moved.

@@ -224,27 +224,31 @@ public final class PackNotes {
      * this project's included, reads the first block and treats the second as body text.
      */
     public static String withProvenance(String body, Map<String, String> fields) {
+        // Each key keeps every line it had: a list or a folded value written one item per line
+        // continues on indented lines, and keeping only the first would drop the rest of it.
         Map<String, String> merged = new LinkedHashMap<>();
         String rest = body;
         if (body.startsWith("---")) {
             int end = body.indexOf("\n---", 3);
             if (end >= 0) {
                 String block = body.substring(body.indexOf('\n') + 1, end);
+                String key = null;
                 for (String line : block.split("\\R")) {
                     int colon = line.indexOf(':');
                     if (colon > 0 && !line.startsWith(" ") && !line.startsWith("\t")) {
-                        merged.put(
-                                line.substring(0, colon).strip(),
-                                line.substring(colon + 1).strip());
+                        key = line.substring(0, colon).strip();
+                        merged.put(key, line);
+                    } else if (key != null) {
+                        merged.put(key, merged.get(key) + "\n" + line);
                     }
                 }
                 int after = body.indexOf('\n', end + 1);
                 rest = after < 0 ? "" : body.substring(after + 1);
             }
         }
-        merged.putAll(fields);
+        fields.forEach((k, v) -> merged.put(k, k + ": " + com.osscli.knowledge.FrontMatter.scalar(v)));
         StringBuilder sb = new StringBuilder("---\n");
-        merged.forEach((k, v) -> sb.append(k).append(": ").append(v).append('\n'));
+        merged.values().forEach(line -> sb.append(line).append('\n'));
         sb.append("---\n\n").append(rest.stripLeading());
         return sb.toString();
     }

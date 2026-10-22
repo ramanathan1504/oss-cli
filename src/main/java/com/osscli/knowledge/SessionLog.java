@@ -156,15 +156,9 @@ public final class SessionLog {
     /** The header a new log starts with. */
     static String headerFor(String reference, String topic, String project) {
         StringBuilder sb = new StringBuilder();
-        sb.append("---\n");
-        sb.append("title: ").append(SessionNotes.yaml(reference)).append('\n');
-        sb.append("topic: ").append(topic).append('\n');
-        if (project != null && !project.isBlank()) {
-            sb.append("project: ").append(SessionNotes.yaml(project)).append('\n');
-        }
-        sb.append("kind: running-log\n");
-        sb.append(MARKER).append('\n');
-        sb.append("---\n\n");
+        sb.append(FrontMatter.of(reference, "running-log", topic, null, "session-log", List.of(topic))
+                .put("project", project)
+                .render());
         sb.append("# ").append(reference).append("\n\n");
         sb.append("_Every session about this, oldest first. Each block is one session; re-reading a "
                 + "session replaces its own block and leaves the rest alone._\n");

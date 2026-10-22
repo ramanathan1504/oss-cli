@@ -144,7 +144,15 @@ public final class Digest {
 
     /** The page a reader can go through top to bottom. */
     public static String render(String topic, List<Entry> entries) {
+        return render(topic, entries, null);
+    }
+
+    /** The same, dated {@code date}: carried over from the page on disk so a rerun keeps its day. */
+    public static String render(String topic, List<Entry> entries, String date) {
         StringBuilder sb = new StringBuilder();
+        sb.append(com.osscli.knowledge.FrontMatter.of(
+                        topic + " digest", "digest", topic, date, "oss memory digest", List.of(topic, "digest"))
+                .render());
         sb.append("# ").append(topic).append("\n\n");
         if (entries.isEmpty()) {
             sb.append("No note under this topic carries a problem or a solution yet.\n");

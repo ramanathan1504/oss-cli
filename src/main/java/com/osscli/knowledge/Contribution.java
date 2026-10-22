@@ -72,28 +72,26 @@ public final class Contribution {
      */
     public static String noteFor(Landed c, String topic) {
         StringBuilder sb = new StringBuilder();
-        sb.append("---\n");
-        sb.append("title: ")
-                .append(yaml(c.repo() + " PR " + c.pr() + " — " + c.title()))
-                .append('\n');
-        sb.append("topic: ").append(topic).append('\n');
-        sb.append("project: ").append(c.repo()).append('\n');
-        sb.append("kind: contribution\n");
-        sb.append("pr: ").append(c.pr()).append('\n');
-        sb.append("commit: ").append(c.sha()).append('\n');
-        sb.append("branch: ").append(c.branch()).append('\n');
-        sb.append("merged: ").append(c.mergedOn()).append('\n');
-        sb.append("files: ").append(c.files().size()).append('\n');
-        sb.append("insertions: ").append(c.insertions()).append('\n');
-        sb.append("deletions: ").append(c.deletions()).append('\n');
-        if (c.coAuthored()) {
-            // Recorded rather than quietly claimed. A co-authored change is real work and it is
-            // not sole authorship, and a record that blurs the two is worth less than one that
-            // says which is which.
-            sb.append("role: co-author\n");
-        }
-        sb.append("source: contribution\n");
-        sb.append("---\n\n");
+        // Recorded both ways rather than only when co-authored. A co-authored change is real work
+        // and it is not sole authorship, and a record that leaves the key out when it is sole
+        // authorship cannot be told apart from one that never knew.
+        sb.append(FrontMatter.of(
+                        c.repo() + " PR " + c.pr() + " — " + c.title(),
+                        "contribution",
+                        topic,
+                        c.mergedOn(),
+                        "contribution",
+                        List.of(topic))
+                .put("project", c.repo())
+                .put("pr", c.pr())
+                .put("branch", c.branch())
+                .put("commit", c.sha())
+                .put("merged", c.mergedOn())
+                .put("role", c.coAuthored() ? "co-author" : "author")
+                .put("files", c.files().size())
+                .put("insertions", c.insertions())
+                .put("deletions", c.deletions())
+                .render());
 
         sb.append("# ")
                 .append(c.repo())
@@ -175,10 +173,5 @@ public final class Contribution {
     /** Threads worth keeping, oldest first, capped. */
     public static List<Remark> trim(List<Remark> all) {
         return all.size() <= MAX_THREADS ? all : new ArrayList<>(all.subList(0, MAX_THREADS));
-    }
-
-    static String yaml(String value) {
-        String v = value.replace("\"", "'").replaceAll("\\s+", " ").strip();
-        return v.contains(":") || v.contains("#") || v.startsWith("-") ? "\"" + v + "\"" : v;
     }
 }

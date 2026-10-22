@@ -106,6 +106,16 @@ class PackNotesTest {
         assertFalse(out.contains("---\n---"), "no second block stacked on the first");
     }
 
+    @Test
+    void provenanceKeepsEveryLineOfAMultiLineValue() {
+        String body = "---\ntitle: Original\ntags:\n  - one\n  - two\n---\n\nbody\n";
+
+        String out = PackNotes.withProvenance(body, Map.of("sha256", "abc"));
+
+        assertTrue(out.contains("tags:\n  - one\n  - two\n"), out);
+        assertTrue(out.contains("sha256: abc\n"), out);
+    }
+
     private static int count(String haystack, String needle) {
         int n = 0;
         for (int i = haystack.indexOf(needle); i >= 0; i = haystack.indexOf(needle, i + 1)) {

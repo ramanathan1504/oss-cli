@@ -226,7 +226,20 @@ public final class IssueNotes {
      */
     public static String rewrite(
             String existing, Issue issue, String repo, List<String> discussion, Set<String> roles, String stamp) {
+        return rewrite(existing, issue, repo, null, discussion, roles, stamp);
+    }
+
+    /** The same, filed under {@code topic}; null keeps the topic the note on disk already has. */
+    public static String rewrite(
+            String existing,
+            Issue issue,
+            String repo,
+            String topic,
+            List<String> discussion,
+            Set<String> roles,
+            String stamp) {
         Map<String, String> prior = frontmatter(existing);
+        String filedUnder = topic != null ? topic : prior.getOrDefault("topic", "general");
         Set<String> tags = merge(prior.get("tags"), tagsFor(issue, repo));
         Set<String> allRoles = merge(prior.get("my_role"), roles);
         String state = state(issue, prior.get("state"));
@@ -234,7 +247,7 @@ public final class IssueNotes {
         if (existing != null && body.equals(bodyOf(existing))) {
             return null;
         }
-        return frontmatterFor(issue, repo, tags, allRoles, state, stamp) + body;
+        return frontmatterFor(issue, repo, filedUnder, tags, allRoles, state, stamp) + body;
     }
 
     /** What the archive's copy of one item looks like below its frontmatter. */
@@ -306,27 +319,26 @@ public final class IssueNotes {
     }
 
     private static String frontmatterFor(
-            Issue issue, String repo, Set<String> tags, Set<String> roles, String state, String stamp) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("---\n");
-        sb.append("tags: [").append(String.join(", ", tags)).append("]\n");
-        sb.append("github: ").append(id(repo, issue.number())).append('\n');
-        if (issue.html_url() != null) {
-            sb.append("url: ").append(issue.html_url()).append('\n');
-        }
-        sb.append("kind: ").append(issue.isPullRequest() ? "pr" : "issue").append('\n');
-        sb.append("my_role: ").append(String.join(", ", roles)).append('\n');
-        sb.append("source: involved\n");
-        sb.append("state: ").append(state).append('\n');
-        if (issue.created_at() != null) {
-            sb.append("created: ").append(issue.created_at()).append('\n');
-        }
-        if (issue.updated_at() != null) {
-            sb.append("updated: ").append(issue.updated_at()).append('\n');
-        }
-        sb.append("harvested: ").append(stamp).append('\n');
-        sb.append("---\n\n");
-        return sb.toString();
+            Issue issue, String repo, String topic, Set<String> tags, Set<String> roles, String state, String stamp) {
+        String title = issue.title() == null || issue.title().isBlank()
+                ? "(no title)"
+                : issue.title().strip();
+        String kind = issue.isPullRequest() ? "pr" : "issue";
+        return FrontMatter.of(
+                        repo + (issue.isPullRequest() ? " PR #" : " Issue #") + issue.number() + " — " + title,
+                        kind,
+                        topic,
+                        issue.created_at() != null ? issue.created_at() : stamp,
+                        "involved",
+                        tags)
+                .put("github", id(repo, issue.number()))
+                .put("url", issue.html_url())
+                .put("state", state)
+                .put("created", issue.created_at())
+                .put("updated", issue.updated_at())
+                .put("harvested", stamp)
+                .put("my_role", String.join(", ", roles))
+                .render();
     }
 
     /** What the item is about, as terms: the repository, what kind of thing it is, and its labels. */
@@ -376,7 +388,15 @@ public final class IssueNotes {
         long repositories = notes.stream().map(Filed::repo).distinct().count();
 
         StringBuilder sb = new StringBuilder();
-        sb.append("---\ntags: [oss, github, index]\nharvested: ").append(stamp).append("\n---\n\n");
+        sb.append(FrontMatter.of(
+                        "OSS GitHub activity — index",
+                        "index",
+                        "general",
+                        stamp,
+                        "oss memory harvest",
+                        List.of("oss", "github", "index"))
+                .put("harvested", stamp)
+                .render());
         sb.append("# OSS GitHub activity — index\n\n");
         sb.append("**Search Tags/Keywords:** #oss #github #index #issue #pullrequest\n");
         sb.append("**")
@@ -437,7 +457,7 @@ public final class IssueNotes {
             if (colon > 0) {
                 out.put(
                         line.substring(0, colon).trim(),
-                        line.substring(colon + 1).trim());
+                        FrontMatter.unquote(line.substring(colon + 1).trim()));
             }
         }
         return out;
@@ -479,12 +499,7 @@ public final class IssueNotes {
     private static Set<String> merge(String prior, Set<String> fresh) {
         Set<String> out = new LinkedHashSet<>();
         if (prior != null) {
-            String cleaned = prior.replace("[", "").replace("]", "");
-            for (String part : cleaned.split(",")) {
-                if (!part.isBlank()) {
-                    out.add(part.strip());
-                }
-            }
+            out.addAll(FrontMatter.items(prior));
         }
         out.addAll(fresh);
         out.remove("");
