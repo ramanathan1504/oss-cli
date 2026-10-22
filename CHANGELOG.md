@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.10.6
+
+_2026-10-22_
+
+- memory: write one front-matter layout for every note (#257)
+
+
 ## 4.10.5
 
 _2026-10-21_
